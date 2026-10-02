@@ -1,2 +1,3 @@
 jsonschema>=4.23
+tzdata>=2025.2  # zoneinfo på Windows saknar annars Europe/Stockholm
 pytest>=8

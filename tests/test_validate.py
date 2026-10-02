@@ -269,6 +269,52 @@ def test_okand_sektor_och_egen_sektor_i_impacts(week, instruments, sector_ids):
     assert any("'rymd' finns inte" in e for e in res.errors)
 
 
+# --- instruments.csv och mfn_slug ------------------------------------------
+
+CSV_HEAD = "namn,alias,ticker,yahoo_ticker,börs"
+
+
+def write_csv(tmp_path, *rows, head=CSV_HEAD + ",mfn_slug"):
+    p = tmp_path / "instruments.csv"
+    p.write_text("\n".join([head, *rows]) + "\n", encoding="utf-8")
+    return p
+
+
+def test_mfn_slug_lases_och_ar_valfri(tmp_path):
+    p = write_csv(tmp_path, "Fjällhem,,FJLH B,FJLH-B.MOCK,Exempelbörsen,fjallhem-fastigheter", "Albion,,ALBN,ALBN.MOCK,Exempelbörsen,")
+    inst = validate.load_instruments(p)
+    assert inst["FJLH B"].mfn_slug == "fjallhem-fastigheter"
+    assert inst["ALBN"].mfn_slug is None
+
+
+def test_csv_utan_mfn_slug_kolumn_fungerar(tmp_path):
+    p = write_csv(tmp_path, "Fjällhem,,FJLH B,FJLH-B.MOCK,Exempelbörsen", head=CSV_HEAD)
+    assert validate.load_instruments(p)["FJLH B"].mfn_slug is None
+
+
+@pytest.mark.parametrize("slug", ["Fjallhem", "fjällhem", "fjallhem_fastigheter", "-fjallhem", "fjallhem--ab", "mfn.se/a/fjallhem"])
+def test_ogiltig_mfn_slug_underkanns(tmp_path, slug):
+    p = write_csv(tmp_path, f"Fjällhem,,FJLH B,FJLH-B.MOCK,Exempelbörsen,{slug}")
+    with pytest.raises(ValueError, match="ogiltig mfn_slug"):
+        validate.load_instruments(p)
+
+
+def test_dubblerad_mfn_slug_underkanns(tmp_path):
+    p = write_csv(
+        tmp_path,
+        "Fjällhem,,FJLH B,FJLH-B.MOCK,Exempelbörsen,fjallhem",
+        "Fjällhem pref,,FJLH PREF,FJLH-PREF.MOCK,Exempelbörsen,fjallhem",
+    )
+    with pytest.raises(ValueError, match="rad 3: mfn_slug 'fjallhem' används redan av 'FJLH B'"):
+        validate.load_instruments(p)
+
+
+def test_projektets_instrumentlistor_ar_giltiga():
+    validate.load_instruments()
+    mock = validate.load_instruments(validate.MOCK_DIR / "instruments.csv")
+    assert mock["FJLH B"].mfn_slug == "fjallhem-fastigheter"
+
+
 # --- Rådata och mock-spärr -------------------------------------------------
 
 

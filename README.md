@@ -7,12 +7,31 @@ Inga betaltjänster eller betal-API:er. **Inget investeringsråd.**
 
 | Steg | Skriver | Committas |
 |---|---|---|
-| `scripts/fetch.py` (RSS: MFN, Cision; API: Riksbanken, SCB) | `data/raw/<vecka>/` | nej (`.gitignore`) |
+| `scripts/fetch.py` (RSS: MFN, Cision; API: Riksbankens styrränta) | `data/raw/<vecka>/` | nej, rådatan ligger i det privata repot `veckans-finans-raw` |
 | `/sammanfatta-veckan` (Claude Code, manuellt en gång i veckan) | `data/weeks/<vecka>.json` | ja |
 | `scripts/prices.py` (yfinance, valfritt) | `data/prices/<vecka>.json` | ja |
 | `scripts/validate.py` | – | – |
 
 Veckor anges som ISO-vecka, t.ex. `2026-W40` (mån–sön, Europe/Stockholm).
+
+### Hämtning (`scripts/fetch.py`)
+
+Körs var fjärde timme i GitHub Actions i det privata repot `veckans-finans-raw`.
+Workflow-mallen ligger i [`deploy/raw-repo/`](deploy/raw-repo/). Lokalt klonas det privata repot in som `data/raw/`.
+
+| Källa | Adress (kontrollerad 2026-10-02) | Text |
+|---|---|---|
+| MFN | `https://mfn.se/all/s/nordic.rss?limit=200` (odokumenterad, men flödet anger själv adressen) | fulltext |
+| Cision | `https://news.cision.com/se/ListItems?format=rss` | utdrag, ca 600 tecken |
+| Riksbanken | `https://api.riksbank.se/swea/v1/Observations/Latest/SECBREPOEFF` (ingen nyckel krävs) | en mening |
+
+- Varje körning gör ett anrop per källa, med en timeout på 30 s och User-Agent `veckans-finans-fetch/0.1 (+repo-URL)`.
+- MFN filtreras till `scope SE`, svenska eller engelska. Insynshandel (`sub:ci:insider`) sparas inte.
+  Rutinmeddelanden sparas men får `routine: true`. De känns igen på MFN-taggar eller rubrik.
+- Varje post hamnar i veckan för sin egen publiceringstid i svensk tid.
+- Om samma pressmeddelande finns hos både MFN och Cision behålls MFN-versionen, och Cision-länken sparas i `also_in`.
+- En källa som fallerar loggas i `index.json` → `runs`, och de övriga sparas ändå. Det ger exit-kod 0 och en
+  `::warning::` i Actions-loggen. Bara om alla källor fallerar blir exit-koden 1 och körningen röd.
 
 ## Datamodell
 
@@ -30,7 +49,9 @@ Veckor anges som ISO-vecka, t.ex. `2026-W40` (mån–sön, Europe/Stockholm).
   gör det inte) och negationer ("ökade inte"). Undantaget för "till" gör också att en felaktig riktning framför
   en nivå inte fångas. Kontrollen är ett skyddsnät och ersätter inte en egen läsning.
 - [`schema/prices.schema.json`](schema/prices.schema.json): kursförändring per `yahoo_ticker`. Sidan fungerar utan filen.
-- [`data/instruments.csv`](data/instruments.csv): `namn,alias,ticker,yahoo_ticker,börs`. Flera alias separeras med `|`. Underhålls manuellt.
+- [`data/instruments.csv`](data/instruments.csv): `namn,alias,ticker,yahoo_ticker,börs,mfn_slug`. Flera alias separeras
+  med `|`. Underhålls manuellt. `mfn_slug` är valfri och anger bolagets slug i MFN:s URL:er (`mfn.se/a/<slug>/…`).
+  Poster från de bolagen prioriteras när veckan sammanfattas. Fyll bara i slugs du sett i en faktisk MFN-URL.
 - [`data/sectors.json`](data/sectors.json): fast sektorlista som styr flikarna.
 - `data/mock/`: exempeldata (`"mock": true`) med **påhittade bolag och källor** och en egen
   [`instruments.csv`](data/mock/instruments.csv). Valideringen underkänner mockfiler utanför `data/mock/`.

@@ -181,6 +181,9 @@ class Result:
     warnings: list[str] = field(default_factory=list)
 
 
+MFN_SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+
+
 @dataclass(frozen=True)
 class Instrument:
     namn: str
@@ -188,26 +191,39 @@ class Instrument:
     ticker: str
     yahoo_ticker: str
     bors: str
+    mfn_slug: str | None = None  # bolagets slug i MFN:s URL:er (mfn.se/a/<slug>/…), valfri
 
 
 def load_instruments(path: Path = DATA_DIR / "instruments.csv") -> dict[str, Instrument]:
     """Läser instruments.csv och returnerar instrumenten nycklade på ticker.
 
+    Kolumnen mfn_slug är valfri (både kolumnen och värdet). Den används i
+    urvalssteget för att prioritera MFN-poster om bevakade bolag, så ett
+    felaktigt eller dubblerat värde stoppas här.
     utf-8-sig så att filen fungerar även om den sparats från Excel (BOM).
     """
     instruments: dict[str, Instrument] = {}
+    slugs: dict[str, str] = {}
     with path.open(encoding="utf-8-sig", newline="") as f:
-        for row in csv.DictReader(f):
+        for line, row in enumerate(csv.DictReader(f), start=2):
             alias = tuple(a.strip() for a in (row.get("alias") or "").split("|") if a.strip())
+            slug = (row.get("mfn_slug") or "").strip() or None
             inst = Instrument(
                 namn=row["namn"].strip(),
                 alias=alias,
                 ticker=row["ticker"].strip(),
                 yahoo_ticker=row["yahoo_ticker"].strip(),
                 bors=row["börs"].strip(),
+                mfn_slug=slug,
             )
             if inst.ticker in instruments:
-                raise ValueError(f"instruments.csv: dubblett av ticker {inst.ticker!r}")
+                raise ValueError(f"{path.name} rad {line}: dubblett av ticker {inst.ticker!r}")
+            if slug is not None:
+                if not MFN_SLUG_RE.match(slug):
+                    raise ValueError(f"{path.name} rad {line}: ogiltig mfn_slug {slug!r} (gemener, siffror och bindestreck)")
+                if slug in slugs:
+                    raise ValueError(f"{path.name} rad {line}: mfn_slug {slug!r} används redan av {slugs[slug]!r}")
+                slugs[slug] = inst.ticker
             instruments[inst.ticker] = inst
     return instruments
 

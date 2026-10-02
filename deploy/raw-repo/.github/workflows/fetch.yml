@@ -1,0 +1,76 @@
+# Mall för det PRIVATA repot veckans-finans-raw. Kopieras dit som
+# .github/workflows/fetch.yml – ligger här under deploy/ så att den aldrig
+# körs i det publika repot.
+#
+# Hämtar råtext var fjärde timme med scripts/fetch.py från det publika repot
+# och committar resultatet till det privata repot. Rådatan når aldrig det
+# publika repot.
+name: Hämta råtext
+
+on:
+  schedule:
+    # Var fjärde timme, dygnet runt (UTC). Minut 17 för att undvika
+    # rusningen vid hel timme i GitHub Actions.
+    - cron: "17 */4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write # för att kunna pusha till det här (privata) repot
+
+concurrency:
+  group: fetch
+  cancel-in-progress: false
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checka ut rådatarepot
+        uses: actions/checkout@v4
+        with:
+          path: raw
+
+      - name: Checka ut koden från det publika repot
+        uses: actions/checkout@v4
+        with:
+          repository: peternordengren-netizen/veckans-finans
+          ref: main
+          path: app
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # fetch.py använder bara standardbiblioteket (Linux har tidszonsdatabasen).
+      - name: Hämta
+        id: fetch
+        run: |
+          set +e
+          python app/scripts/fetch.py --raw-dir raw
+          echo "code=$?" >> "$GITHUB_OUTPUT"
+
+      # Committa alltid, även när alla källor fallerat – då sparas åtminstone
+      # felloggen i index.json → runs. Delvisa fel ger exit 0 och syns som
+      # ::warning:: i loggen.
+      - name: Committa ny rådata
+        working-directory: raw
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Inga ändringar."
+          else
+            git commit -q -m "Hämtning $(date -u +%Y-%m-%dT%H:%MZ)"
+            git push
+          fi
+
+      # Bara om ALLA källor fallerade (eller skriptet kraschade) blir körningen
+      # röd, så att GitHub mejlar.
+      - name: Rapportera att alla källor fallerade
+        if: steps.fetch.outputs.code != '0'
+        run: |
+          echo "::error::fetch.py avslutades med kod ${{ steps.fetch.outputs.code }} – inga källor kunde hämtas, se index.json → runs."
+          exit 1
