@@ -35,6 +35,26 @@ Veckor anges som ISO-vecka, t.ex. `2026-W40` (mån–sön, Europe/Stockholm).
 - `data/mock/`: exempeldata (`"mock": true`) med **påhittade bolag och källor** och en egen
   [`instruments.csv`](data/mock/instruments.csv). Valideringen underkänner mockfiler utanför `data/mock/`.
 
+## Sidan (Astro)
+
+Kräver Node 22 eller senare.
+
+```bash
+npm install
+npm run dev:mock      # utveckling mot data/mock/ – http://localhost:4321/veckans-finans/
+npm run dev           # utveckling mot riktiga data/weeks/
+npm run build         # statisk export till dist/ (läser bara data/weeks/ och data/prices/)
+npm run preview       # visa dist/ lokalt
+```
+
+- `--mode mock` (i `dev:mock`/`build:mock`) är det enda sättet att läsa `data/mock/`. Det vanliga bygget kastar fel
+  om en fil i `data/weeks/` är markerad som mock.
+- Sidan läser aldrig `evidence` eller `data/raw/`.
+- Kursrader visas bara om `data/prices/<vecka>.json` finns. Saknas en ticker i filen står det "Kurs saknas".
+- Onoterade bolag listas med namn och motivering, men utan aktiekort.
+- Utan JavaScript visas alla sektorer under varandra. Med JavaScript blir de flikar, och `#sektor-<id>` i adressen
+  väljer flik.
+
 ## Validering
 
 ```bash

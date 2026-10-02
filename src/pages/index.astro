@@ -1,0 +1,28 @@
+---
+/** Startsidan visar senaste veckan, eller ett tomt läge innan något publicerats. */
+import Base from "../layouts/Base.astro";
+import WeekPage from "../components/WeekPage.astro";
+import { listWeeks, loadWeek } from "../lib/data";
+
+const weeks = listWeeks();
+const view = weeks.length > 0 ? loadWeek(weeks[0]) : null;
+---
+
+{
+  view ? (
+    <WeekPage view={view} weeks={weeks} />
+  ) : (
+    <Base title="Veckans finans">
+      <main class="wrap empty-state">
+        <h1>Veckans finans</h1>
+        <p>Ingen vecka är publicerad ännu.</p>
+      </main>
+    </Base>
+  )
+}
+
+<style>
+  .empty-state {
+    padding-top: 48px;
+  }
+</style>

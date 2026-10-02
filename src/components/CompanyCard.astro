@@ -1,0 +1,130 @@
+---
+/** Aktiekort för ett matchat (noterat) bolag. Kursraden visas bara när veckan har en kursfil. */
+import type { ListedCompany } from "../lib/data";
+
+interface Props {
+  company: ListedCompany;
+  hasPrices: boolean;
+}
+const { company, hasPrices } = Astro.props;
+const q = company.quote;
+
+const pct = q
+  ? new Intl.NumberFormat("sv-SE", { minimumFractionDigits: 1, maximumFractionDigits: 1, signDisplay: "exceptZero" }).format(q.change_pct)
+  : "";
+const close = q ? new Intl.NumberFormat("sv-SE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(q.close) : "";
+const trend = !q || q.change_pct === 0 ? "flat" : q.change_pct > 0 ? "up" : "down";
+const arrow = { up: "▲", down: "▼", flat: "■" }[trend];
+---
+
+<article class="card">
+  <header class="card-head">
+    <div>
+      <h4 class="name">{company.name}</h4>
+      <p class="ticker">{company.ticker} · {company.exchange}</p>
+    </div>
+    <span class:list={["badge", company.impact]}>{company.impact}</span>
+  </header>
+  <p class="rationale">{company.rationale}</p>
+  {
+    hasPrices && (
+      <p class="price">
+        {q ? (
+          <>
+            <span class:list={["change", trend]}>
+              <span aria-hidden="true">{arrow}</span> {pct} %
+            </span>
+            <span class="close">
+              {close} {q.currency}
+            </span>
+            <span class="sr-only">kursförändring under veckan</span>
+          </>
+        ) : (
+          <span class="missing">Kurs saknas för veckan</span>
+        )}
+      </p>
+    )
+  }
+</article>
+
+<style>
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+  }
+  .card-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .name {
+    margin: 0;
+    font-size: 1rem;
+    line-height: 1.3;
+  }
+  .ticker {
+    margin: 2px 0 0;
+    font-size: 0.8125rem;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .badge {
+    flex-shrink: 0;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 2px 8px;
+    border-radius: 999px;
+  }
+  .badge.direkt {
+    background: var(--direct-bg);
+    color: var(--direct-fg);
+  }
+  .badge.indirekt {
+    background: var(--indirect-bg);
+    color: var(--indirect-fg);
+  }
+  .rationale {
+    margin: 0;
+    font-size: 0.9375rem;
+  }
+  .price {
+    margin: 4px 0 0;
+    padding-top: 8px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 0.875rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .change {
+    font-weight: 600;
+  }
+  .change.up {
+    color: var(--pos);
+  }
+  .change.down {
+    color: var(--neg);
+  }
+  .close,
+  .missing {
+    color: var(--muted);
+  }
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+</style>

@@ -1,0 +1,17 @@
+{
+  "name": "veckans-finans",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Statisk sida som sammanfattar veckans finansnyheter per sektor. Inget investeringsråd.",
+  "scripts": {
+    "dev": "astro dev",
+    "dev:mock": "astro dev --mode mock",
+    "build": "astro build",
+    "build:mock": "astro build --mode mock",
+    "preview": "astro preview"
+  },
+  "dependencies": {
+    "astro": "^7.3.5"
+  }
+}

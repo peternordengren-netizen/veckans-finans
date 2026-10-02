@@ -1,0 +1,15 @@
+---
+/** En sida per vecka: /vecka/2026-W40/ */
+import WeekPage from "../../components/WeekPage.astro";
+import { listWeeks, loadWeek } from "../../lib/data";
+
+export function getStaticPaths() {
+  return listWeeks().map((week) => ({ params: { week } }));
+}
+
+const { week } = Astro.params;
+const view = loadWeek(week!);
+const weeks = listWeeks();
+---
+
+<WeekPage view={view} weeks={weeks} />

@@ -1,0 +1,158 @@
+---
+/** Grundlayout: färgtokens för ljust/mörkt läge, typografi och sidfot med ansvarsfriskrivning. */
+interface Props {
+  title: string;
+  description?: string;
+}
+const { title, description = "Veckans finansnyheter sammanfattade per sektor och kopplade till noterade aktier." } = Astro.props;
+---
+
+<!doctype html>
+<html lang="sv">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="description" content={description} />
+    <link rel="icon" type="image/svg+xml" href={`${import.meta.env.BASE_URL.replace(/\/$/, "")}/favicon.svg`} />
+    <title>{title}</title>
+  </head>
+  <body>
+    <slot />
+    <footer class="site-footer">
+      <div class="wrap">
+        <p>
+          <strong>Inget investeringsråd.</strong> Veckans finans är en automatiskt sammanställd nyhetsöversikt i
+          informationssyfte. Innehållet är inte en rekommendation att köpa, sälja eller behålla något finansiellt
+          instrument. Sammanfattningarna kan innehålla fel eller utelämna information, så läs alltid originalkällan.
+          Kursdata kan vara fördröjd, ofullständig eller saknas. Historisk kursutveckling är ingen garanti för
+          framtida avkastning. Fatta egna beslut och ta vid behov hjälp av en rådgivare.
+        </p>
+      </div>
+    </footer>
+  </body>
+</html>
+
+<style is:global>
+  :root {
+    --bg: #f7f6f3;
+    --surface: #ffffff;
+    --surface-2: #f0eee9;
+    --text: #1d1d1b;
+    --muted: #5f5d57;
+    --border: #e1ded6;
+    --accent: #1f5f8b;
+    --accent-contrast: #ffffff;
+    --pos: #1c7a43;
+    --neg: #b3261e;
+    --direct-bg: #dfeaf3;
+    --direct-fg: #18496b;
+    --indirect-bg: #efe8da;
+    --indirect-fg: #6a4b14;
+    --banner-bg: #fff3c4;
+    --banner-fg: #5a4300;
+    --banner-border: #e8cf6a;
+    --radius: 10px;
+    --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #131416;
+      --surface: #1b1d20;
+      --surface-2: #24272b;
+      --text: #ecebe8;
+      --muted: #a4a29c;
+      --border: #33363b;
+      --accent: #7cb7e3;
+      --accent-contrast: #0e2333;
+      --pos: #5fcf8c;
+      --neg: #ff8a80;
+      --direct-bg: #1d3446;
+      --direct-fg: #b5d6f0;
+      --indirect-bg: #3a3122;
+      --indirect-fg: #e8cf9f;
+      --banner-bg: #3b3210;
+      --banner-fg: #f5e3a1;
+      --banner-border: #6e5d1c;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --bg: #131416;
+    --surface: #1b1d20;
+    --surface-2: #24272b;
+    --text: #ecebe8;
+    --muted: #a4a29c;
+    --border: #33363b;
+    --accent: #7cb7e3;
+    --accent-contrast: #0e2333;
+    --pos: #5fcf8c;
+    --neg: #ff8a80;
+    --direct-bg: #1d3446;
+    --direct-fg: #b5d6f0;
+    --indirect-bg: #3a3122;
+    --indirect-fg: #e8cf9f;
+    --banner-bg: #3b3210;
+    --banner-fg: #f5e3a1;
+    --banner-border: #6e5d1c;
+  }
+
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 16px;
+    line-height: 1.55;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  body > main {
+    flex: 1;
+  }
+
+  a {
+    color: var(--accent);
+  }
+
+  .wrap {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 0 16px;
+  }
+
+  .site-footer {
+    border-top: 1px solid var(--border);
+    margin-top: 48px;
+    padding: 24px 0 40px;
+    color: var(--muted);
+    font-size: 0.875rem;
+  }
+
+  .site-footer p {
+    margin: 0;
+    max-width: 70ch;
+  }
+
+  .site-footer strong {
+    color: var(--text);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+</style>

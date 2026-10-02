@@ -1,0 +1,413 @@
+---
+/**
+ * En veckas sida: rubrik, veckoväljare, mock-banderoll och en flik per sektor.
+ * Utan JavaScript visas alla sektorer under varandra; med JavaScript blir de flikar.
+ */
+import Base from "../layouts/Base.astro";
+import CompanyCard from "./CompanyCard.astro";
+import { formatDate, weekLabel, type WeekView } from "../lib/data";
+
+interface Props {
+  view: WeekView;
+  weeks: string[];
+}
+const { view, weeks } = Astro.props;
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+const directionLabel = { positiv: "Positiv", negativ: "Negativ", blandad: "Blandad", oklar: "Oklar" };
+---
+
+<Base title={`${weekLabel(view.week)} – Veckans finans`}>
+  <main>
+    {
+      view.mock && (
+        <div class="mock-banner" role="note">
+          <div class="wrap">
+            <strong>Exempeldata.</strong> Bolagen, källorna och nyheterna på den här sidan är påhittade och används bara för
+            att utveckla sidan.
+          </div>
+        </div>
+      )
+    }
+
+    <header class="page-head">
+      <div class="wrap">
+        <p class="brand"><a href={`${base}/`}>Veckans finans</a></p>
+        <div class="title-row">
+          <div>
+            <h1>{weekLabel(view.week)}</h1>
+            <p class="period">{formatDate(view.start)} – {formatDate(view.end)}</p>
+          </div>
+          {
+            weeks.length > 1 && (
+              <nav class="week-nav" aria-label="Välj vecka">
+                <label for="week-select">Vecka</label>
+                <select id="week-select" data-week-select>
+                  {weeks.map((w) => (
+                    <option value={`${base}/vecka/${w}/`} selected={w === view.week}>
+                      {weekLabel(w)}
+                    </option>
+                  ))}
+                </select>
+              </nav>
+            )
+          }
+        </div>
+      </div>
+    </header>
+
+    <div class="wrap">
+      <div class="tabs" role="tablist" aria-label="Sektorer" data-tabs hidden>
+        {
+          view.sectors.map((s, i) => (
+            <button
+              type="button"
+              role="tab"
+              id={`tab-${s.sector.id}`}
+              aria-controls={`sektor-${s.sector.id}`}
+              aria-selected={i === 0 ? "true" : "false"}
+              tabindex={i === 0 ? 0 : -1}
+              data-sector={s.sector.id}
+            >
+              {s.sector.name}
+              <span class="count">{s.items.length}</span>
+            </button>
+          ))
+        }
+      </div>
+
+      {view.sectors.length === 0 && <p class="empty">Inga nyheter den här veckan.</p>}
+
+      {
+        view.sectors.map((s) => (
+          <section class="sector" id={`sektor-${s.sector.id}`} role="tabpanel" aria-labelledby={`tab-${s.sector.id}`} tabindex="0">
+            <h2>{s.sector.name}</h2>
+            <p class="sector-summary">{s.summary}</p>
+
+            {s.items.map((it) => (
+              <article class="item" id={it.id}>
+                <p class="meta">
+                  <time datetime={it.published}>{formatDate(it.published)}</time>
+                  <span aria-hidden="true"> · </span>
+                  <a href={it.sourceUrl} rel="noopener noreferrer" target="_blank">
+                    {it.sourceName}
+                    <span class="sr-only"> (öppnas i ny flik)</span>
+                    <span aria-hidden="true"> ↗</span>
+                  </a>
+                </p>
+                <h3>{it.headline}</h3>
+                <p class="summary">{it.summary}</p>
+
+                {it.listed.length > 0 && (
+                  <div class="cards">
+                    {it.listed.map((c) => (
+                      <CompanyCard company={c} hasPrices={view.hasPrices} />
+                    ))}
+                  </div>
+                )}
+
+                {it.unlisted.length > 0 && (
+                  <div class="unlisted">
+                    <h4>Onoterade bolag</h4>
+                    <ul>
+                      {it.unlisted.map((c) => (
+                        <li>
+                          <strong>{c.name}</strong> <span class="impact-text">({c.impact})</span>: {c.rationale}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {it.impacts.length > 0 && (
+                  <div class="impacts">
+                    <h4>Indirekt sektorpåverkan</h4>
+                    <ul>
+                      {it.impacts.map((imp) => (
+                        <li>
+                          <span class:list={["dir", imp.direction]}>{directionLabel[imp.direction]}</span>
+                          <span>
+                            <strong>{imp.sector.name}</strong>: {imp.rationale}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </article>
+            ))}
+          </section>
+        ))
+      }
+    </div>
+  </main>
+</Base>
+
+<script>
+  // Flikar: visa en sektor åt gången, synka med #sektor-<id> i adressfältet.
+  const tablist = document.querySelector<HTMLElement>("[data-tabs]");
+  if (tablist) {
+    const tabs = Array.from(tablist.querySelectorAll<HTMLButtonElement>('[role="tab"]'));
+    const panels = tabs.map((t) => document.getElementById(t.getAttribute("aria-controls")!)!);
+
+    const select = (index: number, focus = false, updateHash = true) => {
+      tabs.forEach((t, i) => {
+        const active = i === index;
+        t.setAttribute("aria-selected", String(active));
+        t.tabIndex = active ? 0 : -1;
+        panels[i].hidden = !active;
+      });
+      if (focus) tabs[index].focus();
+      // Scrolla bara flikraden i sidled (mobil), aldrig hela sidan.
+      const t = tabs[index];
+      if (t.offsetLeft < tablist.scrollLeft || t.offsetLeft + t.offsetWidth > tablist.scrollLeft + tablist.clientWidth) {
+        tablist.scrollTo({ left: t.offsetLeft - 16, behavior: "smooth" });
+      }
+      if (updateHash) history.replaceState(null, "", `#sektor-${tabs[index].dataset.sector}`);
+    };
+
+    tabs.forEach((t, i) => t.addEventListener("click", () => select(i)));
+    tablist.addEventListener("keydown", (e) => {
+      const current = tabs.findIndex((t) => t.getAttribute("aria-selected") === "true");
+      const keys: Record<string, number> = {
+        ArrowRight: (current + 1) % tabs.length,
+        ArrowLeft: (current - 1 + tabs.length) % tabs.length,
+        Home: 0,
+        End: tabs.length - 1,
+      };
+      if (e.key in keys) {
+        e.preventDefault();
+        select(keys[e.key], true);
+      }
+    });
+
+    // Sektorn i adressfältet, eller sektorn som innehåller en länkad nyhet.
+    const fromHash = () => {
+      const target = location.hash ? document.getElementById(decodeURIComponent(location.hash.slice(1))) : null;
+      const panel = target?.closest<HTMLElement>('[role="tabpanel"]');
+      return { target, index: panel ? Math.max(0, panels.indexOf(panel)) : 0, isPanel: target === panel };
+    };
+
+    const start = fromHash();
+    tablist.hidden = false;
+    document.documentElement.classList.add("has-tabs");
+    select(start.index, false, false);
+    if (start.target && !start.isPanel) start.target.scrollIntoView();
+
+    window.addEventListener("hashchange", () => {
+      const h = fromHash();
+      select(h.index, false, false);
+      if (h.target && !h.isPanel) h.target.scrollIntoView();
+    });
+  }
+
+  document.querySelector<HTMLSelectElement>("[data-week-select]")?.addEventListener("change", (e) => {
+    location.href = (e.target as HTMLSelectElement).value;
+  });
+</script>
+
+<style>
+  .mock-banner {
+    background: var(--banner-bg);
+    color: var(--banner-fg);
+    border-bottom: 1px solid var(--banner-border);
+    padding: 10px 0;
+    font-size: 0.9375rem;
+  }
+
+  .page-head {
+    padding: 24px 0 16px;
+  }
+  .brand {
+    margin: 0 0 4px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .brand a {
+    color: var(--muted);
+    text-decoration: none;
+  }
+  .title-row {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 12px;
+  }
+  h1 {
+    margin: 0;
+    font-size: clamp(1.75rem, 5vw, 2.25rem);
+    line-height: 1.15;
+  }
+  .period {
+    margin: 4px 0 0;
+    color: var(--muted);
+  }
+  .week-nav {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.875rem;
+    color: var(--muted);
+  }
+  .week-nav select {
+    font: inherit;
+    color: var(--text);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 6px 8px;
+  }
+
+  .tabs {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    scrollbar-width: thin;
+    padding: 4px 0 10px;
+    margin-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    background: var(--bg);
+    z-index: 1;
+  }
+  .tabs[hidden] {
+    display: none;
+  }
+  .tabs button {
+    flex-shrink: 0;
+    font: inherit;
+    font-size: 0.9375rem;
+    color: var(--text);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 6px 14px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .tabs button[aria-selected="true"] {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-contrast);
+  }
+  .count {
+    font-size: 0.75rem;
+    opacity: 0.75;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .sector {
+    padding: 16px 0 8px;
+  }
+  .sector:focus-visible {
+    outline-offset: 4px;
+  }
+  .sector h2 {
+    margin: 0 0 6px;
+    font-size: 1.375rem;
+  }
+  /* Med flikar syns sektornamnet redan i flikraden. */
+  :global(.has-tabs) .sector h2 {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+  .sector-summary {
+    margin: 0 0 20px;
+    font-size: 1.0625rem;
+    max-width: 70ch;
+  }
+
+  .item {
+    background: var(--surface-2);
+    border-radius: var(--radius);
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+  .meta {
+    margin: 0;
+    font-size: 0.8125rem;
+    color: var(--muted);
+  }
+  .item h3 {
+    margin: 4px 0 6px;
+    font-size: 1.1875rem;
+    line-height: 1.3;
+  }
+  .summary {
+    margin: 0 0 12px;
+    max-width: 70ch;
+  }
+
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr));
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  .unlisted,
+  .impacts {
+    margin-top: 10px;
+    font-size: 0.9375rem;
+  }
+  .unlisted h4,
+  .impacts h4 {
+    margin: 0 0 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .unlisted ul,
+  .impacts ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 4px;
+  }
+  .impact-text {
+    color: var(--muted);
+  }
+  .impacts li {
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+  }
+  .dir {
+    flex-shrink: 0;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 1px 7px;
+    border-radius: 4px;
+    border: 1px solid currentColor;
+    color: var(--muted);
+  }
+  .dir.positiv {
+    color: var(--pos);
+  }
+  .dir.negativ {
+    color: var(--neg);
+  }
+
+  .empty {
+    color: var(--muted);
+  }
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+</style>
