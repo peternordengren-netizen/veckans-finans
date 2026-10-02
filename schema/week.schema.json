@@ -1,0 +1,155 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "week.schema.json",
+  "title": "Veckans finans – en veckas sammanfattning",
+  "description": "Skrivs av /sammanfatta-veckan till data/weeks/<vecka>.json. Kursdata ligger separat i data/prices/<vecka>.json så att sidan fungerar utan den.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "week", "period", "generated_at", "sectors"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "week": {
+      "description": "ISO-vecka, t.ex. 2026-W40. Ska matcha filnamnet.",
+      "type": "string",
+      "pattern": "^[0-9]{4}-W(0[1-9]|[1-4][0-9]|5[0-3])$"
+    },
+    "period": {
+      "description": "Måndag–söndag för ISO-veckan.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start", "end"],
+      "properties": {
+        "start": { "type": "string", "format": "date" },
+        "end": { "type": "string", "format": "date" }
+      }
+    },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "mock": {
+      "description": "true för exempeldata. Sidan visar då en tydlig banderoll.",
+      "type": "boolean"
+    },
+    "sectors": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/sector" }
+    }
+  },
+  "$defs": {
+    "sectorId": {
+      "description": "Måste finnas i data/sectors.json (kontrolleras av validate.py).",
+      "type": "string",
+      "pattern": "^[a-z0-9-]+$"
+    },
+    "sector": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "summary", "items"],
+      "properties": {
+        "id": { "$ref": "#/$defs/sectorId" },
+        "summary": {
+          "description": "Svensk sammanfattning av sektorns vecka, 2–5 meningar.",
+          "type": "string",
+          "minLength": 1
+        },
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/item" }
+        }
+      }
+    },
+    "item": {
+      "description": "En nyhet/ett pressmeddelande.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "headline", "summary", "published", "source", "evidence", "companies", "sector_impacts"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+        "headline": { "type": "string", "minLength": 1 },
+        "summary": { "type": "string", "minLength": 1 },
+        "published": {
+          "description": "Publiceringsdatum enligt källtexten (Europe/Stockholm).",
+          "type": "string",
+          "format": "date"
+        },
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "url", "raw_file"],
+          "properties": {
+            "name": { "type": "string", "minLength": 1 },
+            "url": { "type": "string", "pattern": "^https?://" },
+            "raw_file": {
+              "description": "Sökväg relativt data/raw/<vecka>/ till källtexten sammanfattningen bygger på.",
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "evidence": {
+          "description": "Ordagranna citat ur källtexten, högst 25 ord vardera, som belägger varje siffra och datum i headline/summary. Används bara för validering och visas inte på sidan. validate.py kontrollerar ordgränsen, att varje siffra finns exakt i något citat och att varje citat finns i raw_file.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["quote"],
+            "properties": {
+              "quote": { "type": "string", "minLength": 3 }
+            }
+          }
+        },
+        "companies": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/company" }
+        },
+        "sector_impacts": {
+          "description": "Indirekt påverkan på andra sektorer än den nyheten ligger under.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/sectorImpact" }
+        }
+      }
+    },
+    "company": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "match", "impact", "rationale"],
+      "properties": {
+        "name": { "description": "Namnet som det står i källtexten.", "type": "string", "minLength": 1 },
+        "match": { "enum": ["matchad", "onoterat"] },
+        "ticker": { "type": ["string", "null"] },
+        "yahoo_ticker": { "type": ["string", "null"] },
+        "exchange": { "type": ["string", "null"] },
+        "impact": {
+          "description": "direkt = bolaget är föremål för nyheten; indirekt = påverkas via kunder, leverantörer, konkurrenter, räntor e.d.",
+          "enum": ["direkt", "indirekt"]
+        },
+        "rationale": { "description": "En mening om varför bolaget berörs.", "type": "string", "minLength": 1 }
+      },
+      "if": { "properties": { "match": { "const": "matchad" } } },
+      "then": {
+        "required": ["ticker", "yahoo_ticker", "exchange"],
+        "properties": {
+          "ticker": { "type": "string", "minLength": 1 },
+          "yahoo_ticker": { "type": "string", "minLength": 1 },
+          "exchange": { "type": "string", "minLength": 1 }
+        }
+      },
+      "else": {
+        "properties": {
+          "ticker": { "const": null },
+          "yahoo_ticker": { "const": null },
+          "exchange": { "const": null }
+        }
+      }
+    },
+    "sectorImpact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sector", "direction", "rationale"],
+      "properties": {
+        "sector": { "$ref": "#/$defs/sectorId" },
+        "direction": { "enum": ["positiv", "negativ", "blandad", "oklar"] },
+        "rationale": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

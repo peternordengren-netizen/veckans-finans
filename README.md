@@ -1,0 +1,48 @@
+# Veckans finans
+
+Statisk sida som sammanfattar veckans finansnyheter per sektor och kopplar dem till noterade aktier.
+Inga betaltjänster eller betal-API:er. **Inget investeringsråd.**
+
+## Dataflöde
+
+| Steg | Skriver | Committas |
+|---|---|---|
+| `scripts/fetch.py` (RSS: MFN, Cision; API: Riksbanken, SCB) | `data/raw/<vecka>/` | nej (`.gitignore`) |
+| `/sammanfatta-veckan` (Claude Code, manuellt en gång i veckan) | `data/weeks/<vecka>.json` | ja |
+| `scripts/prices.py` (yfinance, valfritt) | `data/prices/<vecka>.json` | ja |
+| `scripts/validate.py` | – | – |
+
+Veckor anges som ISO-vecka, t.ex. `2026-W40` (mån–sön, Europe/Stockholm).
+
+## Datamodell
+
+- [`schema/week.schema.json`](schema/week.schema.json): sektorer → nyheter → bolag och indirekt sektorpåverkan.
+  Varje nyhet har `evidence`, ordagranna citat ur källtexten (max 25 ord, visas inte på sidan).
+  Alla siffror i rubrik och sammanfattning måste finnas exakt i något citat. Jämförelsen sker efter normalisering
+  (decimalkomma/punkt, mellanslag och hårt mellanslag som tusentalsavgränsare, %/procent, typografiskt minus),
+  så avrundade eller omräknade siffror underkänns.
+  Valideringen kontrollerar också riktningen. Ett ökningsord (ökade, steg, höjdes, växte, stärktes) får inte stå
+  framför ett tal som är negativt i citatet, och ett minskningsord (minskade, sjönk, föll, sänktes, försvagades)
+  får inte stå framför ett positivt. Citatets egna riktningsord räknas, så "minskade med 3,2 procent" räknas som negativt.
+  Står "till" direkt före talet ("sänktes till 1,75") är det en nivå, och då kontrolleras inte riktningen. "med" kontrolleras.
+  **Ordlistan fångar inte allt.** Den matchar på ordstam inom fyra ord före talet i samma mening. Den missar synonymer
+  (backade, rasade, lyfte, tappade), riktningsord efter talet ("en ökning på 3 procent" fångas, "3 procents ökning"
+  gör det inte) och negationer ("ökade inte"). Undantaget för "till" gör också att en felaktig riktning framför
+  en nivå inte fångas. Kontrollen är ett skyddsnät och ersätter inte en egen läsning.
+- [`schema/prices.schema.json`](schema/prices.schema.json): kursförändring per `yahoo_ticker`. Sidan fungerar utan filen.
+- [`data/instruments.csv`](data/instruments.csv): `namn,alias,ticker,yahoo_ticker,börs`. Flera alias separeras med `|`. Underhålls manuellt.
+- [`data/sectors.json`](data/sectors.json): fast sektorlista som styr flikarna.
+- `data/mock/`: exempeldata (`"mock": true`) med **påhittade bolag och källor** och en egen
+  [`instruments.csv`](data/mock/instruments.csv). Valideringen underkänner mockfiler utanför `data/mock/`.
+
+## Validering
+
+```bash
+python -m venv .venv
+.venv/Scripts/python -m pip install -r requirements.txt
+.venv/Scripts/python scripts/validate.py
+.venv/Scripts/python -m pytest -q
+```
+
+`validate.py` underkänner bland annat tickers som saknas i `instruments.csv`, bolag som markerats "onoterat" trots att de finns där,
+datum utanför veckan, siffror utan citat och citat som inte står i källtexten.

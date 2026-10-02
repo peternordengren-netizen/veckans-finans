@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "week": "2026-W40",
+  "fetched_at": "2026-10-04T18:05:00+02:00",
+  "mock": true,
+  "quotes": {
+    "FJLH-B.MOCK": { "change_pct": 4.8, "close": 5.12, "currency": "SEK" },
+    "KUST-A.MOCK": { "change_pct": -2.3, "close": 251.4, "currency": "SEK" },
+    "NRSK.MOCK": { "change_pct": 6.3, "close": 412.0, "currency": "SEK" },
+    "VAGN-B.MOCK": { "change_pct": -1.9, "close": 84.2, "currency": "SEK" },
+    "MOLN.MOCK": { "change_pct": 0.4, "close": 301.5, "currency": "SEK" }
+  },
+  "errors": {
+    "ALBN.MOCK": "Exempel: ingen data returnerades"
+  }
+}

@@ -1,0 +1,135 @@
+{
+  "schema_version": 1,
+  "week": "2026-W40",
+  "period": { "start": "2026-09-28", "end": "2026-10-04" },
+  "generated_at": "2026-10-04T18:00:00+02:00",
+  "mock": true,
+  "sectors": [
+    {
+      "id": "makro",
+      "summary": "EXEMPELDATA – fiktiva källor och bolag. Centralbanken lämnade styrräntan oförändrad på 1,75 procent och inflationen landade på 2,1 procent.",
+      "items": [
+        {
+          "id": "makro-centralbank-rantebesked",
+          "headline": "Centralbanken lämnar styrräntan oförändrad på 1,75 procent",
+          "summary": "Direktionen behåller räntan och signalerar oförändrad nivå resten av året.",
+          "published": "2026-09-30",
+          "source": { "name": "Centralbanken (fiktiv)", "url": "https://example.com/centralbanken/rantebesked", "raw_file": "centralbanken/rantebesked.txt" },
+          "evidence": [ { "quote": "Styrräntan lämnas oförändrad på 1,75 procent." } ],
+          "companies": [],
+          "sector_impacts": [
+            { "sector": "fastigheter", "direction": "positiv", "rationale": "Stabila räntor minskar osäkerheten kring refinansieringskostnader." },
+            { "sector": "banker-finans", "direction": "blandad", "rationale": "Räntenettot hålls stabilt men får ingen ytterligare medvind." }
+          ]
+        },
+        {
+          "id": "makro-statistikbyran-inflation",
+          "headline": "Inflationen 2,1 % i september",
+          "summary": "Inflationstakten ligger nära målet.",
+          "published": "2026-10-01",
+          "source": { "name": "Statistikbyrån (fiktiv)", "url": "https://example.com/statistikbyran/inflation", "raw_file": "statistikbyran/inflation.txt" },
+          "evidence": [ { "quote": "Inflationstakten var 2,1 procent i september." } ],
+          "companies": [],
+          "sector_impacts": [
+            { "sector": "konsument", "direction": "oklar", "rationale": "Låg inflation stöder köpkraften, men effekten beror på löneutvecklingen." }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "fastigheter",
+      "summary": "EXEMPELDATA. Fjällhem refinansierade obligationer och ett onoterat bolag sålde ett bestånd.",
+      "items": [
+        {
+          "id": "fast-fjallhem-refinansiering",
+          "headline": "Fjällhem refinansierar obligationer för 2 000 miljoner kronor",
+          "summary": "Bolaget ersätter obligationer som förfaller under 2027 med nya lån.",
+          "published": "2026-09-29",
+          "source": { "name": "Pressmeddelande (fiktivt)", "url": "https://example.com/fjallhem/refinansiering", "raw_file": "press/fjallhem-refinansiering.txt" },
+          "evidence": [
+            { "quote": "nya obligationer om totalt 2 000 miljoner kronor" },
+            { "quote": "ersätter obligationer som förfaller under 2027" }
+          ],
+          "companies": [
+            { "name": "Fjällhem", "match": "matchad", "ticker": "FJLH B", "yahoo_ticker": "FJLH-B.MOCK", "exchange": "Exempelbörsen", "impact": "direkt", "rationale": "Bolaget som refinansierar." },
+            { "name": "Kustbanken", "match": "matchad", "ticker": "KUST A", "yahoo_ticker": "KUST-A.MOCK", "exchange": "Exempelbörsen", "impact": "indirekt", "rationale": "Ledarbank i emissionen." }
+          ],
+          "sector_impacts": [
+            { "sector": "banker-finans", "direction": "positiv", "rationale": "Minskad kreditrisk i bankernas fastighetsexponering." }
+          ]
+        },
+        {
+          "id": "fast-tallmo-forsaljning",
+          "headline": "Tallmo Fastighets AB säljer bestånd till Fjällhem",
+          "summary": "Ett onoterat bolag avyttrar kontorsfastigheter.",
+          "published": "2026-10-02",
+          "source": { "name": "Pressmeddelande (fiktivt)", "url": "https://example.com/tallmo/forsaljning", "raw_file": "press/tallmo-forsaljning.txt" },
+          "evidence": [],
+          "companies": [
+            { "name": "Tallmo Fastighets AB", "match": "onoterat", "ticker": null, "yahoo_ticker": null, "exchange": null, "impact": "direkt", "rationale": "Säljare av beståndet." },
+            { "name": "Fjällhem Fastigheter", "match": "matchad", "ticker": "FJLH B", "yahoo_ticker": "FJLH-B.MOCK", "exchange": "Exempelbörsen", "impact": "direkt", "rationale": "Köpare av beståndet." }
+          ],
+          "sector_impacts": []
+        }
+      ]
+    },
+    {
+      "id": "banker-finans",
+      "summary": "EXEMPELDATA. Kustbankens räntenetto minskade 3,2 procent.",
+      "items": [
+        {
+          "id": "bank-kustbanken-kvartal",
+          "headline": "Kustbankens räntenetto minskade 3,2 procent",
+          "summary": "Minskningen förklaras av lägre marknadsräntor.",
+          "published": "2026-10-01",
+          "source": { "name": "Pressmeddelande (fiktivt)", "url": "https://example.com/kustbanken/rapport", "raw_file": "press/kustbanken-rapport.txt" },
+          "evidence": [ { "quote": "Räntenettot förändrades med −3,2 % jämfört med föregående kvartal." } ],
+          "companies": [
+            { "name": "Kustbanken", "match": "matchad", "ticker": "KUST A", "yahoo_ticker": "KUST-A.MOCK", "exchange": "Exempelbörsen", "impact": "direkt", "rationale": "Bolaget som rapporterar." }
+          ],
+          "sector_impacts": []
+        }
+      ]
+    },
+    {
+      "id": "halsovard",
+      "summary": "EXEMPELDATA. Norrsken Pharma rapporterade studieresultat som även berör en konkurrent.",
+      "items": [
+        {
+          "id": "halso-norrsken-studie",
+          "headline": "Norrsken Pharma redovisar fas 3-resultat",
+          "summary": "Studien nådde sitt primära effektmått enligt bolaget.",
+          "published": "2026-10-01",
+          "source": { "name": "Pressmeddelande (fiktivt)", "url": "https://example.com/norrsken/studie", "raw_file": "press/norrsken-studie.txt" },
+          "evidence": [ { "quote": "fas 3-studien nådde sitt primära effektmått" } ],
+          "companies": [
+            { "name": "Norrsken Pharma", "match": "matchad", "ticker": "NRSK", "yahoo_ticker": "NRSK.MOCK", "exchange": "Exempelbörsen", "impact": "direkt", "rationale": "Bolaget bakom studien." },
+            { "name": "Albion Biotech", "match": "matchad", "ticker": "ALBN", "yahoo_ticker": "ALBN.MOCK", "exchange": "Exempelbörsen", "impact": "indirekt", "rationale": "Konkurrent inom samma terapiområde." }
+          ],
+          "sector_impacts": []
+        }
+      ]
+    },
+    {
+      "id": "teknik",
+      "summary": "EXEMPELDATA. Ett mjukvarubolag tecknade avtal med en telekomoperatör.",
+      "items": [
+        {
+          "id": "teknik-molnbyran-vagnat",
+          "headline": "Vågnät väljer Molnbyrån som kundplattform",
+          "summary": "Avtalet gäller 5 år och omfattar 12 500 användare.",
+          "published": "2026-09-28",
+          "source": { "name": "Pressmeddelande (fiktivt)", "url": "https://example.com/molnbyran/avtal", "raw_file": "press/molnbyran-avtal.txt" },
+          "evidence": [ { "quote": "Avtalet löper på 5 år och omfattar 12 500 användare." } ],
+          "companies": [
+            { "name": "Vågnät", "match": "matchad", "ticker": "VAGN B", "yahoo_ticker": "VAGN-B.MOCK", "exchange": "Exempelbörsen", "impact": "direkt", "rationale": "Kund i avtalet." },
+            { "name": "Molnbyrån", "match": "matchad", "ticker": "MOLN", "yahoo_ticker": "MOLN.MOCK", "exchange": "Exempelbörsen", "impact": "direkt", "rationale": "Leverantör i avtalet." }
+          ],
+          "sector_impacts": [
+            { "sector": "telekom", "direction": "oklar", "rationale": "Kostnadseffektivisering hos en operatör." }
+          ]
+        }
+      ]
+    }
+  ]
+}

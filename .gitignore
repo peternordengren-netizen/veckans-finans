@@ -1,0 +1,16 @@
+# Rå källtext hämtas om varje vecka och committas aldrig – bara data/weeks/ (och data/prices/) publiceras.
+data/raw/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Astro / Node
+node_modules/
+dist/
+.astro/
+
+# Hemligheter (används inte i dag, men ska aldrig hamna i ett publikt repo)
+.env

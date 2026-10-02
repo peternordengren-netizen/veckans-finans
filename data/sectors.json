@@ -1,0 +1,11 @@
+[
+  { "id": "makro", "name": "Makro & räntor" },
+  { "id": "banker-finans", "name": "Banker & finans" },
+  { "id": "fastigheter", "name": "Fastigheter" },
+  { "id": "industri", "name": "Industri" },
+  { "id": "halsovard", "name": "Hälsovård" },
+  { "id": "teknik", "name": "Teknik" },
+  { "id": "telekom", "name": "Telekom" },
+  { "id": "energi-ravaror", "name": "Energi & råvaror" },
+  { "id": "konsument", "name": "Konsument & handel" }
+]
