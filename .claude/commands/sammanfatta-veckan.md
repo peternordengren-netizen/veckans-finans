@@ -60,6 +60,10 @@ Veckan har typiskt flera hundra poster. Läs dem inte alla.
 7. **Bolag:** ta med varje bolag som nämns och som nyheten berör.
    - Matcha mot `instruments.csv` på `namn` eller något `alias`. Vid träff kopierar du `ticker`, `yahoo_ticker` och `börs` (till `exchange`) exakt från raden och sätter `"match": "matchad"`.
    - **Hitta aldrig på tickers.** Om bolaget inte finns i csv:n sätter du `"match": "ej i listan"` och `ticker`/`yahoo_ticker`/`exchange` till `null`. Det gäller även om bolaget är noterat, till exempel på First North eller Small Cap. "Ej i listan" säger bara att bolaget saknas i bevakningslistan, inget om noteringen. Lista sådana bolag i slutrapporten (se nedan) så att jag kan lägga till dem i csv:n.
+   - **Avsändare av undersökningar och index kopplas inte.** När ett bolag bara publicerar en undersökning, ett index
+     eller en analys om något annat, kopplas avsändaren inte till nyheten, varken direkt eller indirekt. Det gäller till
+     exempel Swedbanks inköpschefsindex, SEB:s boprisindikator, bankers konjunkturprognoser och Swecos analyser. Bolaget
+     kopplas bara om nyheten handlar om dess egen verksamhet, till exempel dess egna siffror eller affärer.
    - `impact`: `"direkt"` om bolaget är föremål för nyheten, `"indirekt"` om det påverkas via kunder, leverantörer, konkurrenter, räntor eller liknande. `rationale` är en mening.
 8. **Indirekt sektorpåverkan:** ange i `sector_impacts` vilka *andra* sektorer nyheten rimligen påverkar, med riktning (`positiv`/`negativ`/`blandad`/`oklar`) och en motivering på en mening. Använd `oklar` hellre än att gissa. En tom lista är okej.
 9. **Sektor och indirekta kopplingar via `sektor` i `instruments.csv`:**
