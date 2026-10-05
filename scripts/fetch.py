@@ -440,7 +440,15 @@ def store(result: RunResult, raw_dir: Path, now: datetime) -> dict[str, int]:
         week = iso_week(item.published)
         idx = index_for(week)
         entries = idx["items"]
-        if any(e["id"] == item.id and e["source"] == item.source for e in entries) or _already_merged(entries, item):
+        same = next((e for e in entries if e["id"] == item.id and e["source"] == item.source), None)
+        if same is not None:
+            # Nyckeltal (t.ex. styrräntan) uppdateras om datan ändrats eller saknas
+            # (poster sparade i äldre format); vanliga nyheter skrivs aldrig om.
+            if item.data is not None and same.get("data") != item.data:
+                _write_atomic(raw_dir / week / same["path"], _text_file(item))
+                same.update(data=item.data, url=item.url, tags=item.tags, title=item.title)
+            continue
+        if _already_merged(entries, item):
             continue
         dup = next((e for e in entries if _is_duplicate(e, item)), None)
         if dup is not None:

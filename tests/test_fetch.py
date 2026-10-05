@@ -239,6 +239,31 @@ def test_riksbank_url_ar_ett_intervall_bakat_fran_idag():
     assert url.endswith("/2026-10-05")
 
 
+def test_nyckeltalspost_i_aldre_format_uppdateras(tmp_path):
+    run(tmp_path)
+    idx_path = tmp_path / "2026-W40" / "index.json"
+    idx = json.loads(idx_path.read_text(encoding="utf-8"))
+    [e] = [e for e in idx["items"] if e["source"] == "riksbanken"]
+    del e["data"]  # som en post sparad före nyckeltalsformatet
+    e["url"], e["tags"] = "https://api.riksbank.se/swea/v1/Observations/Latest/SECBREPOEFF", ["makro", "styrränta"]
+    idx_path.write_text(json.dumps(idx), encoding="utf-8")
+    (tmp_path / "2026-W40" / e["path"]).write_text("gammal text", encoding="utf-8")
+
+    run(tmp_path)
+    [e] = [e for e in read_index(tmp_path, "2026-W40")["items"] if e["source"] == "riksbanken"]
+    assert e["data"]["policy_rate"]["previous_value"] == 2.0
+    assert e["url"] == fetch.RIKSBANK_PAGE_URL and e["tags"] == ["nyckeltal", "styrränta"]
+    assert "Föregående värde var 2 procent" in (tmp_path / "2026-W40" / e["path"]).read_text(encoding="utf-8")
+
+
+def test_vanlig_nyhet_skrivs_aldrig_om(tmp_path):
+    feed = mfn_feed(mfn_item("m1", "Fjällhem tecknar avtal", "Fri, 02 Oct 2026 08:00:00 +0000", text="Första."))
+    run(tmp_path, mfn=feed)
+    feed2 = mfn_feed(mfn_item("m1", "Fjällhem tecknar avtal", "Fri, 02 Oct 2026 08:00:00 +0000", text="Ändrad."))
+    run(tmp_path, mfn=feed2)
+    assert (tmp_path / "2026-W40" / "mfn" / "m1.txt").read_text(encoding="utf-8").rstrip().endswith("Första.")
+
+
 def test_nyckeltal_sparas_strukturerat_i_index(tmp_path):
     run(tmp_path)
     [e] = [e for e in read_index(tmp_path, "2026-W40")["items"] if e["source"] == "riksbanken"]
