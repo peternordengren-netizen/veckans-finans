@@ -492,6 +492,49 @@ def test_makrosammanfattningen_far_hanvisa_till_nyckeltalet(week, instruments, s
     assert any("['1,5 procent']" in e for e in run(week, instruments, sector_ids).errors)
 
 
+@pytest.mark.parametrize(
+    "summary",
+    [
+        "Styrräntan sänktes till 1,75 procent.",
+        "Riksbanken har höjt styrräntan till 1,75 procent.",
+        "Inflationen var 2,1 procent. Styrräntan sänks till 1,75 procent.",
+    ],
+)
+def test_sankt_eller_hojd_underkanns_nar_andringen_skett_fore_veckan(week, instruments, sector_ids, summary):
+    # Mockens changed_on är 2025-10-01, alltså före vecka 40.
+    week["sectors"][0]["summary"] = summary
+    res = run(week, instruments, sector_ids)
+    assert any("säger att styrräntan ändrats, men den är oförändrad under veckan (senast ändrad 2025-10-01)" in e
+               for e in res.errors)
+
+
+def test_sankt_godkanns_nar_andringen_skett_under_veckan(week, instruments, sector_ids):
+    week["key_figures"]["policy_rate"].update(value=1.5, previous_value=1.75, changed_on="2026-09-30")
+    week["sectors"][0]["summary"] = "Styrräntan sänktes till 1,5 procent från 1,75 procent."
+    assert run(week, instruments, sector_ids).errors == []
+
+
+@pytest.mark.parametrize(
+    "summary",
+    [
+        "Styrräntan ligger kvar på 1,75 procent, oförändrad sedan 1 oktober 2025.",
+        "Hushållen tror att styrräntan höjs under nästa år.",  # förväntan, inte påstående
+        "Riksbankens signaler om en höjning av styrräntan blir tydligare.",
+        "Bankerna höjde sina bolåneräntor.",  # inte styrräntan
+    ],
+)
+def test_oforandrad_och_forvantningar_godkanns(week, instruments, sector_ids, summary):
+    week["sectors"][0]["summary"] = summary
+    assert run(week, instruments, sector_ids).errors == []
+
+
+def test_ingen_andring_i_hamtad_period_raknas_som_oforandrad(week, instruments, sector_ids):
+    week["key_figures"]["policy_rate"].update(previous_value=None, changed_on=None)
+    week["sectors"][0]["summary"] = "Styrräntan sänktes till 1,75 procent."
+    res = run(week, instruments, sector_ids)
+    assert any("(ingen ändring i hämtad period)" in e for e in res.errors)
+
+
 def test_annan_sektor_far_inte_luta_sig_mot_nyckeltalet(week, instruments, sector_ids):
     week["sectors"][1]["summary"] = "Styrräntan på 1,75 procent påverkar fastigheter."
     res = run(week, instruments, sector_ids)

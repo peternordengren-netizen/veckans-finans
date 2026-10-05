@@ -8,6 +8,8 @@ Utöver JSON Schema-kontrollen görs korskontroller som schemat inte kan uttryck
 - inget bolag markerat "ej i listan" finns i instruments.csv (missad matchning)
 - ett indirekt kopplat bolag tillhör (enligt kolumnen sektor) nyhetens sektor
   eller en sektor i nyhetens sector_impacts
+- makrosammanfattningen säger inte att styrräntan sänkts/höjts om nyckeltalets
+  ändringsdatum ligger före veckan
 - publiceringsdatum ligger inom veckan
 - varje siffra i rubrik/sammanfattning finns exakt (efter normalisering, se
   extract_numbers) i något evidence-citat – avrundade siffror underkänns
@@ -424,6 +426,26 @@ def _sv_number(value: float) -> str:
     return f"{value:.2f}".rstrip("0").rstrip(".").replace(".", ",")
 
 
+_RATE_RE = re.compile(r"styrränt", re.IGNORECASE)
+_RATE_CHANGE_RE = re.compile(r"\b(?:sänk|höj)\w*", re.IGNORECASE)
+# Meningar om förväntningar eller prognoser påstår inte att räntan ändrats.
+_FORECAST_RE = re.compile(r"\b(?:tror|väntar|förväntar|förväntningar|väntas|prognos\w*|bedöm\w*|signal\w*|kan komma)\b",
+                          re.IGNORECASE)
+
+
+def _changed_this_week(kf: dict, start: date, end: date) -> bool:
+    return kf["changed_on"] is not None and start <= date.fromisoformat(kf["changed_on"]) <= end
+
+
+def _rate_change_claims(text: str) -> list[str]:
+    """Meningar som säger att styrräntan sänkts/höjts (inte förväntningar om det)."""
+    sentences = re.split(r"(?<=[.!?])\s+", text)
+    return [
+        s.strip() for s in sentences
+        if _RATE_RE.search(s) and _RATE_CHANGE_RE.search(s) and not _FORECAST_RE.search(s)
+    ]
+
+
 def _check_policy_rate(
     data: dict, start: date, end: date, raw_index: dict[str, dict] | None, is_mock: bool, res: Result
 ) -> list[str]:
@@ -458,6 +480,15 @@ def _check_policy_rate(
             )
             if latest is not None and kf["date"] != latest:
                 res.errors.append(f"key_figures.policy_rate avser {kf['date']}, men senaste observationen i veckan är {latest}")
+
+    if not _changed_this_week(kf, start, end):
+        makro = next((s for s in data["sectors"] if s["id"] == "makro"), None)
+        for sentence in _rate_change_claims(makro["summary"] if makro else ""):
+            when = f"senast ändrad {kf['changed_on']}" if kf["changed_on"] else "ingen ändring i hämtad period"
+            res.errors.append(
+                f"makro: sammanfattningen säger att styrräntan ändrats, men den är oförändrad under veckan "
+                f"({when}) – skriv \"oförändrad sedan …\": {sentence!r}"
+            )
 
     quotes = [f"{_sv_number(kf['value'])} procent", kf["date"]]
     if kf["previous_value"] is not None:

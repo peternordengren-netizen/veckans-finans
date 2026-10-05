@@ -9,7 +9,8 @@
     "dev:mock": "astro dev --mode mock",
     "build": "astro build",
     "build:mock": "astro build --mode mock",
-    "preview": "astro preview"
+    "preview": "astro preview",
+    "test:js": "node --test \"tests/**/*.test.ts\""
   },
   "dependencies": {
     "astro": "^7.3.5"

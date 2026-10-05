@@ -216,15 +216,6 @@ export function loadWeek(week: string): WeekView {
   };
 }
 
-/** 1.75 -> "1,75", 2 -> "2,00" (räntor visas alltid med två decimaler). */
-export function formatRate(value: number): string {
-  return new Intl.NumberFormat("sv-SE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
-}
-
-export function formatLongDate(iso: string): string {
-  return new Date(`${iso}T12:00:00`).toLocaleDateString("sv-SE", { day: "numeric", month: "long", year: "numeric" });
-}
-
 export function weekLabel(week: string): string {
   const [year, w] = week.split("-W");
   return `Vecka ${Number(w)}, ${year}`;

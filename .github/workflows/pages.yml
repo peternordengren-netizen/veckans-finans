@@ -49,6 +49,9 @@ jobs:
       - name: Installera Node-beroenden
         run: npm ci
 
+      - name: JS-tester
+        run: npm run test:js
+
       - name: Bygg sidan
         run: npm run build
 

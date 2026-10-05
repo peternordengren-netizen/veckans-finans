@@ -43,8 +43,12 @@ Veckan har typiskt flera hundra poster. Läs dem inte alla.
    - Gör ingen nyhet av styrräntan. Valideringen underkänner en nyhet med `raw_file` under `riksbanken/`.
    - Makrosammanfattningen hänvisar till nyckeltalet, till exempel "Styrräntan ligger kvar på 1,75 procent
      (se nyckeltal)". Värdena och datumen i nyckeltalet räknas som belägg för makrosammanfattningen, men bara där.
-   - Om ändringsdatumet (`changed_on`) ligger inom veckan har räntan ändrats den här veckan. Då ska det stå först i
-     makrosammanfattningen.
+   - **Formulering beroende på ändringsdatumet (`changed_on`):**
+     - Om `changed_on` ligger före veckan, eller är `null`, skriver du "oförändrad", till exempel "Styrräntan ligger
+       kvar på 1,75 procent, oförändrad sedan 1 oktober 2025". Skriv aldrig "sänkt" eller "höjd" om styrräntan då.
+       Valideringen underkänner det. Förväntningar om framtida ändringar ("hushållen tror att räntan höjs") är tillåtna.
+     - Om `changed_on` ligger inom veckan har räntan ändrats den här veckan. Då ska det stå först i
+       makrosammanfattningen, med "sänkt" eller "höjd" från `previous_value`.
    - Om Riksbanksposter saknas i veckan utelämnar du `key_figures` och nämner det i slutrapporten.
 5. **Källfel:** kontrollera `runs` i indexet. Om någon källa har `status: "fel"` i flera körningar i följd kan veckan
    ha luckor. Nämn det i slutrapporten.
