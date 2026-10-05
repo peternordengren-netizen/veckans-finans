@@ -63,7 +63,7 @@
           "source": { "name": "Pressmeddelande (fiktivt)", "url": "https://example.com/tallmo/forsaljning", "raw_file": "press/tallmo-forsaljning.txt" },
           "evidence": [],
           "companies": [
-            { "name": "Tallmo Fastighets AB", "match": "onoterat", "ticker": null, "yahoo_ticker": null, "exchange": null, "impact": "direkt", "rationale": "Säljare av beståndet." },
+            { "name": "Tallmo Fastighets AB", "match": "ej i listan", "ticker": null, "yahoo_ticker": null, "exchange": null, "impact": "direkt", "rationale": "Säljare av beståndet." },
             { "name": "Fjällhem Fastigheter", "match": "matchad", "ticker": "FJLH B", "yahoo_ticker": "FJLH-B.MOCK", "exchange": "Exempelbörsen", "impact": "direkt", "rationale": "Köpare av beståndet." }
           ],
           "sector_impacts": []

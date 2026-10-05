@@ -249,7 +249,7 @@ def test_fel_yahoo_ticker_underkanns(week, instruments, sector_ids):
     assert any("yahoo_ticker" in e for e in res.errors)
 
 
-def test_onoterat_med_ticker_underkanns_av_schemat(week, instruments, sector_ids):
+def test_ej_i_listan_med_ticker_underkanns_av_schemat(week, instruments, sector_ids):
     item(week, "fast-tallmo-forsaljning")["companies"][0]["ticker"] = "TALL"
     res = run(week, instruments, sector_ids)
     assert any(e.startswith("schema:") for e in res.errors)
@@ -258,7 +258,13 @@ def test_onoterat_med_ticker_underkanns_av_schemat(week, instruments, sector_ids
 def test_missad_matchning_via_alias_underkanns(week, instruments, sector_ids):
     item(week, "fast-tallmo-forsaljning")["companies"][0]["name"] = "Norrsken"  # alias i mock-listan
     res = run(week, instruments, sector_ids)
-    assert any("markerat onoterat men matchar 'NRSK'" in e for e in res.errors)
+    assert any("markerat 'ej i listan' men matchar 'NRSK'" in e for e in res.errors)
+
+
+def test_gamla_vardet_onoterat_underkanns(week, instruments, sector_ids):
+    item(week, "fast-tallmo-forsaljning")["companies"][0]["match"] = "onoterat"
+    res = run(week, instruments, sector_ids)
+    assert any(e.startswith("schema:") and "onoterat" in e for e in res.errors)
 
 
 def test_okand_sektor_och_egen_sektor_i_impacts(week, instruments, sector_ids):

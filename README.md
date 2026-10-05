@@ -116,7 +116,8 @@ npm run preview       # visa dist/ lokalt
   om en fil i `data/weeks/` är markerad som mock.
 - Sidan läser aldrig `evidence` eller `data/raw/`.
 - Kursrader visas bara om `data/prices/<vecka>.json` finns. Saknas en ticker i filen står det "Kurs saknas".
-- Onoterade bolag listas med namn och motivering, men utan aktiekort.
+- Bolag som inte finns i `instruments.csv` (`"match": "ej i listan"`) listas under "Ej i bevakningslistan" med namn
+  och motivering, men utan aktiekort. De kan ändå vara noterade, till exempel på First North.
 - Utan JavaScript visas alla sektorer under varandra. Med JavaScript blir de flikar, och `#sektor-<id>` i adressen
   väljer flik.
 
@@ -138,5 +139,5 @@ python -m venv .venv
 .venv/Scripts/python -m pytest -q
 ```
 
-`validate.py` underkänner bland annat tickers som saknas i `instruments.csv`, bolag som markerats "onoterat" trots att de finns där,
+`validate.py` underkänner bland annat tickers som saknas i `instruments.csv`, bolag som markerats "ej i listan" trots att de finns där,
 datum utanför veckan, siffror utan citat och citat som inte står i källtexten.

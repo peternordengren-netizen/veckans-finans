@@ -37,7 +37,7 @@ export interface ListedCompany {
   quote: Quote | null;
 }
 
-export interface UnlistedCompany {
+export interface NotInListCompany {
   name: string;
   impact: Impact;
   rationale: string;
@@ -57,7 +57,7 @@ export interface ItemView {
   sourceName: string;
   sourceUrl: string;
   listed: ListedCompany[];
-  unlisted: UnlistedCompany[];
+  notInList: NotInListCompany[];
   impacts: SectorImpact[];
 }
 
@@ -119,7 +119,7 @@ function loadQuotes(week: string): Record<string, Quote> | null {
 // Rå struktur enligt schema/week.schema.json – bara de fält sidan använder.
 interface RawCompany {
   name: string;
-  match: "matchad" | "onoterat";
+  match: "matchad" | "ej i listan";
   ticker: string | null;
   yahoo_ticker: string | null;
   exchange: string | null;
@@ -180,8 +180,8 @@ export function loadWeek(week: string): WeekView {
         rationale: c.rationale,
         quote: (c.yahoo_ticker && quotes?.[c.yahoo_ticker]) || null,
       })),
-    unlisted: it.companies
-      .filter((c) => c.match === "onoterat")
+    notInList: it.companies
+      .filter((c) => c.match === "ej i listan")
       .map((c) => ({ name: c.name, impact: c.impact, rationale: c.rationale })),
     impacts: it.sector_impacts.map((s) => ({
       sector: sectorOf(s.sector),

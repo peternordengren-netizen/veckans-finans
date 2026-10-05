@@ -136,7 +136,10 @@
       "required": ["name", "match", "impact", "rationale"],
       "properties": {
         "name": { "description": "Namnet som det står i källtexten.", "type": "string", "minLength": 1 },
-        "match": { "enum": ["matchad", "onoterat"] },
+        "match": {
+          "description": "matchad = finns i data/instruments.csv. ej i listan = finns inte där (kan ändå vara noterat, t.ex. på First North).",
+          "enum": ["matchad", "ej i listan"]
+        },
         "ticker": { "type": ["string", "null"] },
         "yahoo_ticker": { "type": ["string", "null"] },
         "exchange": { "type": ["string", "null"] },

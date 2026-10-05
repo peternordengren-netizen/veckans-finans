@@ -44,7 +44,7 @@ def fake_fetch(table, calls=None):
 def test_matchade_tickers_ur_mockveckan():
     assert prices.matched_tickers(MOCK_WEEK) == [
         "ALBN.MOCK", "FJLH-B.MOCK", "KUST-A.MOCK", "MOLN.MOCK", "NRSK.MOCK", "VAGN-B.MOCK",
-    ]  # Tallmo är onoterat och kommer inte med
+    ]  # Tallmo är "ej i listan" och kommer inte med
 
 
 def test_veckoforandring_fran_foregaende_veckas_stangning():

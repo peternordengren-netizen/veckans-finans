@@ -59,7 +59,7 @@ Veckan har typiskt flera hundra poster. Läs dem inte alla.
 6. **Datum:** `published` är datumdelen av raden `Publicerad:` i källfilen (Europe/Stockholm) och måste ligga inom veckan (mån–sön). Kontrollera datumet i filen och anta det inte från filnamnet eller körningstiden.
 7. **Bolag:** ta med varje bolag som nämns och som nyheten berör.
    - Matcha mot `instruments.csv` på `namn` eller något `alias`. Vid träff kopierar du `ticker`, `yahoo_ticker` och `börs` (till `exchange`) exakt från raden och sätter `"match": "matchad"`.
-   - **Hitta aldrig på tickers.** Om bolaget inte finns i csv:n sätter du `"match": "onoterat"` och `ticker`/`yahoo_ticker`/`exchange` till `null`, även om du tror att bolaget är noterat. Lista sådana bolag i slutrapporten (se nedan) så att jag kan lägga till dem i csv:n.
+   - **Hitta aldrig på tickers.** Om bolaget inte finns i csv:n sätter du `"match": "ej i listan"` och `ticker`/`yahoo_ticker`/`exchange` till `null`. Det gäller även om bolaget är noterat, till exempel på First North eller Small Cap. "Ej i listan" säger bara att bolaget saknas i bevakningslistan, inget om noteringen. Lista sådana bolag i slutrapporten (se nedan) så att jag kan lägga till dem i csv:n.
    - `impact`: `"direkt"` om bolaget är föremål för nyheten, `"indirekt"` om det påverkas via kunder, leverantörer, konkurrenter, räntor eller liknande. `rationale` är en mening.
 8. **Indirekt sektorpåverkan:** ange i `sector_impacts` vilka *andra* sektorer nyheten rimligen påverkar, med riktning (`positiv`/`negativ`/`blandad`/`oklar`) och en motivering på en mening. Använd `oklar` hellre än att gissa. En tom lista är okej.
 9. **Sektor och indirekta kopplingar via `sektor` i `instruments.csv`:**
@@ -89,7 +89,7 @@ Veckan har typiskt flera hundra poster. Läs dem inte alla.
 Kort, i chatten:
 - antal poster i indexet, antal valda nyheter per sektor, och antal fulltextlästa filer som valdes bort (med en rad om varför)
 - källfel eller luckor enligt `runs`, och om `git pull` misslyckades
-- bolag markerade "onoterat", med förslag på om de bör läggas till i `instruments.csv` (du får inte lägga till dem själv)
+- bolag markerade "ej i listan", med förslag på om de bör läggas till i `instruments.csv` (du får inte lägga till dem själv)
 - matchade bolag vars `mfn_slug` är tom men som hade MFN-poster i veckan: föreslå sluggen ur postens `company`
   (du får inte fylla i den själv)
 - valideringens resultat: OK efter hur många körningar, eller **EJ GODKÄND** med alla kvarvarande fel listade

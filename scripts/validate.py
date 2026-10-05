@@ -5,7 +5,7 @@ Utöver JSON Schema-kontrollen görs korskontroller som schemat inte kan uttryck
 - sektorer finns i data/sectors.json
 - varje "matchad" ticker finns i data/instruments.csv med samma yahoo_ticker/börs
   (skydd mot påhittade tickers)
-- inget bolag markerat "onoterat" finns i instruments.csv (missad matchning)
+- inget bolag markerat "ej i listan" finns i instruments.csv (missad matchning)
 - ett indirekt kopplat bolag tillhör (enligt kolumnen sektor) nyhetens sektor
   eller en sektor i nyhetens sector_impacts
 - publiceringsdatum ligger inom veckan
@@ -463,7 +463,7 @@ def _check_company(c: dict, where: str, instruments: dict[str, Instrument], name
     else:
         ticker = names.get(c["name"].casefold())
         if ticker is not None:
-            res.errors.append(f"{label}: markerat onoterat men matchar {ticker!r} i instruments.csv")
+            res.errors.append(f"{label}: markerat 'ej i listan' men matchar {ticker!r} i instruments.csv")
 
 
 def _check_indirect_sector(
@@ -471,7 +471,7 @@ def _check_indirect_sector(
 ) -> None:
     """Ett indirekt kopplat bolag måste tillhöra nyhetens sektor eller en sektor i
     dess sector_impacts – annars saknar kopplingen stöd i nyhetens egen analys.
-    Bolag utan sektor i instruments.csv (och onoterade) kontrolleras inte."""
+    Bolag utan sektor i instruments.csv (och bolag som inte finns i listan) kontrolleras inte."""
     if c["impact"] != "indirekt" or c["match"] != "matchad":
         return
     inst = instruments.get(c["ticker"])

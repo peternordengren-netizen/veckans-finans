@@ -132,11 +132,11 @@ const lastChange =
                   </div>
                 )}
 
-                {it.unlisted.length > 0 && (
-                  <div class="unlisted">
-                    <h4>Onoterade bolag</h4>
+                {it.notInList.length > 0 && (
+                  <div class="not-in-list">
+                    <h4>Ej i bevakningslistan</h4>
                     <ul>
-                      {it.unlisted.map((c) => (
+                      {it.notInList.map((c) => (
                         <li>
                           <strong>{c.name}</strong> <span class="impact-text">({c.impact})</span>: {c.rationale}
                         </li>
@@ -419,12 +419,12 @@ const lastChange =
     margin-bottom: 12px;
   }
 
-  .unlisted,
+  .not-in-list,
   .impacts {
     margin-top: 10px;
     font-size: 0.9375rem;
   }
-  .unlisted h4,
+  .not-in-list h4,
   .impacts h4 {
     margin: 0 0 4px;
     font-size: 0.75rem;
@@ -433,7 +433,7 @@ const lastChange =
     text-transform: uppercase;
     color: var(--muted);
   }
-  .unlisted ul,
+  .not-in-list ul,
   .impacts ul {
     margin: 0;
     padding: 0;
