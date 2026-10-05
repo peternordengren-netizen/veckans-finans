@@ -10,7 +10,7 @@ Du ska skriva veckans sammanfattning för Veckans finans. Vecka: `$ARGUMENTS`. O
 - `data/raw/` är en klon av det privata repot `veckans-finans-raw`. Kör `git -C data/raw pull` först. Om det
   misslyckas, fortsätt med det som finns och nämn det i slutrapporten.
 - `data/raw/<vecka>/` är den enda tillåtna källan. Använd inte egen kunskap, webbsökning eller andra filer för fakta.
-- Läs `data/instruments.csv` (`namn,alias,ticker,yahoo_ticker,börs,mfn_slug`, alias separeras med `|`, `mfn_slug` är valfri och ofta tom) och `data/sectors.json`.
+- Läs `data/instruments.csv` (`namn,alias,ticker,yahoo_ticker,börs,sektor,mfn_slug`, alias separeras med `|`, `sektor` är ett id ur `data/sectors.json` och kan vara tom, `mfn_slug` är valfri och ofta tom) och `data/sectors.json`.
 - Skriv `data/weeks/<vecka>.json` enligt `schema/week.schema.json`. Läs schemat först.
 - Skriv inte `"mock"`. Använd aldrig `data/mock/` som källa.
 
@@ -54,7 +54,16 @@ Veckan har typiskt flera hundra poster. Läs dem inte alla.
    - **Hitta aldrig på tickers.** Om bolaget inte finns i csv:n sätter du `"match": "onoterat"` och `ticker`/`yahoo_ticker`/`exchange` till `null`, även om du tror att bolaget är noterat. Lista sådana bolag i slutrapporten (se nedan) så att jag kan lägga till dem i csv:n.
    - `impact`: `"direkt"` om bolaget är föremål för nyheten, `"indirekt"` om det påverkas via kunder, leverantörer, konkurrenter, räntor eller liknande. `rationale` är en mening.
 8. **Indirekt sektorpåverkan:** ange i `sector_impacts` vilka *andra* sektorer nyheten rimligen påverkar, med riktning (`positiv`/`negativ`/`blandad`/`oklar`) och en motivering på en mening. Använd `oklar` hellre än att gissa. En tom lista är okej.
-9. **Id:** `item.id` ska vara unikt, med gemener och bindestreck, t.ex. `fast-<bolag>-<ämne>`.
+9. **Sektor och indirekta kopplingar via `sektor` i `instruments.csv`:**
+   - **Placering:** en nyhet om ett matchat bolag hamnar under bolagets `sektor`, om inte innehållet tydligt hör
+     hemma någon annanstans, till exempel makro. Om `sektor` är tom bedömer du utifrån texten.
+   - **Indirekta bolag:** ett bolag med `impact: "indirekt"` måste ha en `sektor` som antingen är nyhetens egen sektor,
+     till exempel en konkurrent, eller finns i nyhetens `sector_impacts`. Valideringen underkänner annars. Bestäm
+     därför först `sector_impacts` och välj sedan indirekta bolag inom de sektorerna, aldrig tvärtom.
+   - **Bolag som inte nämns i texten** får läggas till som `indirekt` bara om kopplingen är konkret: samma marknad,
+     en namngiven kund, leverantör eller konkurrent, eller direkt räntekänslighet. Motiveringen ska nämna kopplingen.
+     Högst två sådana bolag per nyhet. Hellre inga än svaga kopplingar. Att två bolag har samma sektor räcker inte.
+10. **Id:** `item.id` ska vara unikt, med gemener och bindestreck, t.ex. `fast-<bolag>-<ämne>`.
 
 ## Kontroll innan du är klar
 

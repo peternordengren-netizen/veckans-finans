@@ -310,9 +310,60 @@ def test_dubblerad_mfn_slug_underkanns(tmp_path):
 
 
 def test_projektets_instrumentlistor_ar_giltiga():
-    validate.load_instruments()
+    real = validate.load_instruments()
+    assert real["SEB A"].sektor == "banker-finans" and real["VOLV B"].sektor == "industri"
+    assert real["NOVO B"].sektor is None  # inte i Nasdaq Stockholm-datan – lämnas tom
     mock = validate.load_instruments(validate.MOCK_DIR / "instruments.csv")
     assert mock["FJLH B"].mfn_slug == "fjallhem-fastigheter"
+    assert mock["KUST A"].sektor == "banker-finans"
+
+
+def test_sektor_lases_och_ar_valfri(tmp_path):
+    p = write_csv(
+        tmp_path,
+        "Fjällhem,,FJLH B,FJLH-B.MOCK,Exempelbörsen,fastigheter,",
+        "Albion,,ALBN,ALBN.MOCK,Exempelbörsen,,",
+        head=CSV_HEAD + ",sektor,mfn_slug",
+    )
+    inst = validate.load_instruments(p)
+    assert inst["FJLH B"].sektor == "fastigheter"
+    assert inst["ALBN"].sektor is None
+
+
+def test_okand_sektor_underkanns(tmp_path):
+    p = write_csv(tmp_path, "Fjällhem,,FJLH B,FJLH-B.MOCK,Exempelbörsen,Real Estate,", head=CSV_HEAD + ",sektor,mfn_slug")
+    with pytest.raises(ValueError, match="rad 2: okänd sektor 'Real Estate'"):
+        validate.load_instruments(p)
+
+
+# --- Indirekta kopplingar via sektor ---------------------------------------
+
+
+def test_indirekt_bolag_i_sektor_ur_sector_impacts_godkanns(week, instruments, sector_ids):
+    # Kustbanken (banker-finans) är indirekt i en fastighetsnyhet med banker-finans i sector_impacts.
+    assert run(week, instruments, sector_ids).errors == []
+
+
+def test_indirekt_bolag_utan_sektorkoppling_underkanns(week, instruments, sector_ids):
+    item(week, "fast-fjallhem-refinansiering")["sector_impacts"] = []
+    res = run(week, instruments, sector_ids)
+    assert any(
+        "fast-fjallhem-refinansiering: bolaget 'Kustbanken' är indirekt kopplat men tillhör sektor 'banker-finans'" in e
+        for e in res.errors
+    )
+
+
+def test_indirekt_bolag_i_nyhetens_egen_sektor_godkanns(week, instruments, sector_ids):
+    # Albion Biotech (halsovard) är indirekt i en hälsovårdsnyhet utan sector_impacts.
+    assert item(week, "halso-norrsken-studie")["sector_impacts"] == []
+    assert run(week, instruments, sector_ids).errors == []
+
+
+def test_direkt_bolag_i_annan_sektor_kontrolleras_inte(week, instruments, sector_ids):
+    # Vågnät (telekom) är direkt part i en tekniknyhet – det är tillåtet.
+    it = item(week, "teknik-molnbyran-vagnat")
+    it["sector_impacts"] = []
+    assert run(week, instruments, sector_ids).errors == []
 
 
 # --- Rådata och mock-spärr -------------------------------------------------

@@ -6,6 +6,8 @@ Utöver JSON Schema-kontrollen görs korskontroller som schemat inte kan uttryck
 - varje "matchad" ticker finns i data/instruments.csv med samma yahoo_ticker/börs
   (skydd mot påhittade tickers)
 - inget bolag markerat "onoterat" finns i instruments.csv (missad matchning)
+- ett indirekt kopplat bolag tillhör (enligt kolumnen sektor) nyhetens sektor
+  eller en sektor i nyhetens sector_impacts
 - publiceringsdatum ligger inom veckan
 - varje siffra i rubrik/sammanfattning finns exakt (efter normalisering, se
   extract_numbers) i något evidence-citat – avrundade siffror underkänns
@@ -192,22 +194,29 @@ class Instrument:
     yahoo_ticker: str
     bors: str
     mfn_slug: str | None = None  # bolagets slug i MFN:s URL:er (mfn.se/a/<slug>/…), valfri
+    sektor: str | None = None  # id ur data/sectors.json, valfri
 
 
-def load_instruments(path: Path = DATA_DIR / "instruments.csv") -> dict[str, Instrument]:
+def load_instruments(
+    path: Path = DATA_DIR / "instruments.csv", sector_ids: set[str] | None = None
+) -> dict[str, Instrument]:
     """Läser instruments.csv och returnerar instrumenten nycklade på ticker.
 
-    Kolumnen mfn_slug är valfri (både kolumnen och värdet). Den används i
-    urvalssteget för att prioritera MFN-poster om bevakade bolag, så ett
-    felaktigt eller dubblerat värde stoppas här.
+    Kolumnerna mfn_slug och sektor är valfria (både kolumnen och värdet).
+    mfn_slug prioriterar MFN-poster i urvalet och sektor styr vilka bolag som
+    får kopplas indirekt till en nyhet, så felaktiga värden stoppas här.
+    sector_ids: giltiga sektorer (standard: data/sectors.json).
     utf-8-sig så att filen fungerar även om den sparats från Excel (BOM).
     """
+    if sector_ids is None:
+        sector_ids = load_sector_ids()
     instruments: dict[str, Instrument] = {}
     slugs: dict[str, str] = {}
     with path.open(encoding="utf-8-sig", newline="") as f:
         for line, row in enumerate(csv.DictReader(f), start=2):
             alias = tuple(a.strip() for a in (row.get("alias") or "").split("|") if a.strip())
             slug = (row.get("mfn_slug") or "").strip() or None
+            sektor = (row.get("sektor") or "").strip() or None
             inst = Instrument(
                 namn=row["namn"].strip(),
                 alias=alias,
@@ -215,9 +224,12 @@ def load_instruments(path: Path = DATA_DIR / "instruments.csv") -> dict[str, Ins
                 yahoo_ticker=row["yahoo_ticker"].strip(),
                 bors=row["börs"].strip(),
                 mfn_slug=slug,
+                sektor=sektor,
             )
             if inst.ticker in instruments:
                 raise ValueError(f"{path.name} rad {line}: dubblett av ticker {inst.ticker!r}")
+            if sektor is not None and sektor not in sector_ids:
+                raise ValueError(f"{path.name} rad {line}: okänd sektor {sektor!r} (se data/sectors.json)")
             if slug is not None:
                 if not MFN_SLUG_RE.match(slug):
                     raise ValueError(f"{path.name} rad {line}: ogiltig mfn_slug {slug!r} (gemener, siffror och bindestreck)")
@@ -352,8 +364,11 @@ def validate_week(
                         if _normalize_ws(e["quote"]) not in raw_text:
                             res.errors.append(f"{where}: citatet finns inte i källtexten: {e['quote']!r}")
 
+            # Sektorer som nyheten får kopplas till indirekt: den egna plus sector_impacts.
+            linked = {sid, *(imp["sector"] for imp in item["sector_impacts"])}
             for c in item["companies"]:
                 _check_company(c, where, instruments, names, res)
+                _check_indirect_sector(c, where, instruments, linked, res)
 
             for imp in item["sector_impacts"]:
                 if imp["sector"] not in sector_ids:
@@ -386,6 +401,24 @@ def _check_company(c: dict, where: str, instruments: dict[str, Instrument], name
         ticker = names.get(c["name"].casefold())
         if ticker is not None:
             res.errors.append(f"{label}: markerat onoterat men matchar {ticker!r} i instruments.csv")
+
+
+def _check_indirect_sector(
+    c: dict, where: str, instruments: dict[str, Instrument], linked: set[str], res: Result
+) -> None:
+    """Ett indirekt kopplat bolag måste tillhöra nyhetens sektor eller en sektor i
+    dess sector_impacts – annars saknar kopplingen stöd i nyhetens egen analys.
+    Bolag utan sektor i instruments.csv (och onoterade) kontrolleras inte."""
+    if c["impact"] != "indirekt" or c["match"] != "matchad":
+        return
+    inst = instruments.get(c["ticker"])
+    if inst is None or inst.sektor is None:
+        return
+    if inst.sektor not in linked:
+        res.errors.append(
+            f"{where}: bolaget {c['name']!r} är indirekt kopplat men tillhör sektor {inst.sektor!r}, "
+            f"som varken är nyhetens sektor eller finns i sector_impacts {sorted(linked)}"
+        )
 
 
 def validate_prices(data: dict, expected_week: str | None) -> Result:

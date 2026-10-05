@@ -49,8 +49,15 @@ Workflow-mallen ligger i [`deploy/raw-repo/`](deploy/raw-repo/). Lokalt klonas d
   gör det inte) och negationer ("ökade inte"). Undantaget för "till" gör också att en felaktig riktning framför
   en nivå inte fångas. Kontrollen är ett skyddsnät och ersätter inte en egen läsning.
 - [`schema/prices.schema.json`](schema/prices.schema.json): kursförändring per `yahoo_ticker`. Sidan fungerar utan filen.
-- [`data/instruments.csv`](data/instruments.csv): `namn,alias,ticker,yahoo_ticker,börs,mfn_slug`. Flera alias separeras
-  med `|`. Underhålls manuellt. `mfn_slug` är valfri och anger bolagets slug i MFN:s URL:er (`mfn.se/a/<slug>/…`).
+- [`data/instruments.csv`](data/instruments.csv): `namn,alias,ticker,yahoo_ticker,börs,sektor,mfn_slug`. Flera alias
+  separeras med `|`. Underhålls manuellt. `sektor` är ett id ur `sectors.json` och kan vara tom. Den styr var en
+  nyhet placeras och vilka bolag som får kopplas *indirekt*: ett indirekt bolag måste tillhöra nyhetens sektor eller
+  en sektor i dess `sector_impacts`, vilket valideringen kontrollerar.
+  Sektorn kommer från Nasdaqs sektor (ICB) enligt följande mappning:
+  Energy, Basic Materials och Utilities blir `energi-ravaror`, Industrials blir `industri`,
+  Consumer Discretionary och Consumer Staples blir `konsument`, Health Care blir `halsovard`,
+  Financials blir `banker-finans`, Real Estate blir `fastigheter`, Technology blir `teknik`
+  och Telecommunications blir `telekom`. `mfn_slug` är valfri och anger bolagets slug i MFN:s URL:er (`mfn.se/a/<slug>/…`).
   Poster från de bolagen prioriteras när veckan sammanfattas. Fyll bara i slugs du sett i en faktisk MFN-URL.
 
   **Källa (2026-10-05):** Nasdaqs lista över aktier, *Large Cap* och *Mid Cap* på Nasdaq Stockholm
