@@ -23,23 +23,26 @@ concurrency:
 
 jobs:
   fetch:
-    runs-on: ubuntu-latest
+    # Låst version i stället för ubuntu-latest, så att runner-byten (t.ex.
+    # Ubuntu 26) sker när vi själva väljer det.
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
+      # v7 av actions/checkout och actions/setup-python kör på Node 24 (kontrollerat 2026-10-05).
       - name: Checka ut rådatarepot
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           path: raw
 
       - name: Checka ut koden från det publika repot
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: peternordengren-netizen/veckans-finans
           ref: main
           path: app
           persist-credentials: false
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
