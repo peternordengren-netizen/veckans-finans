@@ -23,7 +23,7 @@ Workflow-mallen ligger i [`deploy/raw-repo/`](deploy/raw-repo/). Lokalt klonas d
 |---|---|---|
 | MFN | `https://mfn.se/all/s/nordic.rss?limit=200` (odokumenterad, men flödet anger själv adressen) | fulltext |
 | Cision | `https://news.cision.com/se/ListItems?format=rss` | utdrag, ca 600 tecken |
-| Riksbanken | `https://api.riksbank.se/swea/v1/Observations/Latest/SECBREPOEFF` (ingen nyckel krävs) | en mening |
+| Riksbanken | `https://api.riksbank.se/swea/v1/Observations/SECBREPOEFF/<från>/<till>`, fem år bakåt i ett anrop (ingen nyckel krävs) | nyckeltal |
 
 - Varje körning gör ett anrop per källa, med en timeout på 30 s och User-Agent `veckans-finans-fetch/0.1 (+repo-URL)`.
 - MFN filtreras till `scope SE`, svenska eller engelska. Insynshandel (`sub:ci:insider`) sparas inte.
@@ -48,6 +48,13 @@ Workflow-mallen ligger i [`deploy/raw-repo/`](deploy/raw-repo/). Lokalt klonas d
   (backade, rasade, lyfte, tappade), riktningsord efter talet ("en ökning på 3 procent" fångas, "3 procents ökning"
   gör det inte) och negationer ("ökade inte"). Undantaget för "till" gör också att en felaktig riktning framför
   en nivå inte fångas. Kontrollen är ett skyddsnät och ersätter inte en egen läsning.
+- **Nyckeltal:** `key_figures.policy_rate` innehåller Riksbankens styrränta, alltså senaste observationen i veckan,
+  värdet före senaste ändringen och ändringsdatumet, med länk till
+  [Riksbankens sida om styrräntan](https://www.riksbank.se/sv/statistik/rantor-och-valutakurser/styrranta-in--och-utlaningsranta/).
+  Den visas överst på sidan. Valideringen jämför värdena med rådatans index och kräver att det är veckans senaste
+  observation. Makrosammanfattningen får hänvisa till värdena, men styrräntan är aldrig en nyhet.
+  Serien har en observation per bankdag, så "föregående värde" betyder värdet före senaste *ändringen*,
+  inte gårdagens observation.
 - [`schema/prices.schema.json`](schema/prices.schema.json): kursförändring per `yahoo_ticker`. Sidan fungerar utan filen.
 - [`data/instruments.csv`](data/instruments.csv): `namn,alias,ticker,yahoo_ticker,börs,sektor,mfn_slug`. Flera alias
   separeras med `|`. Underhålls manuellt. `sektor` är ett id ur `sectors.json` och kan vara tom. Den styr var en

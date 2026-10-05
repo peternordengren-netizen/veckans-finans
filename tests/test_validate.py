@@ -120,10 +120,10 @@ def test_intervall_ger_tva_positiva_tal():
 
 
 def test_avrundad_siffra_i_sammanfattning_underkanns(week, instruments, sector_ids):
-    # Citatet säger 1,75 procent – avrundat till 1,8 ska underkännas.
-    item(week, "makro-centralbank-rantebesked")["summary"] = "Styrräntan ligger kvar på cirka 1,8 procent."
+    # Citatet säger 2,1 procent – avrundat till 2 ska underkännas.
+    item(week, "makro-statistikbyran-inflation")["summary"] = "Inflationen var cirka 2 procent."
     res = run(week, instruments, sector_ids)
-    assert any("makro-centralbank-rantebesked: siffror utan exakt stöd" in e and "1,8 procent" in e for e in res.errors)
+    assert any("makro-statistikbyran-inflation: siffror utan exakt stöd" in e and "2 procent" in e for e in res.errors)
 
 
 def test_avrundad_siffra_i_sektorsammanfattning_underkanns(week, instruments, sector_ids):
@@ -133,8 +133,8 @@ def test_avrundad_siffra_i_sektorsammanfattning_underkanns(week, instruments, se
 
 
 def test_citat_over_25_ord_underkanns(week, instruments, sector_ids):
-    long_quote = " ".join(["ord"] * 26) + " 1,75 procent"
-    item(week, "makro-centralbank-rantebesked")["evidence"] = [{"quote": long_quote}]
+    long_quote = " ".join(["ord"] * 26) + " 2,1 procent"
+    item(week, "makro-statistikbyran-inflation")["evidence"] = [{"quote": long_quote}]
     res = run(week, instruments, sector_ids)
     assert any("max 25" in e for e in res.errors)
 
@@ -369,15 +369,38 @@ def test_direkt_bolag_i_annan_sektor_kontrolleras_inte(week, instruments, sector
 # --- Rådata och mock-spärr -------------------------------------------------
 
 
-def test_evidence_kontrolleras_mot_radata(week, instruments, sector_ids, tmp_path):
-    week = copy.deepcopy(week)
-    week["mock"] = False
-    raw = tmp_path / "2026-W40"
+POLICY_RATE = {"value": 1.75, "date": "2026-10-02", "previous_value": 2.0, "changed_on": "2025-10-01"}
+
+
+def make_raw(week, tmp_path, policy_rate=POLICY_RATE, extra_index=()):
+    """Skapar rådata (textfiler + index.json) som stämmer med veckofilen."""
+    raw = tmp_path / week["week"]
+    entries = []
     for s in week["sectors"]:
         for it in s["items"]:
             f = raw / it["source"]["raw_file"]
             f.parent.mkdir(parents=True, exist_ok=True)
             f.write_text("Inledning.\n" + "\n".join(e["quote"] for e in it["evidence"]), encoding="utf-8")
+            entries.append({"path": it["source"]["raw_file"], "source": "mfn", "url": it["source"]["url"]})
+    kf = week.get("key_figures", {}).get("policy_rate")
+    if kf:
+        entries.append({"path": kf["raw_file"], "source": "riksbanken", "url": kf["source_url"],
+                        "data": {"policy_rate": dict(policy_rate)}})
+    entries += list(extra_index)
+    raw.mkdir(parents=True, exist_ok=True)
+    (raw / "index.json").write_text(json.dumps({"items": entries}), encoding="utf-8")
+    return raw
+
+
+def real_week(week):
+    w = copy.deepcopy(week)
+    w["mock"] = False
+    return w
+
+
+def test_evidence_kontrolleras_mot_radata(week, instruments, sector_ids, tmp_path):
+    week = real_week(week)
+    raw = make_raw(week, tmp_path)
     assert run(week, instruments, sector_ids, raw_dir=tmp_path).errors == []
 
     (raw / "statistikbyran" / "inflation.txt").write_text("Inflationstakten var 2,3 procent i september.", encoding="utf-8")
@@ -389,6 +412,71 @@ def test_mockvecka_kontrolleras_inte_mot_riktig_radata_for_samma_vecka(week, ins
     (tmp_path / "2026-W40" / "mfn").mkdir(parents=True)  # riktig rådata för vecka 40 finns
     res = run(week, instruments, sector_ids, raw_dir=tmp_path)
     assert res.errors == []
+
+
+# --- Nyckeltal: styrräntan --------------------------------------------------
+
+
+def test_riksbank_url_ar_samma_i_fetch_och_validate():
+    import fetch
+
+    assert validate.RIKSBANK_PAGE_URL == fetch.RIKSBANK_PAGE_URL
+
+
+def test_nyckeltal_kontrolleras_mot_radatans_index(week, instruments, sector_ids, tmp_path):
+    week = real_week(week)
+    make_raw(week, tmp_path, policy_rate={**POLICY_RATE, "previous_value": 2.25})
+    res = run(week, instruments, sector_ids, raw_dir=tmp_path)
+    assert any("key_figures.policy_rate.previous_value = 2.0, rådatan säger 2.25" in e for e in res.errors)
+
+
+def test_nyckeltal_maste_vara_senaste_observationen_i_veckan(week, instruments, sector_ids, tmp_path):
+    week = real_week(week)
+    week["key_figures"]["policy_rate"].update(date="2026-10-01", raw_file="riksbanken/styrranta-2026-10-01.txt")
+    later = {"path": "riksbanken/styrranta-2026-10-02.txt", "source": "riksbanken", "url": validate.RIKSBANK_PAGE_URL,
+             "data": {"policy_rate": POLICY_RATE}}
+    make_raw(week, tmp_path, policy_rate={**POLICY_RATE, "date": "2026-10-01"}, extra_index=[later])
+    res = run(week, instruments, sector_ids, raw_dir=tmp_path)
+    assert any("senaste observationen i veckan är 2026-10-02" in e for e in res.errors)
+
+
+def test_nyckeltal_med_fel_kallank_och_datum_utanfor_veckan(week, instruments, sector_ids):
+    kf = week["key_figures"]["policy_rate"]
+    kf["source_url"] = "https://api.riksbank.se/swea/v1/Observations/Latest/SECBREPOEFF"
+    kf["date"] = "2026-10-05"
+    res = run(week, instruments, sector_ids)
+    assert any("source_url ska vara Riksbankens sida" in e for e in res.errors)
+    assert any("ligger utanför" in e for e in res.errors)
+
+
+def test_makrosammanfattningen_far_hanvisa_till_nyckeltalet(week, instruments, sector_ids):
+    week["sectors"][0]["summary"] = "Styrräntan är 1,75 procent sedan 2025-10-01, efter 2 procent tidigare."
+    assert run(week, instruments, sector_ids).errors == []
+    # Men inte med ett värde som inte stämmer.
+    week["sectors"][0]["summary"] = "Styrräntan är 1,5 procent."
+    assert any("['1,5 procent']" in e for e in run(week, instruments, sector_ids).errors)
+
+
+def test_annan_sektor_far_inte_luta_sig_mot_nyckeltalet(week, instruments, sector_ids):
+    week["sectors"][1]["summary"] = "Styrräntan på 1,75 procent påverkar fastigheter."
+    res = run(week, instruments, sector_ids)
+    assert any(e.startswith("fastigheter: sektorsammanfattningen har siffror") for e in res.errors)
+
+
+def test_styrrantan_som_nyhet_underkanns(week, instruments, sector_ids):
+    item(week, "makro-statistikbyran-inflation")["source"]["raw_file"] = "riksbanken/styrranta-2026-10-02.txt"
+    res = run(week, instruments, sector_ids)
+    assert any("styrräntan är ett nyckeltal" in e for e in res.errors)
+
+
+def test_saknat_nyckeltal_ger_varning_for_riktig_vecka(week, instruments, sector_ids, tmp_path):
+    week = real_week(week)
+    del week["key_figures"]
+    week["sectors"][0]["summary"] = "Inflationen landade på 2,1 procent."
+    make_raw(week, tmp_path)
+    res = run(week, instruments, sector_ids, raw_dir=tmp_path)
+    assert res.errors == []
+    assert any("policy_rate saknas" in w for w in res.warnings)
 
 
 def test_saknad_radata_ger_varning_inte_fel(week, instruments, sector_ids, tmp_path):

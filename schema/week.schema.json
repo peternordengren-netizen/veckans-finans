@@ -28,12 +28,34 @@
       "description": "true för exempeldata. Sidan visar då en tydlig banderoll.",
       "type": "boolean"
     },
+    "key_figures": {
+      "description": "Nyckeltal som visas överst på sidan. Hämtas ur rådatans index (data.policy_rate), inte ur nyheter.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "policy_rate": { "$ref": "#/$defs/policyRate" }
+      }
+    },
     "sectors": {
       "type": "array",
       "items": { "$ref": "#/$defs/sector" }
     }
   },
   "$defs": {
+    "policyRate": {
+      "description": "Riksbankens styrränta: senaste observationen i veckan och värdet före senaste ändringen.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value", "date", "previous_value", "changed_on", "source_url", "raw_file"],
+      "properties": {
+        "value": { "description": "Procent, t.ex. 1.75.", "type": "number" },
+        "date": { "description": "Observationsdatum (senaste i veckan).", "type": "string", "format": "date" },
+        "previous_value": { "description": "Värdet före senaste ändringen (null om ingen ändring finns i hämtat intervall).", "type": ["number", "null"] },
+        "changed_on": { "description": "Datum då nuvarande nivå började gälla.", "type": ["string", "null"], "format": "date" },
+        "source_url": { "description": "Riksbankens webbsida om styrräntan.", "type": "string", "pattern": "^https://" },
+        "raw_file": { "description": "Rådatafilen (riksbanken/styrranta-<datum>.txt) relativt data/raw/<vecka>/.", "type": "string" }
+      }
+    },
     "sectorId": {
       "description": "Måste finnas i data/sectors.json (kontrolleras av validate.py).",
       "type": "string",

@@ -36,8 +36,16 @@ Veckan har typiskt flera hundra poster. Läs dem inte alla.
    och jämförs inte med `mfn_slug`.
 3. **Läs sedan bara de valda filerna** (`path`) i fulltext. Om en fil visar sig vara irrelevant byter du till en annan
    kandidat ur indexet.
-4. **Riksbankens styrränta** (`source: "riksbanken"`) ska med under `makro` om värdet ändrats under veckan. Om det är
-   oförändrat räcker en mening i makrosammanfattningen.
+4. **Riksbankens styrränta är ett nyckeltal, inte en nyhet.** Ta posten med `source: "riksbanken"` och det senaste
+   `data.policy_rate.date` som ligger inom veckan, och fyll `key_figures.policy_rate` i veckofilen:
+   - `value`, `date`, `previous_value` och `changed_on` kopieras exakt från postens `data.policy_rate`.
+   - `source_url` är postens `url`, alltså Riksbankens webbsida. `raw_file` är postens `path`.
+   - Gör ingen nyhet av styrräntan. Valideringen underkänner en nyhet med `raw_file` under `riksbanken/`.
+   - Makrosammanfattningen hänvisar till nyckeltalet, till exempel "Styrräntan ligger kvar på 1,75 procent
+     (se nyckeltal)". Värdena och datumen i nyckeltalet räknas som belägg för makrosammanfattningen, men bara där.
+   - Om ändringsdatumet (`changed_on`) ligger inom veckan har räntan ändrats den här veckan. Då ska det stå först i
+     makrosammanfattningen.
+   - Om Riksbanksposter saknas i veckan utelämnar du `key_figures` och nämner det i slutrapporten.
 5. **Källfel:** kontrollera `runs` i indexet. Om någon källa har `status: "fel"` i flera körningar i följd kan veckan
    ha luckor. Nämn det i slutrapporten.
 

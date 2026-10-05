@@ -67,12 +67,21 @@ export interface SectorView {
   items: ItemView[];
 }
 
+export interface PolicyRate {
+  value: number;
+  date: string;
+  previousValue: number | null;
+  changedOn: string | null;
+  sourceUrl: string;
+}
+
 export interface WeekView {
   week: string;
   start: string;
   end: string;
   mock: boolean;
   hasPrices: boolean;
+  policyRate: PolicyRate | null;
   sectors: SectorView[];
 }
 
@@ -130,6 +139,15 @@ interface RawWeek {
   week: string;
   period: { start: string; end: string };
   mock?: boolean;
+  key_figures?: {
+    policy_rate?: {
+      value: number;
+      date: string;
+      previous_value: number | null;
+      changed_on: string | null;
+      source_url: string;
+    };
+  };
   sectors: { id: string; summary: string; items: RawItem[] }[];
 }
 
@@ -178,14 +196,33 @@ export function loadWeek(week: string): WeekView {
     .map((s) => ({ sector: sectorOf(s.id), summary: s.summary, items: s.items.map(toItem) }))
     .sort((a, b) => (order.get(a.sector.id) ?? 99) - (order.get(b.sector.id) ?? 99));
 
+  const pr = raw.key_figures?.policy_rate;
   return {
     week: raw.week,
     start: raw.period.start,
     end: raw.period.end,
     mock: Boolean(raw.mock),
     hasPrices: quotes !== null,
+    policyRate: pr
+      ? {
+          value: pr.value,
+          date: pr.date,
+          previousValue: pr.previous_value,
+          changedOn: pr.changed_on,
+          sourceUrl: pr.source_url,
+        }
+      : null,
     sectors: sectorViews,
   };
+}
+
+/** 1.75 -> "1,75", 2 -> "2,00" (räntor visas alltid med två decimaler). */
+export function formatRate(value: number): string {
+  return new Intl.NumberFormat("sv-SE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
+}
+
+export function formatLongDate(iso: string): string {
+  return new Date(`${iso}T12:00:00`).toLocaleDateString("sv-SE", { day: "numeric", month: "long", year: "numeric" });
 }
 
 export function weekLabel(week: string): string {

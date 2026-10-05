@@ -10,7 +10,8 @@ publiceringstid, inte körningens):
     <vecka>/index.json            metadata per post + logg över körningar
     <vecka>/mfn/<id>.txt          fulltext
     <vecka>/cision/<id>.txt       utdrag ur RSS (Cision har bara utdrag i flödet)
-    <vecka>/riksbanken/<id>.txt   styrräntan som en mening
+    <vecka>/riksbanken/<id>.txt   styrräntan (nyckeltal): värde, föregående värde, ändringsdatum;
+                                  samma värden strukturerat i index.json → data.policy_rate
 
 Dubbletter mellan MFN och Cision (samma pressmeddelande via båda) slås ihop:
 MFN-versionen behålls eftersom den har fulltext, och Cision-länken sparas i
@@ -37,7 +38,7 @@ import unicodedata
 import urllib.request
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Callable
@@ -55,7 +56,14 @@ TIMEOUT_S = 30
 # 7 timmar och kan inte pagineras – därav körning var fjärde timme.
 MFN_URL = "https://mfn.se/all/s/nordic.rss?limit=200"
 CISION_URL = "https://news.cision.com/se/ListItems?format=rss"
-RIKSBANK_URL = "https://api.riksbank.se/swea/v1/Observations/Latest/SECBREPOEFF"
+# Styrräntan: dagliga observationer för ett datumintervall (…/<från>/<till>),
+# kontrollerat 2026-10-05. Fem år bakåt räcker för att hitta senaste ändringen
+# (den förra låg ett år bakåt) och är ett enda litet anrop.
+RIKSBANK_SERIES = "SECBREPOEFF"
+RIKSBANK_URL = f"https://api.riksbank.se/swea/v1/Observations/{RIKSBANK_SERIES}/"
+RIKSBANK_LOOKBACK_DAYS = 5 * 366
+# Riksbankens webbsida om styrräntan – källänken som visas för läsaren (inte API:et).
+RIKSBANK_PAGE_URL = "https://www.riksbank.se/sv/statistik/rantor-och-valutakurser/styrranta-in--och-utlaningsranta/"
 
 MFN_NS = "{https://mfn.se/schemas/rss-ns-x/}"
 MFN_SCOPES = {"SE"}
@@ -132,6 +140,7 @@ class Item:
     text: str
     text_kind: str  # "fulltext" | "utdrag" | "data"
     routine: bool = False
+    data: dict | None = None  # strukturerade värden (nyckeltal), sparas i index.json
 
 
 @dataclass
@@ -232,23 +241,49 @@ def parse_cision(data: bytes) -> list[Item]:
     return items
 
 
+def sv_number(value: float) -> str:
+    """1.75 -> '1,75', 2.0 -> '2' (samma format som i veckofilens texter)."""
+    return f"{value:.2f}".rstrip("0").rstrip(".").replace(".", ",")
+
+
+def policy_rate_figure(observations: list[dict]) -> dict:
+    """Nyckeltal ur dagliga observationer (äldst först): senaste värdet, värdet
+    före senaste ändringen och datumet då nuvarande nivå började gälla.
+    previous_value/changed_on är None om ingen ändring finns i intervallet."""
+    if not observations:
+        raise ValueError("inga observationer")
+    obs = sorted(observations, key=lambda o: o["date"])
+    latest = obs[-1]
+    previous_value = changed_on = None
+    for older, newer in zip(reversed(obs[:-1]), reversed(obs[1:])):
+        if older["value"] != latest["value"]:
+            previous_value, changed_on = older["value"], newer["date"]
+            break
+    return {"value": latest["value"], "date": latest["date"], "previous_value": previous_value, "changed_on": changed_on}
+
+
 def parse_riksbank(data: bytes) -> list[Item]:
-    """Senaste observationen av styrräntan blir en post per observationsdatum."""
-    obs = json.loads(data)
-    day = obs["date"]
-    value = f"{obs['value']:.2f}".rstrip("0").rstrip(".").replace(".", ",")
+    """Styrräntan blir ett nyckeltal: en post per observationsdatum, med
+    strukturerade värden i Item.data och en mening per värde i texten."""
+    fig = policy_rate_figure(json.loads(data))
+    day = fig["date"]
+    text = f"Riksbankens styrränta (serie {RIKSBANK_SERIES}) var {sv_number(fig['value'])} procent den {day}."
+    if fig["previous_value"] is not None:
+        text += (f" Föregående värde var {sv_number(fig['previous_value'])} procent."
+                 f" Nuvarande nivå gäller sedan {fig['changed_on']}.")
     return [Item(
         id=f"styrranta-{day}",
         source="riksbanken",
         source_name="Riksbanken",
-        url=RIKSBANK_URL,
+        url=RIKSBANK_PAGE_URL,
         published=datetime.fromisoformat(day).replace(tzinfo=STOCKHOLM),
         title=f"Riksbankens styrränta {day}",
         company=None,
         language="sv",
-        tags=["makro", "styrränta"],
-        text=f"Riksbankens styrränta (serie SECBREPOEFF) var {value} procent den {day}.",
+        tags=["nyckeltal", "styrränta"],
+        text=text,
         text_kind="data",
+        data={"policy_rate": fig},
     )]
 
 
@@ -261,20 +296,27 @@ def http_get(url: str) -> bytes:
         return resp.read()
 
 
-Source = tuple[str, str, Callable[[bytes], list[Item]]]
+def riksbank_url(today: date) -> str:
+    """Ett anrop som täcker RIKSBANK_LOOKBACK_DAYS bakåt, så att senaste ändringen hittas."""
+    return f"{RIKSBANK_URL}{today - timedelta(days=RIKSBANK_LOOKBACK_DAYS)}/{today}"
+
+
+Source = tuple[str, str | Callable[[date], str], Callable[[bytes], list[Item]]]
 SOURCES: list[Source] = [
     ("mfn", MFN_URL, parse_mfn),  # MFN först, så att den vinner dubbletter inom samma körning
     ("cision", CISION_URL, parse_cision),
-    ("riksbanken", RIKSBANK_URL, parse_riksbank),
+    ("riksbanken", riksbank_url, parse_riksbank),
 ]
 
 
-def fetch_all(sources: list[Source] = SOURCES, get: Callable[[str], bytes] = http_get) -> RunResult:
+def fetch_all(sources: list[Source] = SOURCES, get: Callable[[str], bytes] = http_get,
+              today: date | None = None) -> RunResult:
     """Ett anrop per källa. Fel loggas och övriga källor körs ändå."""
     res = RunResult()
+    today = today or datetime.now(STOCKHOLM).date()
     for name, url, parse in sources:
         try:
-            items = parse(get(url))
+            items = parse(get(url(today) if callable(url) else url))
         except Exception as err:  # noqa: BLE001 – varje källfel ska loggas, inte stoppa körningen
             res.log[name] = {"status": "fel", "error": f"{type(err).__name__}: {err}"[:300]}
             print(f"[{name}] FEL: {err}", file=sys.stderr)
@@ -431,6 +473,8 @@ def store(result: RunResult, raw_dir: Path, now: datetime) -> dict[str, int]:
             "text_kind": item.text_kind,
             "path": rel,
         }
+        if item.data is not None:
+            entry["data"] = item.data
         if carried:
             entry["also_in"] = carried
         entries.append(entry)
@@ -465,8 +509,9 @@ def main(argv: list[str] | None = None, get: Callable[[str], bytes] = http_get, 
     parser.add_argument("--raw-dir", type=Path, default=ROOT / "data" / "raw")
     args = parser.parse_args(argv)
 
-    result = fetch_all(get=get)
-    new = store(result, args.raw_dir, now or datetime.now(STOCKHOLM))
+    now = now or datetime.now(STOCKHOLM)
+    result = fetch_all(get=get, today=now.astimezone(STOCKHOLM).date())
+    new = store(result, args.raw_dir, now)
     print("nya poster:", new)
     if len(result.failed) == len(result.log):
         return 1

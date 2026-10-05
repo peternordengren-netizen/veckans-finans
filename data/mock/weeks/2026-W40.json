@@ -4,24 +4,21 @@
   "period": { "start": "2026-09-28", "end": "2026-10-04" },
   "generated_at": "2026-10-04T18:00:00+02:00",
   "mock": true,
+  "key_figures": {
+    "policy_rate": {
+      "value": 1.75,
+      "date": "2026-10-02",
+      "previous_value": 2.0,
+      "changed_on": "2025-10-01",
+      "source_url": "https://www.riksbank.se/sv/statistik/rantor-och-valutakurser/styrranta-in--och-utlaningsranta/",
+      "raw_file": "riksbanken/styrranta-2026-10-02.txt"
+    }
+  },
   "sectors": [
     {
       "id": "makro",
-      "summary": "EXEMPELDATA – fiktiva källor och bolag. Centralbanken lämnade styrräntan oförändrad på 1,75 procent och inflationen landade på 2,1 procent.",
+      "summary": "EXEMPELDATA – fiktiva källor och bolag. Styrräntan ligger kvar på 1,75 procent, där den legat sedan 1 oktober 2025 (se nyckeltal). Inflationen landade på 2,1 procent.",
       "items": [
-        {
-          "id": "makro-centralbank-rantebesked",
-          "headline": "Centralbanken lämnar styrräntan oförändrad på 1,75 procent",
-          "summary": "Direktionen behåller räntan och signalerar oförändrad nivå resten av året.",
-          "published": "2026-09-30",
-          "source": { "name": "Centralbanken (fiktiv)", "url": "https://example.com/centralbanken/rantebesked", "raw_file": "centralbanken/rantebesked.txt" },
-          "evidence": [ { "quote": "Styrräntan lämnas oförändrad på 1,75 procent." } ],
-          "companies": [],
-          "sector_impacts": [
-            { "sector": "fastigheter", "direction": "positiv", "rationale": "Stabila räntor minskar osäkerheten kring refinansieringskostnader." },
-            { "sector": "banker-finans", "direction": "blandad", "rationale": "Räntenettot hålls stabilt men får ingen ytterligare medvind." }
-          ]
-        },
         {
           "id": "makro-statistikbyran-inflation",
           "headline": "Inflationen 2,1 % i september",

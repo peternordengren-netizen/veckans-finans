@@ -5,7 +5,7 @@
  */
 import Base from "../layouts/Base.astro";
 import CompanyCard from "./CompanyCard.astro";
-import { formatDate, weekLabel, type WeekView } from "../lib/data";
+import { formatDate, formatLongDate, formatRate, weekLabel, type WeekView } from "../lib/data";
 
 interface Props {
   view: WeekView;
@@ -14,6 +14,12 @@ interface Props {
 const { view, weeks } = Astro.props;
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 const directionLabel = { positiv: "Positiv", negativ: "Negativ", blandad: "Blandad", oklar: "Oklar" };
+
+const pr = view.policyRate;
+const lastChange =
+  pr && pr.previousValue !== null && pr.changedOn
+    ? `${pr.value > pr.previousValue ? "Höjd" : "Sänkt"} från ${formatRate(pr.previousValue)} % den ${formatLongDate(pr.changedOn)}`
+    : null;
 ---
 
 <Base title={`${weekLabel(view.week)} – Veckans finans`}>
@@ -56,6 +62,27 @@ const directionLabel = { positiv: "Positiv", negativ: "Negativ", blandad: "Bland
     </header>
 
     <div class="wrap">
+      {
+        pr && (
+          <aside class="key-figures" aria-label="Nyckeltal">
+            <div class="kf">
+              <p class="kf-label">Riksbankens styrränta</p>
+              <p class="kf-value">{formatRate(pr.value)} %</p>
+              <p class="kf-meta">
+                {lastChange ?? "Ingen ändring i hämtad period"}
+                <span aria-hidden="true"> · </span>
+                avser {formatDate(pr.date)}
+                <span aria-hidden="true"> · </span>
+                <a href={pr.sourceUrl} rel="noopener noreferrer" target="_blank">
+                  Riksbanken<span class="sr-only"> (öppnas i ny flik)</span>
+                  <span aria-hidden="true"> ↗</span>
+                </a>
+              </p>
+            </div>
+          </aside>
+        )
+      }
+
       <div class="tabs" role="tablist" aria-label="Sektorer" data-tabs hidden>
         {
           view.sectors.map((s, i) => (
@@ -258,6 +285,45 @@ const directionLabel = { positiv: "Positiv", negativ: "Negativ", blandad: "Bland
     border: 1px solid var(--border);
     border-radius: 8px;
     padding: 6px 8px;
+  }
+
+  .key-figures {
+    margin: 0 0 16px;
+  }
+  .kf {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px 16px;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    grid-template-areas: "label value" "meta meta";
+    align-items: baseline;
+    column-gap: 16px;
+    row-gap: 2px;
+  }
+  .kf-label {
+    grid-area: label;
+    margin: 0;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .kf-value {
+    grid-area: value;
+    margin: 0;
+    font-size: 1.5rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    justify-self: end;
+  }
+  .kf-meta {
+    grid-area: meta;
+    margin: 0;
+    font-size: 0.875rem;
+    color: var(--muted);
   }
 
   .tabs {

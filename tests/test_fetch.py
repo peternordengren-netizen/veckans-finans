@@ -2,7 +2,7 @@
 
 import json
 import sys
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -51,14 +51,18 @@ def cision_feed(*items):
     <title>Cision News</title>{''.join(items)}</channel></rss>""").encode("utf-8")
 
 
-RIKSBANK = b'{"date":"2026-10-02","value":1.75}'
+RIKSBANK = (
+    b'[{"date":"2026-09-29","value":2.0},{"date":"2026-09-30","value":2.0},'
+    b'{"date":"2026-10-01","value":1.75},{"date":"2026-10-02","value":1.75}]'
+)
 
 
 def fake_get(responses):
-    """responses: url -> bytes eller Exception."""
+    """responses: url (eller url-prefix) -> bytes eller Exception."""
 
     def get(url):
-        r = responses[url]
+        key = url if url in responses else next(k for k in responses if url.startswith(k))
+        r = responses[key]
         if isinstance(r, Exception):
             raise r
         return r
@@ -199,10 +203,47 @@ def test_cision_markeras_som_utdrag_och_rutin_via_rubrik():
     assert items[0].company == "tallmo-ab"
 
 
-def test_riksbanken_blir_en_mening_med_svensk_decimal():
+def test_riksbanken_blir_nyckeltal_med_foregaende_varde():
     [item] = fetch.parse_riksbank(RIKSBANK)
-    assert item.text == "Riksbankens styrränta (serie SECBREPOEFF) var 1,75 procent den 2026-10-02."
+    assert item.text == (
+        "Riksbankens styrränta (serie SECBREPOEFF) var 1,75 procent den 2026-10-02."
+        " Föregående värde var 2 procent. Nuvarande nivå gäller sedan 2026-10-01."
+    )
+    assert item.data == {"policy_rate": {
+        "value": 1.75, "date": "2026-10-02", "previous_value": 2.0, "changed_on": "2026-10-01",
+    }}
+    assert item.url == fetch.RIKSBANK_PAGE_URL  # webbsidan, inte API:et
+    assert item.tags == ["nyckeltal", "styrränta"]
     assert fetch.iso_week(item.published) == "2026-W40"
+
+
+def test_styrranta_utan_andring_i_intervallet():
+    fig = fetch.policy_rate_figure([{"date": "2026-10-01", "value": 1.75}, {"date": "2026-10-02", "value": 1.75}])
+    assert fig == {"value": 1.75, "date": "2026-10-02", "previous_value": None, "changed_on": None}
+
+
+def test_styrranta_tar_senaste_andringen_och_tal_osorterad_data():
+    obs = [
+        {"date": "2026-10-02", "value": 2.0},
+        {"date": "2025-01-01", "value": 2.5},
+        {"date": "2025-06-01", "value": 2.25},
+        {"date": "2026-03-01", "value": 2.0},
+    ]
+    fig = fetch.policy_rate_figure(obs)
+    assert (fig["previous_value"], fig["changed_on"]) == (2.25, "2026-03-01")
+
+
+def test_riksbank_url_ar_ett_intervall_bakat_fran_idag():
+    url = fetch.riksbank_url(date(2026, 10, 5))
+    assert url.startswith("https://api.riksbank.se/swea/v1/Observations/SECBREPOEFF/")
+    assert url.endswith("/2026-10-05")
+
+
+def test_nyckeltal_sparas_strukturerat_i_index(tmp_path):
+    run(tmp_path)
+    [e] = [e for e in read_index(tmp_path, "2026-W40")["items"] if e["source"] == "riksbanken"]
+    assert e["data"]["policy_rate"]["value"] == 1.75
+    assert e["url"] == fetch.RIKSBANK_PAGE_URL
 
 
 # --- Lagring, dubbletter och fel -------------------------------------------

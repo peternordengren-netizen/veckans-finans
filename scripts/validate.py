@@ -45,6 +45,9 @@ MOCK_DIR = DATA_DIR / "mock"
 
 MAX_QUOTE_WORDS = 25
 
+# Källänken för styrräntan (samma som fetch.RIKSBANK_PAGE_URL – ett test håller dem i synk).
+RIKSBANK_PAGE_URL = "https://www.riksbank.se/sv/statistik/rantor-och-valutakurser/styrranta-in--och-utlaningsranta/"
+
 # Hårt mellanslag, smalt hårt mellanslag, tunt mellanslag och siffermellanslag
 # behandlas som vanligt mellanslag (vanliga tusentalsavgränsare i svensk text).
 _SPACE_CHARS = str.maketrans({c: " " for c in "    "})
@@ -319,6 +322,9 @@ def validate_week(
     raw_available = not is_mock and week_raw is not None and week_raw.is_dir()
     if not is_mock and not raw_available:
         res.warnings.append(f"rådata saknas ({week_raw}) – evidence-citaten kontrollerades inte mot källtexten")
+    raw_index = _load_raw_index(week_raw, res) if raw_available else None
+
+    key_quotes = _check_policy_rate(data, start, end, raw_index, is_mock, res)
 
     seen_sectors: set[str] = set()
     seen_items: set[str] = set()
@@ -330,12 +336,15 @@ def validate_week(
             res.errors.append(f"sektor {sid!r} förekommer flera gånger")
         seen_sectors.add(sid)
 
-        sector_quotes: list[str] = []
+        # Makrosammanfattningen får hänvisa till nyckeltalen (styrräntan).
+        sector_quotes: list[str] = list(key_quotes) if sid == "makro" else []
         for item in s["items"]:
             where = f"{sid}/{item['id']}"
             if item["id"] in seen_items:
                 res.errors.append(f"{where}: nyhets-id förekommer flera gånger")
             seen_items.add(item["id"])
+            if item["source"]["raw_file"].startswith("riksbanken/"):
+                res.errors.append(f"{where}: styrräntan är ett nyckeltal (key_figures.policy_rate), inte en nyhet")
 
             published = date.fromisoformat(item["published"])
             if not start <= published <= end:
@@ -384,6 +393,60 @@ def validate_week(
             res.errors.append(f"{sid}: sektorsammanfattningens riktning motsäger evidence: {conflicts}")
 
     return res
+
+
+def _load_raw_index(week_raw: Path, res: Result) -> dict[str, dict] | None:
+    """index.json i rådatan, nycklat på path. None (med fel) om det saknas."""
+    path = week_raw / "index.json"
+    if not path.is_file():
+        res.errors.append(f"rådatans index saknas: {path}")
+        return None
+    return {e["path"]: e for e in json.loads(path.read_text(encoding="utf-8"))["items"]}
+
+
+def _sv_number(value: float) -> str:
+    return f"{value:.2f}".rstrip("0").rstrip(".").replace(".", ",")
+
+
+def _check_policy_rate(
+    data: dict, start: date, end: date, raw_index: dict[str, dict] | None, is_mock: bool, res: Result
+) -> list[str]:
+    """Kontrollerar key_figures.policy_rate och returnerar "citat" som
+    makrosammanfattningen får använda (värdena och datumen, i svensk form)."""
+    kf = (data.get("key_figures") or {}).get("policy_rate")
+    if kf is None:
+        if not is_mock:
+            res.warnings.append("key_figures.policy_rate saknas – styrräntan visas inte på sidan")
+        return []
+    if kf["source_url"] != RIKSBANK_PAGE_URL:
+        res.errors.append(f"key_figures.policy_rate.source_url ska vara Riksbankens sida {RIKSBANK_PAGE_URL}")
+    if not start <= date.fromisoformat(kf["date"]) <= end:
+        res.errors.append(f"key_figures.policy_rate.date {kf['date']} ligger utanför {start}–{end}")
+    if (kf["previous_value"] is None) != (kf["changed_on"] is None):
+        res.errors.append("key_figures.policy_rate: previous_value och changed_on ska båda vara satta eller båda null")
+
+    if raw_index is not None:
+        entry = raw_index.get(kf["raw_file"])
+        raw = (entry or {}).get("data", {}).get("policy_rate")
+        if entry is None or entry["source"] != "riksbanken" or raw is None:
+            res.errors.append(f"key_figures.policy_rate.raw_file {kf['raw_file']!r} är ingen styrräntepost i rådatans index")
+        else:
+            for key in ("value", "date", "previous_value", "changed_on"):
+                if kf[key] != raw[key]:
+                    res.errors.append(f"key_figures.policy_rate.{key} = {kf[key]!r}, rådatan säger {raw[key]!r}")
+            latest = max(
+                (e["data"]["policy_rate"]["date"] for e in raw_index.values()
+                 if e["source"] == "riksbanken" and "policy_rate" in e.get("data", {})
+                 and e["data"]["policy_rate"]["date"] <= end.isoformat()),
+                default=None,
+            )
+            if latest is not None and kf["date"] != latest:
+                res.errors.append(f"key_figures.policy_rate avser {kf['date']}, men senaste observationen i veckan är {latest}")
+
+    quotes = [f"{_sv_number(kf['value'])} procent", kf["date"]]
+    if kf["previous_value"] is not None:
+        quotes += [f"{_sv_number(kf['previous_value'])} procent", kf["changed_on"]]
+    return quotes
 
 
 def _check_company(c: dict, where: str, instruments: dict[str, Instrument], names: dict[str, str], res: Result) -> None:
