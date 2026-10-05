@@ -63,6 +63,24 @@ def test_for_korta_alias_laggs_inte_till():
     assert res.too_short == [("XY", "XY")]
 
 
+def test_vanliga_ord_blir_inte_alias():
+    rows = [row("Momentum Group", "MMGR"), row("Humble Group", "HUMB"), row("Kustbanken Group", "KUST")]
+    res = add_aliases.add_aliases(rows)
+    assert rows[0]["alias"] == "" and rows[1]["alias"] == ""
+    assert rows[2]["alias"] == "Kustbanken"
+    assert sorted(res.stopwords) == [("HUMB", "Humble"), ("MMGR", "Momentum")]
+
+
+def test_projektets_lista_har_inga_alias_pa_stopplistan():
+    with (ROOT / "data" / "instruments.csv").open(encoding="utf-8-sig", newline="") as f:
+        rows = list(csv.DictReader(f))
+    offenders = [
+        (r["ticker"], a) for r in rows for a in (r["alias"] or "").split("|")
+        if a and a.casefold() in add_aliases.STOPWORDS
+    ]
+    assert offenders == []
+
+
 def test_befintligt_alias_dupliceras_inte_och_skriptet_ar_idempotent(tmp_path):
     p = tmp_path / "instruments.csv"
     fields = ["namn", "alias", "ticker", "yahoo_ticker", "börs", "sektor", "mfn_slug"]

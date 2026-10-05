@@ -3,7 +3,8 @@
 "Avanza Bank Holding" ger aliasen "Avanza Bank" och "Avanza". Ändelser tas
 bort stegvis från slutet (se SUFFIXES). Ett alias läggs bara till om det är
 unikt i hela listan – det får inte vara namn/alias på en annan rad och inte
-heller genereras från en annan rad – och har minst MIN_LENGTH tecken.
+heller genereras från en annan rad –, har minst MIN_LENGTH tecken och inte
+är ett vanligt ord (STOPWORDS).
 Krockar och för korta alias skrivs ut så att de kan avgöras för hand.
 
 Skriptet är idempotent: körs det igen läggs inget till som redan finns.
@@ -31,6 +32,17 @@ SUFFIXES = {
 }
 MIN_LENGTH = 3
 
+# Vanliga ord som aldrig blir alias (de ger falska träffar i löptext), t.ex.
+# "Momentum Group" -> inte "Momentum". Jämförs gemener mot hela aliaset.
+STOPWORDS = {
+    # engelska
+    "momentum", "humble", "green", "global", "nordic", "international", "capital", "invest", "investment",
+    "property", "properties", "energy", "medical", "health", "care", "tech", "technology", "solutions",
+    "systems", "services", "partners", "industries", "smart", "prime", "core", "select", "link", "nova",
+    # svenska
+    "fastigheter", "industri", "bygg", "hälsa", "vård", "energi", "kapital", "sverige", "norden",
+}
+
 
 def stripped_variants(name: str) -> list[str]:
     """Namnet med en, två, … ändelser borttagna (det ursprungliga namnet ingår inte)."""
@@ -47,6 +59,7 @@ class AliasResult:
     added: list[tuple[str, str]] = field(default_factory=list)  # (ticker, alias)
     collisions: dict[str, list[str]] = field(default_factory=dict)  # alias -> tickers
     too_short: list[tuple[str, str]] = field(default_factory=list)  # (ticker, alias)
+    stopwords: list[tuple[str, str]] = field(default_factory=list)  # (ticker, alias)
 
 
 def add_aliases(rows: list[dict]) -> AliasResult:
@@ -81,6 +94,8 @@ def add_aliases(rows: list[dict]) -> AliasResult:
                 res.collisions[alias] = sorted(owners)
             elif len(alias) < MIN_LENGTH:
                 res.too_short.append((ticker, alias))
+            elif key in STOPWORDS:
+                res.stopwords.append((ticker, alias))
             else:
                 new.append(alias)
                 res.added.append((ticker, alias))
@@ -108,6 +123,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  {alias!r}: {', '.join(tickers)}")
     print(f"För korta (< {MIN_LENGTH} tecken, inte tillagda): {len(res.too_short)}")
     for ticker, alias in res.too_short:
+        print(f"  {ticker:12} {alias!r}")
+    print(f"Vanliga ord (stopplistan, inte tillagda): {len(res.stopwords)}")
+    for ticker, alias in res.stopwords:
         print(f"  {ticker:12} {alias!r}")
 
     if not args.dry_run and res.added:
