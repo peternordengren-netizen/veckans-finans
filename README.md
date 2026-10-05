@@ -52,6 +52,21 @@ Workflow-mallen ligger i [`deploy/raw-repo/`](deploy/raw-repo/). Lokalt klonas d
 - [`data/instruments.csv`](data/instruments.csv): `namn,alias,ticker,yahoo_ticker,börs,mfn_slug`. Flera alias separeras
   med `|`. Underhålls manuellt. `mfn_slug` är valfri och anger bolagets slug i MFN:s URL:er (`mfn.se/a/<slug>/…`).
   Poster från de bolagen prioriteras när veckan sammanfattas. Fyll bara i slugs du sett i en faktisk MFN-URL.
+
+  **Källa (2026-10-05):** Nasdaqs lista över aktier, *Large Cap* och *Mid Cap* på Nasdaq Stockholm
+  ([nasdaq.com/european-market-activity/shares](https://www.nasdaq.com/european-market-activity/shares)).
+  Listan hämtades via samma anrop som sidan själv gör,
+  `api.nasdaq.com/api/nordic/screener/shares?category=MAIN_MARKET&market=STO&segment=LARGE_CAP|MID_CAP`.
+  Det gav 163 + 140 aktieslag och 265 bolag.
+  - **En rad per bolag.** Preferens- och D-aktier tas inte med. Bolag med flera stamaktieslag får slaget med högst
+    omsättning enligt samma källa, till exempel `SEB A`, `SHB A`, `ATCO A`, `EPI A`, `INDU C`, `STE R` och `VOLV B`.
+  - **`yahoo_ticker`** följer Yahoos format för Stockholm (`SBB B` blir `SBB-B.ST`). Varje ticker verifierades mot
+    Yahoo: att den finns, att börsen är `STO`, att valutan stämmer med Nasdaqs och att bolagsnamnet stämmer.
+    Ingen ticker underkändes.
+  - **`namn`** är Nasdaqs namn utan aktieslag. Nasdaq förkortar ibland ("Fast. Balder", "Sv. Handelsbanken"), så lägg
+    gärna till fullständiga namn som alias.
+  - **`mfn_slug`** är ifylld för 20 bolag, de vars slug förekom i den hämtade rådatan och exakt motsvarar bolagsnamnet.
+  - Novo Nordisk och Salesforce ligger kvar från den ursprungliga listan.
 - [`data/sectors.json`](data/sectors.json): fast sektorlista som styr flikarna.
 - `data/mock/`: exempeldata (`"mock": true`) med **påhittade bolag och källor** och en egen
   [`instruments.csv`](data/mock/instruments.csv). Valideringen underkänner mockfiler utanför `data/mock/`.
