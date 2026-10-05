@@ -66,11 +66,49 @@ MFN_SKIP_TAGS = {"sub:ci:insider"}  # insynshandel och flaggningar sparas inte
 # MFN: på taggprefix eller rubrik (alla MFN-poster är inte taggade). Cision saknar
 # taggar, så där används bara rubriken.
 MFN_ROUTINE_TAG_PREFIXES = ("sub:ci:gm", "sub:ca:shares", "sub:ci:presentation")
+_INVITATION = r"^\s*inbjudan\b|^\s*invitation\b|inbjudan till|invitation to"
 ROUTINE_TITLE_RE = re.compile(
-    r"kallelse till|kommuniké från|återköp av|antal aktier och röster|inbjudan till|nyhetsbrev"
-    r"|notice of|bulletin from|repurchase of|number of shares and votes|invitation to|newsletter",
+    # Stämmor, nyhetsbrev, antal aktier
+    r"kallelse till|kommuniké från|antal aktier och röster|nyhetsbrev"
+    r"|notice of|bulletin from|number of shares and votes|newsletter"
+    # Återköp av egna aktier
+    r"|återköp av|aktieåterköp|förvärv av egna"
+    r"|repurchases? of|share repurchases?|buy-?backs? of|share buy-?backs?|acquisitions? of own"
+    r"|\brepurchase\b.*\b(?:week|vecka)\s+\d+"  # veckorapport om återköp ("Repurchase B shares in week 40")
+    # Inbjudningar till rapportpresentationer
+    r"|" + _INVITATION + r"|webbsändning|telefonkonferens|webcast|teleconference|conference call",
     re.IGNORECASE,
 )
+# Själva rapporterna är inte rutin, även om rubriken nämner t.ex. en webbsändning –
+# bara uttryckliga inbjudningar till en rapport räknas som rutin.
+REPORT_TITLE_RE = re.compile(
+    r"delårsrapport|kvartalsrapport|halvårsrapport|bokslutskommuniké|årsredovisning"
+    r"|interim report|quarterly report|half-year report|year-end report|annual report",
+    re.IGNORECASE,
+)
+INVITATION_RE = re.compile(_INVITATION, re.IGNORECASE)
+
+
+def is_routine(title: str, tags: list[str] = ()) -> bool:
+    """Rutinmeddelande enligt MFN-taggar eller rubrik. Rapporter är aldrig rutin
+    (utom inbjudningar till dem)."""
+    if REPORT_TITLE_RE.search(title) and not INVITATION_RE.search(title):
+        return False
+    return any(t.startswith(MFN_ROUTINE_TAG_PREFIXES) for t in tags) or bool(ROUTINE_TITLE_RE.search(title))
+
+
+def retag_routine(entries: list[dict]) -> int:
+    """Räknar om rutinmärkningen för befintliga poster (så att ändrade mönster
+    även gäller tidigare hämtat). Returnerar antal ändrade poster."""
+    changed = 0
+    for e in entries:
+        tags = [t for t in e.get("tags", []) if t != "rutin"]
+        routine = e["source"] in ("mfn", "cision") and is_routine(e["title"], tags)
+        new_tags = tags + (["rutin"] if routine else [])
+        if routine != e.get("routine") or new_tags != e.get("tags"):
+            e["routine"], e["tags"] = routine, new_tags
+            changed += 1
+    return changed
 
 # Poster från olika källor räknas som samma pressmeddelande om rubriken är lika
 # (efter normalisering) och publiceringstiderna ligger så här nära varandra.
@@ -153,7 +191,7 @@ def parse_mfn(data: bytes) -> list[Item]:
         text = (text_el.text if text_el is not None else None) or el.findtext("description") or ""
         url = el.findtext("link") or ""
         title = (el.findtext("title") or "").strip()
-        routine = any(t.startswith(MFN_ROUTINE_TAG_PREFIXES) for t in tags) or bool(ROUTINE_TITLE_RE.search(title))
+        routine = is_routine(title, tags)
         items.append(Item(
             id=el.findtext(MFN_NS + "newsId") or url,
             source="mfn",
@@ -176,7 +214,7 @@ def parse_cision(data: bytes) -> list[Item]:
     for el in ET.fromstring(data).findall("./channel/item"):
         url = el.findtext("link") or ""
         title = html.unescape((el.findtext("title") or "").strip())
-        routine = bool(ROUTINE_TITLE_RE.search(title))
+        routine = is_routine(title)
         items.append(Item(
             id=el.findtext("guid") or url,
             source="cision",
@@ -403,6 +441,8 @@ def store(result: RunResult, raw_dir: Path, now: datetime) -> dict[str, int]:
     # Språkpar slås ihop i hela veckan varje körning, så att även äldre poster
     # (och par där den engelska kom först) städas.
     merged = sum(merge_language_pairs(idx["items"], raw_dir / week) for week, idx in indexes.items())
+    for idx in indexes.values():
+        retag_routine(idx["items"])
     run_log = {
         name: {**r, "new": new_counts.get(name, 0)} if r["status"] == "ok" else r
         for name, r in result.log.items()

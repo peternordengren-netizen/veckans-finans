@@ -130,6 +130,64 @@ def test_mfn_filter_och_rutintaggar():
     assert by_id["ok"].company == "fjallhem-fastigheter"
 
 
+@pytest.mark.parametrize(
+    "title",
+    [
+        # Återköp, svenska och engelska
+        "Aktieåterköp i Fjällhem under perioden 28 september - 2 oktober 2026",
+        "Återköp av aktier i Fjällhem AB (publ) 28 september - 2 oktober 2026",
+        "Förvärv av egna stamaktier av serie A i Fjällhem",
+        "Share buybacks in Fjällhem during the period September 28 - October 2, 2026",
+        "Share repurchases in Fjällhem AB (publ)",
+        "Buyback of Class B shares in Fjällhem during week 40, 2026",
+        "Acquisitions of own shares in Fjällhem AB (publ)",
+        "Fjällhem PLC — Transactions under Share Buy-back Programme",
+        "Fjällhem AB: Repurchase Fjällhem B shares in week 40, 2026",
+        # Inbjudningar till rapportpresentationer
+        "Inbjudan - Fjällhems resultat för det tredje kvartalet 2026",
+        "Invitation - Fjällhem's results for the third quarter 2026",
+        "Inbjudan till presentation av Fjällhems delårsrapport för tredje kvartalet",
+        "Invitation to presentation of Fjällhem's interim report Q3 2026",
+        "Fjällhem's third quarter report – webcast and teleconference",
+    ],
+)
+def test_rutinmeddelanden_kanns_igen(title):
+    assert fetch.is_routine(title)
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "Fjällhem: Delårsrapport januari–september 2026",
+        "Fjällhem interim report Q3 2026",
+        "Fjällhems resultat för det tredje kvartalet 2026",
+        "Fjällhem bokslutskommuniké 2026 – webbsändning kl 10",  # rapport, inte inbjudan
+        "FJÄLLHEM AB (PUBL): PRELIMINÄR FÖRSÄLJNINGSRAPPORT Q3 2026",
+        "Fjällhem förvärvar Tallmo",
+        "Fjällhem board resolves to repurchase up to 10% of the shares",  # beslut om program = nyhet
+    ],
+)
+def test_rapporter_och_vanliga_nyheter_ar_inte_rutin(title):
+    assert not fetch.is_routine(title)
+
+
+def test_rutinmarkning_raknas_om_for_befintliga_poster(tmp_path):
+    pub = "Mon, 05 Oct 2026 06:00:00 +0000"
+    now = datetime(2026, 10, 5, 12, 0, tzinfo=fetch.STOCKHOLM)
+    run(tmp_path, mfn=mfn_feed(mfn_item("b1", "Share buybacks in Fjällhem", pub, lang="en")), now=now)
+    # Simulera en post som sparats med äldre mönster (utan rutinmärkning).
+    idx_path = tmp_path / "2026-W41" / "index.json"
+    idx = json.loads(idx_path.read_text(encoding="utf-8"))
+    for e in idx["items"]:
+        if e["id"] == "b1":
+            e["routine"], e["tags"] = False, []
+    idx_path.write_text(json.dumps(idx), encoding="utf-8")
+
+    run(tmp_path, now=now)
+    [e] = [e for e in read_index(tmp_path, "2026-W41")["items"] if e["id"] == "b1"]
+    assert e["routine"] is True and e["tags"] == ["rutin"]
+
+
 def test_cision_markeras_som_utdrag_och_rutin_via_rubrik():
     pub = "Fri, 02 Oct 2026 08:00:00 GMT"
     items = fetch.parse_cision(cision_feed(
