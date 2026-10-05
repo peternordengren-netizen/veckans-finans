@@ -216,6 +216,7 @@ def load_instruments(
         sector_ids = load_sector_ids()
     instruments: dict[str, Instrument] = {}
     slugs: dict[str, str] = {}
+    name_owner: dict[str, str] = {}  # namn/alias (gemener) -> ticker
     with path.open(encoding="utf-8-sig", newline="") as f:
         for line, row in enumerate(csv.DictReader(f), start=2):
             alias = tuple(a.strip() for a in (row.get("alias") or "").split("|") if a.strip())
@@ -234,6 +235,11 @@ def load_instruments(
                 raise ValueError(f"{path.name} rad {line}: dubblett av ticker {inst.ticker!r}")
             if sektor is not None and sektor not in sector_ids:
                 raise ValueError(f"{path.name} rad {line}: okänd sektor {sektor!r} (se data/sectors.json)")
+            # Matchningen bygger på att ett namn pekar ut exakt ett instrument.
+            for n in (inst.namn, *inst.alias):
+                owner = name_owner.setdefault(n.casefold(), inst.ticker)
+                if owner != inst.ticker:
+                    raise ValueError(f"{path.name} rad {line}: namnet/aliaset {n!r} används redan av {owner!r}")
             if slug is not None:
                 if not MFN_SLUG_RE.match(slug):
                     raise ValueError(f"{path.name} rad {line}: ogiltig mfn_slug {slug!r} (gemener, siffror och bindestreck)")

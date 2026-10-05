@@ -79,6 +79,10 @@ Workflow-mallen ligger i [`deploy/raw-repo/`](deploy/raw-repo/). Lokalt klonas d
     Ingen ticker underkändes.
   - **`namn`** är Nasdaqs namn utan aktieslag. Nasdaq förkortar ibland ("Fast. Balder", "Sv. Handelsbanken"), så lägg
     gärna till fullständiga namn som alias.
+  - **Alias** läggs till maskinellt med [`scripts/add_aliases.py`](scripts/add_aliases.py). Skriptet tar bort ändelser
+    som Holding, Group, AB, Bank, Ltd och Oyj, så att "Avanza Bank Holding" ger "Avanza Bank" och "Avanza". Ett alias
+    läggs bara till om det är unikt i listan och har minst tre tecken. Krockar skrivs ut för manuell bedömning.
+    Kör skriptet igen efter att nya rader lagts till. Valideringen underkänner ett namn eller alias som finns på två rader.
   - **`mfn_slug`** är ifylld för 20 bolag, de vars slug förekom i den hämtade rådatan och exakt motsvarar bolagsnamnet.
   - Novo Nordisk och Salesforce ligger kvar från den ursprungliga listan.
 - [`data/sectors.json`](data/sectors.json): fast sektorlista som styr flikarna.
