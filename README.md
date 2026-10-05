@@ -9,7 +9,7 @@ Inga betaltjänster eller betal-API:er. **Inget investeringsråd.**
 |---|---|---|
 | `scripts/fetch.py` (RSS: MFN, Cision; API: Riksbankens styrränta) | `data/raw/<vecka>/` | nej, rådatan ligger i det privata repot `veckans-finans-raw` |
 | `/sammanfatta-veckan` (Claude Code, manuellt en gång i veckan) | `data/weeks/<vecka>.json` | ja |
-| `scripts/prices.py` (yfinance, valfritt) | `data/prices/<vecka>.json` | ja |
+| `scripts/prices.py` (yfinance, valfritt, körs lokalt) | `data/prices/<vecka>.json` | ja |
 | `scripts/validate.py` | – | – |
 
 Veckor anges som ISO-vecka, t.ex. `2026-W40` (mån–sön, Europe/Stockholm).
@@ -55,6 +55,21 @@ Workflow-mallen ligger i [`deploy/raw-repo/`](deploy/raw-repo/). Lokalt klonas d
 - [`data/sectors.json`](data/sectors.json): fast sektorlista som styr flikarna.
 - `data/mock/`: exempeldata (`"mock": true`) med **påhittade bolag och källor** och en egen
   [`instruments.csv`](data/mock/instruments.csv). Valideringen underkänner mockfiler utanför `data/mock/`.
+
+### Kurser (`scripts/prices.py`)
+
+Körs lokalt efter `/sammanfatta-veckan`:
+
+```bash
+.venv/Scripts/python -m pip install -r requirements-prices.txt
+.venv/Scripts/python scripts/prices.py 2026-W40
+```
+
+- Skriptet läser `yahoo_ticker` för matchade bolag i `data/weeks/<vecka>.json` och skriver `data/prices/<vecka>.json`.
+- Förändringen räknas från föregående veckas sista stängning till veckans sista stängning, på justerad stängning.
+- Fail-soft: en ticker som inte går att hämta hamnar i `errors`. Om ingen ticker går att hämta skrivs ingen fil,
+  och en befintlig fil lämnas orörd. Sidan fungerar i båda fallen.
+- `--mock --out <fil>` läser mockveckan. Den kurerade mockkursfilen skrivs aldrig över.
 
 ## Sidan (Astro)
 

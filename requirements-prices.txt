@@ -1,0 +1,4 @@
+# Bara för scripts/prices.py (körs lokalt). Hålls separat så att validering
+# och sidbygge inte behöver pandas/yfinance.
+-r requirements.txt
+yfinance>=1.7,<2
