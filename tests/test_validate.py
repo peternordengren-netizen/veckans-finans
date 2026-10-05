@@ -420,6 +420,35 @@ def test_mockvecka_kontrolleras_inte_mot_riktig_radata_for_samma_vecka(week, ins
     assert res.errors == []
 
 
+def test_source_url_maste_stamma_med_index(week, instruments, sector_ids, tmp_path):
+    week = real_week(week)
+    make_raw(week, tmp_path)
+    item(week, "fast-fjallhem-refinansiering")["source"]["url"] = "https://example.com/fjallhem/fel-adress"
+    res = run(week, instruments, sector_ids, raw_dir=tmp_path)
+    assert any(
+        "fast-fjallhem-refinansiering: source.url 'https://example.com/fjallhem/fel-adress' skiljer sig från indexets"
+        in e for e in res.errors
+    )
+
+
+def test_raw_file_som_saknas_i_index_underkanns(week, instruments, sector_ids, tmp_path):
+    week = real_week(week)
+    raw = make_raw(week, tmp_path)
+    idx = json.loads((raw / "index.json").read_text(encoding="utf-8"))
+    idx["items"] = [e for e in idx["items"] if e["path"] != "press/tallmo-forsaljning.txt"]
+    (raw / "index.json").write_text(json.dumps(idx), encoding="utf-8")
+    res = run(week, instruments, sector_ids, raw_dir=tmp_path)
+    assert any("'press/tallmo-forsaljning.txt' finns inte i rådatans index" in e for e in res.errors)
+
+
+def test_saknat_index_underkanns(week, instruments, sector_ids, tmp_path):
+    week = real_week(week)
+    raw = make_raw(week, tmp_path)
+    (raw / "index.json").unlink()
+    res = run(week, instruments, sector_ids, raw_dir=tmp_path)
+    assert any("rådatans index saknas" in e for e in res.errors)
+
+
 # --- Nyckeltal: styrräntan --------------------------------------------------
 
 

@@ -14,6 +14,7 @@ Utöver JSON Schema-kontrollen görs korskontroller som schemat inte kan uttryck
 - riktningsord före ett tal (ökade/sjönk m.fl.) motsäger inte citatets tecken
   eller riktningsord (direction_conflicts)
 - evidence-citat är högst 25 ord
+- source.url är samma som rådatans index anger för samma raw_file
 - varje evidence-citat finns ordagrant i källtexten under data/raw/<vecka>/
   (hoppas över med varning om rådata saknas, t.ex. i CI – data/raw/ committas inte)
 - filer under data/mock/ har "mock": true och valideras mot data/mock/instruments.csv;
@@ -362,6 +363,15 @@ def validate_week(
             conflicts = direction_conflicts(text, quotes)
             if conflicts:
                 res.errors.append(f"{where}: riktningen motsäger evidence: {conflicts}")
+
+            if raw_index is not None:
+                entry = raw_index.get(item["source"]["raw_file"])
+                if entry is None:
+                    res.errors.append(f"{where}: raw_file {item['source']['raw_file']!r} finns inte i rådatans index")
+                elif item["source"]["url"] != entry["url"]:
+                    res.errors.append(
+                        f"{where}: source.url {item['source']['url']!r} skiljer sig från indexets {entry['url']!r}"
+                    )
 
             if raw_available:
                 raw_path = week_raw / item["source"]["raw_file"]
