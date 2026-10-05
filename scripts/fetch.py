@@ -14,7 +14,8 @@ publiceringstid, inte körningens):
 
 Dubbletter mellan MFN och Cision (samma pressmeddelande via båda) slås ihop:
 MFN-versionen behålls eftersom den har fulltext, och Cision-länken sparas i
-also_in.
+also_in. MFN:s svenska och engelska versioner av samma meddelande (samma
+bolag, samma minut) slås också ihop – den svenska behålls.
 
 Bara standardbiblioteket används (tzdata krävs dock på Windows för zoneinfo).
 
@@ -296,6 +297,44 @@ def _file_name(item_id: str) -> str:
     return re.sub(r"[^A-Za-z0-9._-]+", "_", item_id)[:120] + ".txt"
 
 
+LANG_PREFERENCE = {"sv": 0, "en": 1}  # lägre vinner
+
+
+def merge_language_pairs(entries: list[dict], week_dir: Path) -> int:
+    """Slår ihop MFN:s språkversioner av samma pressmeddelande och behåller den svenska.
+
+    Ett par = två MFN-poster med samma bolagsslug och samma publiceringsminut,
+    en på svenska och en på engelska. Den engelska tas bort (även filen) och
+    noteras i den svenskas also_in. Om en minut har fler än en post per språk
+    för samma bolag går det inte att para ihop säkert – då lämnas alla.
+    Returnerar antal borttagna poster.
+    """
+    groups: dict[tuple[str, str], list[dict]] = {}
+    for e in entries:
+        if e["source"] == "mfn" and e.get("company") and e.get("language") in LANG_PREFERENCE:
+            groups.setdefault((e["company"], e["published"][:16]), []).append(e)
+    removed = 0
+    for group in groups.values():
+        by_lang = {lang: [e for e in group if e["language"] == lang] for lang in LANG_PREFERENCE}
+        if len(by_lang["sv"]) != 1 or len(by_lang["en"]) != 1:
+            continue
+        keep, drop = by_lang["sv"][0], by_lang["en"][0]
+        (week_dir / drop["path"]).unlink(missing_ok=True)
+        entries.remove(drop)
+        also = keep.setdefault("also_in", [])
+        also.append({"source": drop["source"], "url": drop["url"], "id": drop["id"], "language": drop["language"]})
+        also.extend(a for a in drop.get("also_in", []) if a not in also)
+        removed += 1
+    return removed
+
+
+def _already_merged(entries: list[dict], item: Item) -> bool:
+    """Sant om posten tidigare slagits ihop in i en annan post (finns i någons also_in)."""
+    return any(
+        a.get("id") == item.id and a["source"] == item.source for e in entries for a in e.get("also_in", [])
+    )
+
+
 def _load_index(path: Path, week: str) -> dict:
     if path.exists():
         return json.loads(path.read_text(encoding="utf-8"))
@@ -321,7 +360,7 @@ def store(result: RunResult, raw_dir: Path, now: datetime) -> dict[str, int]:
         week = iso_week(item.published)
         idx = index_for(week)
         entries = idx["items"]
-        if any(e["id"] == item.id and e["source"] == item.source for e in entries):
+        if any(e["id"] == item.id and e["source"] == item.source for e in entries) or _already_merged(entries, item):
             continue
         dup = next((e for e in entries if _is_duplicate(e, item)), None)
         if dup is not None:
@@ -360,11 +399,19 @@ def store(result: RunResult, raw_dir: Path, now: datetime) -> dict[str, int]:
         new_counts[item.source] = new_counts.get(item.source, 0) + 1
 
     run_week = iso_week(now)
+    index_for(run_week)
+    # Språkpar slås ihop i hela veckan varje körning, så att även äldre poster
+    # (och par där den engelska kom först) städas.
+    merged = sum(merge_language_pairs(idx["items"], raw_dir / week) for week, idx in indexes.items())
     run_log = {
         name: {**r, "new": new_counts.get(name, 0)} if r["status"] == "ok" else r
         for name, r in result.log.items()
     }
-    index_for(run_week)["runs"].append({"time": now.astimezone(STOCKHOLM).isoformat(), "sources": run_log})
+    indexes[run_week]["runs"].append({
+        "time": now.astimezone(STOCKHOLM).isoformat(),
+        "sources": run_log,
+        "merged_language_pairs": merged,
+    })
 
     for week, idx in indexes.items():
         idx["items"].sort(key=lambda e: e["published"])

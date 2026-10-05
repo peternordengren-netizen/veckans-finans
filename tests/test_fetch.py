@@ -203,6 +203,66 @@ def test_olika_rubriker_eller_langt_isar_i_tid_ar_inte_dubbletter(tmp_path):
     assert sources == ["c1", "c2", "m1"]
 
 
+# --- Språkpar (MFN sv/en) --------------------------------------------------
+
+PUB = "Mon, 05 Oct 2026 06:00:00 +0000"
+
+
+def mfn_entries(raw):
+    return [e for e in read_index(raw, "2026-W41")["items"] if e["source"] == "mfn"]
+
+
+def run_w41(tmp_path, mfn):
+    return run(tmp_path, mfn=mfn, now=datetime(2026, 10, 5, 12, 0, tzinfo=fetch.STOCKHOLM))
+
+
+def test_sprakpar_slas_ihop_och_svenska_behalls(tmp_path):
+    run_w41(tmp_path, mfn_feed(
+        mfn_item("en1", "Fjällhem signs agreement", PUB, lang="en"),
+        mfn_item("sv1", "Fjällhem tecknar avtal", PUB, lang="sv"),
+    ))
+    [e] = mfn_entries(tmp_path)
+    assert e["id"] == "sv1"
+    assert e["also_in"] == [{"source": "mfn", "url": "https://mfn.se/a/fjallhem-fastigheter/en1", "id": "en1", "language": "en"}]
+    assert not (tmp_path / "2026-W41" / "mfn" / "en1.txt").exists()
+    assert read_index(tmp_path, "2026-W41")["runs"][-1]["merged_language_pairs"] == 1
+
+
+def test_engelska_som_kommer_forst_ersatts_och_kommer_inte_tillbaka(tmp_path):
+    en = mfn_item("en1", "Fjällhem signs agreement", PUB, lang="en")
+    sv = mfn_item("sv1", "Fjällhem tecknar avtal", PUB, lang="sv")
+    run_w41(tmp_path, mfn_feed(en))
+    assert [e["id"] for e in mfn_entries(tmp_path)] == ["en1"]  # ensam engelsk post behålls
+    run_w41(tmp_path, mfn_feed(en, sv))
+    run_w41(tmp_path, mfn_feed(en, sv))  # den engelska finns kvar i flödet
+    assert [e["id"] for e in mfn_entries(tmp_path)] == ["sv1"]
+    assert read_index(tmp_path, "2026-W41")["runs"][-1]["merged_language_pairs"] == 0
+
+
+@pytest.mark.parametrize(
+    "items",
+    [
+        # Olika minut – två olika meddelanden.
+        [("sv1", "sv", "Mon, 05 Oct 2026 06:00:00 +0000"), ("en1", "en", "Mon, 05 Oct 2026 06:01:00 +0000")],
+        # Två svenska och en engelsk samma minut – går inte att para säkert.
+        [("sv1", "sv", PUB), ("sv2", "sv", PUB), ("en1", "en", PUB)],
+        # Två svenska – inget språkpar.
+        [("sv1", "sv", PUB), ("sv2", "sv", PUB)],
+    ],
+)
+def test_sprakpar_slas_inte_ihop_nar_det_ar_osakert(tmp_path, items):
+    run_w41(tmp_path, mfn_feed(*(mfn_item(i, f"Rubrik {i}", p, lang=lang) for i, lang, p in items)))
+    assert sorted(e["id"] for e in mfn_entries(tmp_path)) == sorted(i for i, _, _ in items)
+
+
+def test_olika_bolag_samma_minut_slas_inte_ihop(tmp_path):
+    run_w41(tmp_path, mfn_feed(
+        mfn_item("sv1", "Fjällhem tecknar avtal", PUB, lang="sv", slug="fjallhem-fastigheter"),
+        mfn_item("en1", "Kustbanken signs agreement", PUB, lang="en", slug="kustbanken"),
+    ))
+    assert sorted(e["id"] for e in mfn_entries(tmp_path)) == ["en1", "sv1"]
+
+
 def test_upprepad_korning_ger_inga_dubbletter(tmp_path):
     mfn = mfn_feed(mfn_item("m1", "Fjällhem tecknar avtal", "Fri, 02 Oct 2026 08:00:00 +0000"))
     run(tmp_path, mfn=mfn)
