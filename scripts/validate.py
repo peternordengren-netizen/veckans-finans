@@ -302,7 +302,9 @@ def validate_week(
 
     names = _name_index(instruments)
     week_raw = raw_dir / week if raw_dir is not None else None
-    raw_available = week_raw is not None and week_raw.is_dir()
+    # Mockveckor har påhittade källor och jämförs aldrig med riktig rådata, även
+    # om data/raw/ råkar ha en mapp för samma veckonummer.
+    raw_available = not is_mock and week_raw is not None and week_raw.is_dir()
     if not is_mock and not raw_available:
         res.warnings.append(f"rådata saknas ({week_raw}) – evidence-citaten kontrollerades inte mot källtexten")
 

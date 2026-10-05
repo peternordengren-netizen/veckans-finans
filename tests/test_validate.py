@@ -334,6 +334,12 @@ def test_evidence_kontrolleras_mot_radata(week, instruments, sector_ids, tmp_pat
     assert any("citatet finns inte i källtexten" in e for e in res.errors)
 
 
+def test_mockvecka_kontrolleras_inte_mot_riktig_radata_for_samma_vecka(week, instruments, sector_ids, tmp_path):
+    (tmp_path / "2026-W40" / "mfn").mkdir(parents=True)  # riktig rådata för vecka 40 finns
+    res = run(week, instruments, sector_ids, raw_dir=tmp_path)
+    assert res.errors == []
+
+
 def test_saknad_radata_ger_varning_inte_fel(week, instruments, sector_ids, tmp_path):
     week["mock"] = False
     res = run(week, instruments, sector_ids, raw_dir=tmp_path)
