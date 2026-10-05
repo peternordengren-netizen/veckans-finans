@@ -13,6 +13,7 @@ Du ska skriva veckans sammanfattning för Veckans finans. Vecka: `$ARGUMENTS`. O
 - Läs `data/instruments.csv` (`namn,alias,ticker,yahoo_ticker,börs,sektor,mfn_slug`, alias separeras med `|`, `sektor` är ett id ur `data/sectors.json` och kan vara tom, `mfn_slug` är valfri och ofta tom) och `data/sectors.json`.
 - Skriv `data/weeks/<vecka>.json` enligt `schema/week.schema.json`. Läs schemat först.
 - Skriv inte `"mock"`. Använd aldrig `data/mock/` som källa.
+- Som sista steg hämtas kurser och veckan säkerhetskopieras till det privata repot. Se "Sista steget" nedan.
 
 ## Arbetsgång: index först, fulltext bara för urvalet
 
@@ -92,6 +93,29 @@ Veckan har typiskt flera hundra poster. Läs dem inte alla.
    kvarvarande felen ordagrant i slutrapporten, så avgör jag hur de ska hanteras.
 5. Ändra aldrig källtexten, csv:n eller valideringen.
 
+## Sista steget: kurser och säkerhetskopia
+
+Görs även om valideringen blev **EJ GODKÄND**, så att arbetet inte går förlorat. Statusen anges i commit-meddelandet.
+
+1. **Kurser:** kör `.venv/Scripts/python scripts/prices.py <vecka>`. Skriptet är fail-soft. Exit-kod 1 betyder att
+   ingen kurs kunde hämtas och ingen kursfil skrevs. Fortsätt då utan kursfil, och nämn det i slutrapporten.
+2. **Säkerhetskopia till det privata repot** `data/raw/` (veckans-finans-raw):
+   1. Kontrollera att `git -C data/raw status --porcelain` är tomt. Om det inte är tomt: stanna och rapportera.
+      Committa aldrig någon annans ändringar.
+   2. Kör `git -C data/raw pull --rebase` för att hämta GitHub Actions senaste hämtningar.
+   3. Kopiera `data/weeks/<vecka>.json` till `data/raw/weeks/<vecka>.json`. Kopiera också `data/prices/<vecka>.json` till
+      `data/raw/prices/<vecka>.json` om kursfilen finns. Skapa mapparna vid behov och skriv över en tidigare kopia av
+      samma vecka.
+   4. Lägg bara till just dessa filer: `git -C data/raw add weeks/<vecka>.json prices/<vecka>.json`. Ta med kursfilen
+      bara om den finns. Använd aldrig `git add -A` eller `git add .`.
+   5. Om något ändrats: `git -C data/raw commit -m "Säkerhetskopia <vecka> (validering OK)"`, eller `(validering EJ
+      GODKÄND)`. Om filerna är identiska med förra kopian hoppar du över commiten.
+   6. Kör `git -C data/raw push`. Om pushen avvisas för att Actions hunnit pusha emellan: kör
+      `git -C data/raw pull --rebase` och försök **en** gång till. Om det fortfarande misslyckas, eller om inloggningen
+      saknas: stanna och rapportera. Filerna finns kvar lokalt i `data/weeks/` och `data/prices/`.
+3. Committa eller pusha **aldrig** veckofilen eller kursfilen till det publika repot (`veckans-finans`). Där är
+   `data/weeks/` och `data/prices/` git-ignorerade, och så ska det förbli.
+
 ## Slutrapport till mig
 
 Kort, i chatten:
@@ -102,3 +126,6 @@ Kort, i chatten:
   (du får inte fylla i den själv)
 - valideringens resultat: OK efter hur många körningar, eller **EJ GODKÄND** med alla kvarvarande fel listade
 - eventuella varningar från valideringen
+- kurser: antal hämtade och antal fel, eller att ingen kursfil skrevs
+- säkerhetskopia: commit-hash som pushats till veckans-finans-raw, "oförändrad sedan förra kopian", eller varför den
+  inte gick igenom

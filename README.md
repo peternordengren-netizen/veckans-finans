@@ -133,11 +133,16 @@ npm run preview       # visa dist/ lokalt
 Arbetsgång varje vecka, efter att veckan är slut. Kör kommandona i repots rot.
 
 1. Hämta rådatan: `git -C data/raw pull`. `/sammanfatta-veckan` gör det också själv.
-2. Kör `/sammanfatta-veckan` i Claude Code. Det skriver `data/weeks/<vecka>.json` och validerar filen.
-3. Hämta kurser (valfritt):
+2. Kör `/sammanfatta-veckan` i Claude Code. Kommandot gör följande:
+   - skriver och validerar `data/weeks/<vecka>.json`
+   - hämtar kurser till `data/prices/<vecka>.json`
+   - **säkerhetskopierar** båda filerna till det privata repot, under `weeks/` och `prices/` i `veckans-finans-raw`,
+     med pull, commit och push
+3. Om du vill hämta kurserna igen senare:
    ```bash
    .venv/Scripts/python scripts/prices.py 2026-W42
    ```
+   Kopiera då också den nya filen till `data/raw/prices/` och committa och pusha den där.
 4. Starta sidan:
    ```bash
    npm run dev
@@ -154,9 +159,10 @@ Arbetsgång varje vecka, efter att veckan är slut. Kör kommandona i repots rot
    ```
    Den finns på samma adress.
 
-Inget behöver committas eller pushas. `data/weeks/` och `data/prices/` är git-ignorerade, så veckorna kan inte
-hamna i det publika repot av misstag. De finns bara på den här datorn, så säkerhetskopiera mappen om du vill spara
-historiken.
+Ingenting committas i det publika repot. `data/weeks/` och `data/prices/` är git-ignorerade, så veckorna kan inte
+hamna där av misstag. Säkerhetskopian ligger i det privata repot. För att återställa på en ny dator: klona
+`veckans-finans-raw` till `data/raw/` och kopiera `data/raw/weeks/*` till `data/weeks/` och `data/raw/prices/*` till
+`data/prices/`.
 
 GitHub Pages är avstängt. [`.github/workflows/pages.yml`](.github/workflows/pages.yml) ligger kvar men är
 inaktiverad på github.com. Med git-ignorerade veckor skulle den ändå bara bygga en tom sida.
