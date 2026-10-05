@@ -1,0 +1,68 @@
+# Bygger den statiska sidan och publicerar den på GitHub Pages vid varje push
+# till main. Validering och tester körs först – trasig data publiceras aldrig.
+name: Publicera sidan
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write # deploy-pages
+  id-token: write # deploy-pages verifierar körningen med OIDC
+
+# En publicering i taget; en pågående avbryts inte (så att en halv deploy inte lämnas).
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      # Versioner kontrollerade 2026-10-05: alla kör på Node 24.
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Installera Python-beroenden
+        run: pip install -r requirements.txt
+
+      # data/raw/ finns inte här (privat repo) – citatkontrollen mot källtexten
+      # blir då en varning; allt annat (schema, tickers, siffror, datum) kontrolleras.
+      - name: Validera data
+        run: python scripts/validate.py
+
+      - name: Tester
+        run: python -m pytest -q
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Installera Node-beroenden
+        run: npm ci
+
+      - name: Bygg sidan
+        run: npm run build
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

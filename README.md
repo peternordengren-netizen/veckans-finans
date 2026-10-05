@@ -106,6 +106,15 @@ npm run preview       # visa dist/ lokalt
 - Utan JavaScript visas alla sektorer under varandra. Med JavaScript blir de flikar, och `#sektor-<id>` i adressen
   väljer flik.
 
+## Publicering (GitHub Pages)
+
+[`.github/workflows/pages.yml`](.github/workflows/pages.yml) körs vid varje push till `main`, och kan också startas
+manuellt. Den validerar data, kör testerna, bygger med `npm run build` och publicerar `dist/` på
+https://peternordengren-netizen.github.io/veckans-finans/. Om valideringen eller testerna fallerar publiceras inget.
+
+Arbetsgång per vecka: `/sammanfatta-veckan`, sedan `scripts/prices.py <vecka>`, sedan commit och push av
+`data/weeks/` och `data/prices/`.
+
 ## Validering
 
 ```bash
