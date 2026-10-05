@@ -3,13 +3,16 @@
 Statisk sida som sammanfattar veckans finansnyheter per sektor och kopplar dem till noterade aktier.
 Inga betaltjänster eller betal-API:er. **Inget investeringsråd.**
 
+Sidan är bara för eget bruk och läses lokalt på localhost (se [Läsa veckan lokalt](#läsa-veckan-lokalt)).
+Den publiceras inte. Veckorna och kurserna ligger bara på den här datorn.
+
 ## Dataflöde
 
 | Steg | Skriver | Committas |
 |---|---|---|
 | `scripts/fetch.py` (RSS: MFN, Cision; API: Riksbankens styrränta) | `data/raw/<vecka>/` | nej, rådatan ligger i det privata repot `veckans-finans-raw` |
-| `/sammanfatta-veckan` (Claude Code, manuellt en gång i veckan) | `data/weeks/<vecka>.json` | ja |
-| `scripts/prices.py` (yfinance, valfritt, körs lokalt) | `data/prices/<vecka>.json` | ja |
+| `/sammanfatta-veckan` (Claude Code, manuellt en gång i veckan) | `data/weeks/<vecka>.json` | nej, git-ignorerad, bara lokalt |
+| `scripts/prices.py` (yfinance, valfritt, körs lokalt) | `data/prices/<vecka>.json` | nej, git-ignorerad, bara lokalt |
 | `scripts/validate.py` | – | – |
 
 Veckor anges som ISO-vecka, t.ex. `2026-W40` (mån–sön, Europe/Stockholm).
@@ -125,14 +128,38 @@ npm run preview       # visa dist/ lokalt
 - Utan JavaScript visas alla sektorer under varandra. Med JavaScript blir de flikar, och `#sektor-<id>` i adressen
   väljer flik.
 
-## Publicering (GitHub Pages)
+## Läsa veckan lokalt
 
-[`.github/workflows/pages.yml`](.github/workflows/pages.yml) körs vid varje push till `main`, och kan också startas
-manuellt. Den validerar data, kör testerna, bygger med `npm run build` och publicerar `dist/` på
-https://peternordengren-netizen.github.io/veckans-finans/. Om valideringen eller testerna fallerar publiceras inget.
+Arbetsgång varje vecka, efter att veckan är slut. Kör kommandona i repots rot.
 
-Arbetsgång per vecka: `/sammanfatta-veckan`, sedan `scripts/prices.py <vecka>`, sedan commit och push av
-`data/weeks/` och `data/prices/`.
+1. Hämta rådatan: `git -C data/raw pull`. `/sammanfatta-veckan` gör det också själv.
+2. Kör `/sammanfatta-veckan` i Claude Code. Det skriver `data/weeks/<vecka>.json` och validerar filen.
+3. Hämta kurser (valfritt):
+   ```bash
+   .venv/Scripts/python scripts/prices.py 2026-W42
+   ```
+4. Starta sidan:
+   ```bash
+   npm run dev
+   ```
+   Öppna http://localhost:4321/veckans-finans/. Startsidan visar senaste veckan, och äldre veckor finns i
+   veckoväljaren eller på `http://localhost:4321/veckans-finans/vecka/<vecka>/`. Stoppa med Ctrl+C.
+
+   Alternativt en byggd version som inte laddar om vid ändringar:
+   ```bash
+   npm run build
+   ```
+   ```bash
+   npm run preview
+   ```
+   Den finns på samma adress.
+
+Inget behöver committas eller pushas. `data/weeks/` och `data/prices/` är git-ignorerade, så veckorna kan inte
+hamna i det publika repot av misstag. De finns bara på den här datorn, så säkerhetskopiera mappen om du vill spara
+historiken.
+
+GitHub Pages är avstängt. [`.github/workflows/pages.yml`](.github/workflows/pages.yml) ligger kvar men är
+inaktiverad på github.com. Med git-ignorerade veckor skulle den ändå bara bygga en tom sida.
 
 ## Validering
 

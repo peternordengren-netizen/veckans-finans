@@ -1,5 +1,9 @@
-# Rå källtext hämtas om varje vecka och committas aldrig – bara data/weeks/ (och data/prices/) publiceras.
+# Rå källtext ligger i det privata repot veckans-finans-raw (klonas hit) och committas aldrig här.
 data/raw/
+
+# Veckans sammanfattningar och kurser är bara för lokal läsning och får aldrig hamna i det publika repot.
+data/weeks/
+data/prices/
 
 # Python
 .venv/
