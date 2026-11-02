@@ -154,7 +154,7 @@ const meetings = report.reports_today.filter((e) => e.kind === "stämma");
 
   <section id="blankning" class="block">
     <H>Blankning</H>
-    {!report.short.available && <p class="empty">{report.short.note}</p>}
+    {!report.short.available && <p class:list={report.short.error ? "warn-box" : "empty"}>{report.short.note}</p>}
     {
       report.short.available && (
         <>

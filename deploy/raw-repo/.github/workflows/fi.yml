@@ -80,9 +80,15 @@ jobs:
             done
           fi
 
-      # Röd körning bara om allt misslyckades; delvisa fel syns som ::warning::.
-      - name: Rapportera om allt misslyckades
+      # Röd körning vid varje fel, också när bara en del misslyckades (kod 2): blankningen gav 404
+      # från 29/10 2026 i flera dagar medan körningen var grön, eftersom insynen gick bra. Det som
+      # hämtades har redan committats ovan.
+      - name: Rapportera fel
         if: steps.fetch.outputs.code != '0'
         run: |
-          echo "::error::fi_fetch.py avslutades med kod ${{ steps.fetch.outputs.code }} – inget kunde hämtas från FI."
+          if [ "${{ steps.fetch.outputs.code }}" = "2" ]; then
+            echo "::error::fi_fetch.py: en del av FI-hämtningen misslyckades (se felen ovan); resten är committad."
+          else
+            echo "::error::fi_fetch.py avslutades med kod ${{ steps.fetch.outputs.code }} – inget kunde hämtas från FI."
+          fi
           exit 1

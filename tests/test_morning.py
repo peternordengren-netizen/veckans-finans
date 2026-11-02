@@ -152,6 +152,23 @@ def test_saknade_kurser_eller_natverk_gors_om():
     assert retry_reasons(data("2026-10-23"), ["fi_fetch.py: fel vid hämtning från FI"], monday) == []
 
 
+def test_saknad_blankningsbild_ar_fel_inte_noll_positioner():
+    """Saknas registrets ögonblicksbild för förra handelsdagen (FI gav 404 från 29/10 2026) är det ett
+    fel som visas som varning, inte "inga ändringar"."""
+    from morning import short_checked
+
+    base = {"available": True, "note": None, "from_as_of": "2026-10-29", "to_as_of": "2026-11-01",
+            "positions": [{"x": 1}], "aggregate": []}
+    friday = date(2026, 10, 30)
+    assert short_checked(base, friday) == {**base, "error": False}  # söndagens bild räcker för fredagen
+    stale = short_checked({**base, "available": False, "from_as_of": "2026-10-27", "to_as_of": "2026-10-27",
+                           "positions": []}, friday)
+    assert stale["error"] and not stale["available"] and stale["positions"] == []
+    assert "kunde inte hämtas från FI" in stale["note"] and "2026-10-27" in stale["note"] and "2026-10-30" in stale["note"]
+    none = short_checked({**base, "to_as_of": None, "from_as_of": None}, friday)
+    assert none["error"] and "ingen ögonblicksbild" in none["note"]
+
+
 def test_ingen_handelsdag_ger_ingen_fil(tmp_path, monkeypatch, capsys):
     import morning
 

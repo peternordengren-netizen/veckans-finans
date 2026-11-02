@@ -172,13 +172,16 @@ def test_historik_filtreras_pa_datum(tmp_path):
     assert [r["date"] for r in data["positions"]] == ["2026-10-08", "2026-09-30"]  # 2019 utesluten
 
 
-def test_en_del_fallerar_ovriga_sparas_och_warning_i_actions(tmp_path, monkeypatch, capsys):
+def test_en_del_fallerar_ovriga_sparas_och_fel_i_actions(tmp_path, monkeypatch, capsys):
+    """Ett fel i en del räknas (kod 2, ::error:: i Actions), och den andra delen sparas ändå
+    (blankningen gav 404 från 29/10 2026 medan körningen var grön)."""
     monkeypatch.setenv("GITHUB_ACTIONS", "true")
     get = fake_get({fi_fetch.AGGREGATE_URL: TimeoutError("timed out"), fi_fetch.INSYN_URL: insyn(ROW_MON)})
-    assert fi_fetch.main(["--raw-dir", str(tmp_path)], get=get, now=NOW) == 0
+    assert fi_fetch.main(["--raw-dir", str(tmp_path)], get=get, now=NOW) == 2
     assert (tmp_path / "2026-W41" / "fi" / "insyn-2026-10-11.json").exists()
     assert not (tmp_path / "2026-W41" / "fi" / "blankning-2026-10-11.json").exists()
-    assert "::warning title=FI-fel: blankning::TimeoutError: timed out" in capsys.readouterr().out
+    assert "::error title=FI-fel: blankning::TimeoutError: timed out" in capsys.readouterr().out
+    assert fi_fetch.last_errors == {"blankning": "TimeoutError: timed out"}
 
 
 def test_allt_fallerar_ger_exitkod_1(tmp_path):

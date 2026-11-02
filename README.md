@@ -141,6 +141,17 @@ till Finansinspektionen. Adresserna kommer från knapparna på FI:s egna sidor o
 
 Data dateras till gårdagen, så att lördagsmorgonens bild hamnar i fredagens vecka.
 
+**Fel räknas, också delvisa.** Misslyckas en del (t.ex. blankningen) men inte den andra blir exit-koden 2. Det som
+hämtades committas ändå, men Actions-körningen blir röd med `::error::`. Morgonrapporten listar felet under "Fel
+vid hämtningen". Saknas registrets ögonblicksbild för förra handelsdagen visas blankningsdelen som en varning
+("Blankningsregistret kunde inte hämtas från FI …") i stället för som 0 positioner.
+
+**Sedan 2026-10-29 avvisar FI skriptade nedladdningar.** Adresserna ovan är oförändrade; FI:s egna knappar anropar
+fortfarande samma `/BlankningsRegister/…`, kontrollerat 2026-11-02. Från webbläsaren svarar de 200, men från
+skript, också GitHub Actions, svarar de 404, oavsett User-Agent, Referer och cookies. FI:s sida säger att FI kan
+begränsa användare som belastar tjänsten. Blankningsdelen saknas därför tills FI öppnar för skriptad hämtning
+igen eller ger besked. Spärren kringgås inte. Insynsregistret fungerar.
+
 `registers.py <vecka>` räknar deterministiskt fram `data/analysis/<vecka>.json` (git-ignorerad) för bolagen i
 `instruments.csv`, kopplade via `isin`:
 - **Blankning över 0,5 %:** läget per innehavare vid veckans slut jämfört med förra veckans slut, ur historikfilen
@@ -417,7 +428,10 @@ Skapas med `powershell -NoProfile -File scripts\install_tasks.ps1`:
   igen, till exempel när datorn låg i viloläge till disk. Varje vecka får högst två automatiska försök. Fler försök
   kör du manuellt med `-Week`. Om senaste veckan saknas visar sidan en varning överst.
 
-  Skriptet kompletterar först veckans rådata med morgonflödets lokala hämtning (`scripts/merge_morning_raw.py`).
+  Skriptet väntar först, högst 90 minuter, tills dagens morgonhämtning är klar ("morning.py: exit" i dagens
+  morgonlogg), vilken utlösare som än startade det. Inloggning och upplåsning startar annars morgonflödet och
+  veckokörningen samtidigt. Sedan kompletterar det veckans rådata med morgonflödets lokala hämtning
+  (`scripts/merge_morning_raw.py`).
   Actions-hämtningen har haft luckor: vecka 43 saknades 46 av 68 Large Cap-rapporter. Därefter kör det
   `/sammanfatta-veckan` för förra veckan med den fristående Claude Code-CLI:n, med Opus (`-Model`), i läget `dontAsk`
   och med en uttömmande lista över tillåtna verktyg. Rapportutfallen körs med Sonnet.

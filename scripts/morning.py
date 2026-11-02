@@ -184,6 +184,18 @@ def short_since(raw_dirs: list[Path], prev_as_of: date, as_of: date, instruments
             "positions": positions, "aggregate": aggregate}
 
 
+def short_checked(short: dict, prev_business_day: date) -> dict:
+    """Saknas registrets ögonblicksbild för förra handelsdagen är det ett hämtningsfel, inte "inga
+    ändringar": blankningsdelen markeras som fel (visas som varning) i stället för 0 positioner."""
+    latest = short["to_as_of"]
+    if latest is not None and latest >= prev_business_day.isoformat():
+        return {**short, "error": False}
+    since = f"senaste ögonblicksbild {latest}" if latest else "ingen ögonblicksbild finns"
+    return {**short, "available": False, "error": True, "positions": [], "aggregate": [],
+            "note": f"Blankningsregistret kunde inte hämtas från FI ({since}, {prev_business_day} saknas). "
+                    "Ändringarna visas inte."}
+
+
 # --- Kurser ------------------------------------------------------------------
 
 
@@ -255,7 +267,8 @@ def build(today: date, now: datetime, instruments: dict[str, Instrument], raw_di
         "reports_today": reports_today,
         "news": overnight_news(raw_dirs, instruments, since, now, reporting),
         "insider": insider_since(raw_dirs, days, instruments),
-        "short": short_since(raw_dirs, prev - timedelta(days=1), today - timedelta(days=1), instruments),
+        "short": short_checked(short_since(raw_dirs, prev - timedelta(days=1), today - timedelta(days=1), instruments),
+                               prev),
         "price": yesterday_prices(instruments, today, fetch),
     }
 
@@ -283,7 +296,10 @@ def fetch_local(today: date) -> list[str]:
     if fetch.main(["--raw-dir", str(MORNING_RAW), "--mfn-limit", str(MORNING_MFN_LIMIT)]) != 0:
         errors.append(FETCH_FAILED)
     if fi_fetch.main(["--raw-dir", str(MORNING_RAW)]) != 0:
-        errors.append("fi_fetch.py: fel vid hämtning från FI")
+        # Varje del som misslyckades räknas, också när en annan gick bra (blankningen gav 404 från
+        # 29/10 2026 medan insynen fungerade, och morgonrapporten visade då "0 positioner").
+        errors += [f"FI {name}: {msg}" for name, msg in fi_fetch.last_errors.items()] or \
+            ["fi_fetch.py: fel vid hämtning från FI"]
     _prune_morning_raw(today)
     return errors
 
@@ -330,6 +346,8 @@ def main(argv: list[str] | None = None, fetch_bars: BarFetcher = yahoo_bars,
 
     data = build(today, now, instruments, raw_dirs, calendar, fetch_once)
     data["errors"] = errors + calendar_errors(calendar)
+    if data["short"]["error"]:
+        data["errors"].append(f"blankning: {data['short']['note']}")
     data["retry"] = retry_reasons(data, errors, today)
     if "kurser" in data["retry"]:
         data["errors"].append(f"kurser saknas för {previous_business_day(today)} (senaste dag hos Yahoo: "

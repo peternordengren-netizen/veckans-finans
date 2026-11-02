@@ -6,7 +6,8 @@
 # - Claude-modell: Opus (-Model för annan). W43 med Sonnet utelämnade stora rapporter och hela
 #   telekomsektorn; rapportutfallen (run_results.ps1) körs med Sonnet.
 # - Före Claude kompletteras veckans rådata med morgonflödets lokala hämtning
-#   (scripts/merge_morning_raw.py), eftersom Actions-hämtningen har luckor.
+#   (scripts/merge_morning_raw.py), eftersom Actions-hämtningen har luckor. Därför väntar körningen
+#   först på dagens morgonhämtning (högst 90 min), vilken utlösare som än startade den.
 # - Högst två automatiska försök per vecka (räknas i <vecka>-run.log); -Week kringgår gränsen.
 #   Ett stopp på grund av Claudes användningsgräns räknas inte: återställningstiden loggas, sidan
 #   visar "Claudes användningsgräns nådd – försöker igen efter <tid>" och en engångsuppgift
@@ -74,6 +75,30 @@ $attempts = if (Test-Path $RunLog) {
 if ($attempts -ge $MaxAttempts -and -not $DryRun -and -not $PSBoundParameters.ContainsKey("Week")) {
     Write-Output "Redan $attempts försök för $Week - avbryter. Se $RunLog."
     exit 0
+}
+
+# Vänta på dagens morgonhämtning, oavsett vilken utlösare som startade körningen: inloggning eller
+# upplåsning startar både morgonflödet och veckokörningen samtidigt, och kompletteringen av rådatan
+# (merge_morning_raw.py) ska se morgonens hämtning. Klar = dagens morgonlogg har "morning.py: exit"
+# (morning.py hämtar först och skriver sedan). Ingen handelsdag: ingen väntan. Högst MaxWaitMinutes,
+# sedan fortsätter körningen med en rad i loggen (uppgiftens tidsgräns är två timmar).
+$MaxWaitMinutes = 90
+if (-not $DryRun) {
+    & $Python scripts\afternoon.py --handelsdag
+    if ($LASTEXITCODE -eq 0) {
+        $MorningLog = Join-Path $Root ("logs\morning\{0:yyyy-MM-dd}.log" -f (Get-Date))
+        $deadline = (Get-Date).AddMinutes($MaxWaitMinutes)
+        $waited = $false
+        while (-not ((Test-Path $MorningLog) -and (Select-String -Path $MorningLog -SimpleMatch "morning.py: exit" -Quiet))) {
+            if ((Get-Date) -ge $deadline) {
+                Log "Morgonhämtningen är inte klar efter $MaxWaitMinutes min - fortsätter ändå."
+                break
+            }
+            if (-not $waited) { Log "Väntar på dagens morgonhämtning ($MorningLog)"; $waited = $true }
+            Start-Sleep -Seconds 30
+        }
+        if ($waited) { Log "Morgonhämtningen klar - fortsätter." }
+    }
 }
 
 Log "Start, vecka $Week$(if ($DryRun) { ' (DryRun)' })"

@@ -23,8 +23,8 @@ Användning:
     python scripts/fi_fetch.py [--raw-dir data/raw]
     python scripts/fi_fetch.py --insyn-from 2026-10-05 --insyn-to 2026-10-10   # efterhämtning, ett anrop
     python scripts/fi_fetch.py --history --history-since 2025-01-01            # historikfilen, en gång
-Exit-kod: 0 = minst en del lyckades (fel skrivs som ::warning:: i Actions),
-1 = allt misslyckades.
+Exit-kod: 0 = allt lyckades, 2 = någon del misslyckades (den andra sparades), 1 = allt misslyckades.
+Fel skrivs som ::error:: i Actions, och körningen blir röd i båda felfallen.
 """
 
 from __future__ import annotations
@@ -231,6 +231,11 @@ def fetch_history(raw_dir: Path, since: date, now: datetime, get: Callable[[str]
     return f"{len(rows)} historiska positionsrader sedan {since}"
 
 
+# Felen från senaste main(): del ("blankning", "insyn", "historik") -> felmeddelande. Läses av
+# morning.py, som visar felet i morgonrapporten.
+last_errors: dict[str, str] = {}
+
+
 def main(argv: list[str] | None = None, get: Callable[[str], bytes] = http_get, now: datetime | None = None) -> int:
     # Utskrifterna innehåller t.ex. '≥', som Windows-konsolens cp1252 inte kan skriva.
     for stream in (sys.stdout, sys.stderr):
@@ -259,16 +264,22 @@ def main(argv: list[str] | None = None, get: Callable[[str], bytes] = http_get, 
         jobs["insyn"] = lambda: fetch_insyn(args.raw_dir, as_of, as_of, now, get)
 
     failed = []
+    last_errors.clear()
     for name, job in jobs.items():
         try:
             print(f"[{name}] {job()}")
         except Exception as err:  # noqa: BLE001 – varje del ska loggas, inte stoppa de andra
             failed.append(name)
             msg = f"{type(err).__name__}: {err}"[:300]
+            last_errors[name] = msg
             print(f"[{name}] FEL: {msg}", file=sys.stderr)
             if os.environ.get("GITHUB_ACTIONS") == "true":
-                print(f"::warning title=FI-fel: {name}::{msg}")
-    return 1 if len(failed) == len(jobs) else 0
+                print(f"::error title=FI-fel: {name}::{msg}")
+    # Ett fel i någon del räknas (2/11 2026: blankningen gav 404 i flera dagar medan körningen var
+    # grön eftersom insynen gick bra). 1 = allt misslyckades, 2 = någon del misslyckades.
+    if not failed:
+        return 0
+    return 1 if len(failed) == len(jobs) else 2
 
 
 if __name__ == "__main__":

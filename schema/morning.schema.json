@@ -89,6 +89,7 @@
       "required": ["available", "note", "from_as_of", "to_as_of", "positions", "aggregate"],
       "properties": {
         "available": { "type": "boolean" },
+        "error": { "type": "boolean", "description": "Registrets ögonblicksbild för förra handelsdagen saknas (hämtningsfel från FI): visas som varning, inte som 0 positioner. Saknas i äldre filer." },
         "note": { "type": ["string", "null"] },
         "from_as_of": { "type": ["string", "null"] },
         "to_as_of": { "type": ["string", "null"] },
