@@ -103,7 +103,8 @@ def _position_records(raw_dir: Path, snaps: list[dict]) -> tuple[list[tuple], st
     if hist_files:
         h = _load(hist_files[-1])
         records += [(r["holder"], r["isin"], r["date"], r["pct"]) for r in h["positions"]]
-        covered.append(h["fetched_at"][:10])
+        # Manuellt nedladdad historik har filens eget datum (as_of); äldre filer hämtningsdagen.
+        covered.append(h.get("as_of") or h["fetched_at"][:10])
     prev: dict | None = None
     for s in snaps:
         records += [(r["holder"], r["isin"], r["date"], r["pct"]) for r in s["current"]]

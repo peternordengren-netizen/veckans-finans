@@ -146,11 +146,24 @@ hämtades committas ändå, men Actions-körningen blir röd med `::error::`. Mo
 vid hämtningen". Saknas registrets ögonblicksbild för förra handelsdagen visas blankningsdelen som en varning
 ("Blankningsregistret kunde inte hämtas från FI …") i stället för som 0 positioner.
 
-**Sedan 2026-10-29 avvisar FI skriptade nedladdningar.** Adresserna ovan är oförändrade; FI:s egna knappar anropar
-fortfarande samma `/BlankningsRegister/…`, kontrollerat 2026-11-02. Från webbläsaren svarar de 200, men från
-skript, också GitHub Actions, svarar de 404, oavsett User-Agent, Referer och cookies. FI:s sida säger att FI kan
-begränsa användare som belastar tjänsten. Blankningsdelen saknas därför tills FI öppnar för skriptad hämtning
-igen eller ger besked. Spärren kringgås inte. Insynsregistret fungerar.
+**Sedan 2026-10-29 avvisar FI skriptade nedladdningar av blankningsregistret.** Adresserna ovan är oförändrade;
+FI:s egna knappar anropar fortfarande samma `/BlankningsRegister/…`, kontrollerat 2026-11-02. Från webbläsaren
+svarar de 200, men från skript, också GitHub Actions, svarar de 404, oavsett User-Agent, Referer och cookies.
+Spärren kringgås inte.
+
+Därför hämtas blankningen inte längre, utan läses ur filer som du laddar ner själv:
+1. Ladda ner "Aktuella positioner" och "Aggregerade positioner" med knapparna på
+   [FI:s sida](https://www.fi.se/sv/vara-register/blankningsregistret/). "Historiska positioner" är valfri.
+2. Spara filerna i [`data/fi_manual/`](data/fi_manual/LÄS_MIG.txt). `*.ods` committas aldrig till det publika repot.
+3. Nästa morgonkörning läser dem, eller kör direkt `python scripts/fi_fetch.py --las-in`.
+
+Den senast sparade filen av varje sort läses. Datumet är filens eget, det senaste positionsdatumet i filen (FI:s
+filer har inget annat datum). Ögonblicksbilden och historiken kopieras till `data/raw/` och pushas till det privata
+repot, där veckans analys och signaler läser dem. Actions hämtar bara insynen (`--utan-blankning`).
+
+Saknas en ögonblicksbild för förra handelsdagen visar morgonrapporten en varning med instruktionen. När
+blankningsunderlaget slutar före veckans slut märks veckans blankningssignaler "Blankning t.o.m. <dag>"
+(`short_as_of` i signalfilen), med en förklaring ovanför signaltabellen.
 
 `registers.py <vecka>` räknar deterministiskt fram `data/analysis/<vecka>.json` (git-ignorerad) för bolagen i
 `instruments.csv`, kopplade via `isin`:

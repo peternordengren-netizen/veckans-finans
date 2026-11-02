@@ -248,12 +248,24 @@ def build(week: str, instruments: dict[str, Instrument], week_data: dict | None,
         "generated_at": now.isoformat(timespec="seconds"),
         "thresholds": THRESHOLDS,
         "index": {"ticker": INDEX_TICKER, "name": INDEX_NAME, "change_pct": index_change} if index_change is not None else None,
+        # Dagen blankningsunderlaget gäller t.o.m. (analysens ögonblicksbild). Före veckans slut visar sidan
+        # "blankning t.o.m. <dag>", så att signalen inte ser aktuell ut (FI-hämtningen stoppades 29/10 2026).
+        "short_as_of": short_as_of(analysis),
         "companies": companies,
         "errors": errors,
     }
     if (week_data or {}).get("mock"):
         out["mock"] = True
     return out
+
+
+def short_as_of(analysis: dict | None) -> str | None:
+    """Senaste dag som blankningsunderlaget (aggregatet, annars positionerna) täcker, eller None."""
+    for key in ("short_aggregate", "short_positions"):
+        block = (analysis or {}).get(key) or {}
+        if block.get("available") and block.get("end_as_of"):
+            return block["end_as_of"]
+    return None
 
 
 def _read(path: Path) -> dict | None:

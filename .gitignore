@@ -31,3 +31,4 @@ dist/
 
 # Loggar från schemalagda körningar (server och veckosammanfattning)
 logs/
+data/fi_manual/*.ods

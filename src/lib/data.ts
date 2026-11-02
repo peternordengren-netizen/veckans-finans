@@ -293,7 +293,7 @@ export interface SectorImpact {
 import type { Tone } from "./tone";
 export type { Tone } from "./tone";
 import type { CalendarEvent } from "./calendar";
-import type { SignalRow } from "./signals";
+import { shortUntil, type SignalRow } from "./signals";
 import type { Consensus } from "./consensus";
 import type { RejectedReport, ReportResult, ResultsView } from "./results";
 import type { ValuationRow } from "./valuation";
@@ -364,6 +364,8 @@ export interface SignalsView {
     short_only_aggregate?: boolean;
   };
   rows: SignalRow[];
+  /** Blankningsunderlaget gäller bara t.o.m. denna dag (före veckans slut), annars null. */
+  shortUntil: string | null;
 }
 
 /** Signalfilen är valfri – saknas den, eller är den trasig, visas ingen flik för den. */
@@ -371,8 +373,14 @@ export function loadSignals(week: string): SignalsView | null {
   const path = join(SIGNALS_DIR, `${week}.json`);
   if (!existsSync(path)) return null;
   try {
-    const raw = readJson<{ generated_at: string; thresholds: SignalsView["thresholds"]; companies: SignalRow[] }>(path);
-    return { generatedAt: raw.generated_at, thresholds: raw.thresholds, rows: raw.companies };
+    const raw = readJson<{
+      generated_at: string; thresholds: SignalsView["thresholds"]; companies: SignalRow[];
+      period: { end: string }; short_as_of?: string | null;
+    }>(path);
+    return {
+      generatedAt: raw.generated_at, thresholds: raw.thresholds, rows: raw.companies,
+      shortUntil: shortUntil(raw.short_as_of ?? null, raw.period.end),
+    };
   } catch (err) {
     console.warn(`[veckans-finans] kunde inte läsa ${path}, visar sidan utan signaler:`, err);
     return null;

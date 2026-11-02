@@ -1,0 +1,18 @@
+Blankningsregistret, manuell nedladdning
+
+FI avvisar sedan 2026-10-29 skriptade nedladdningar av blankningsregistret. Ladda därför ner filerna
+i webbläsaren på https://www.fi.se/sv/vara-register/blankningsregistret/ med knapparna:
+
+  "Aktuella positioner"     -> AktuellaPositioner.ods
+  "Aggregerade positioner"  -> Aggregerade positioner.ods
+  "Historiska positioner"   -> HistoriskaPositioner.ods   (valfri, för veckans analys bakåt)
+
+och spara dem i den här mappen. Filnamnen får ha tillägg som " (1)"; den senast sparade filen av
+varje sort läses. Datumet är filens eget (det senaste positionsdatumet i filen).
+
+Nästa morgonkörning läser filerna, eller kör direkt:
+
+  .venv\Scripts\python scripts\fi_fetch.py --las-in
+
+Inläst blankning kopieras till data/raw/ och pushas till det privata repot. Filerna här (*.ods)
+committas aldrig till det publika repot.

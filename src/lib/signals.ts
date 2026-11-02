@@ -72,14 +72,31 @@ export function shortChange(row: Pick<SignalRow, "short_positions_pp" | "short_a
  * Etikett och färgklass för en signal i tabellen. Insyn visas som "Insynsköp" eller
  * "Insynsförsäljning" efter nettot; går köp och försäljningar jämnt ut står det bara "Insyn".
  */
-export function signalChip(signal: Signal, row: Pick<SignalRow, "insider_net_sek">): { label: string; cls: string } {
+export function signalChip(
+  signal: Signal, row: Pick<SignalRow, "insider_net_sek">, shortUntilDay: string | null = null,
+): { label: string; cls: string } {
   if (signal === "insyn") {
     const net = row.insider_net_sek ?? 0;
     if (net > 0) return { label: "Insynsköp", cls: "insyn-kop" };
     if (net < 0) return { label: "Insynsförsäljning", cls: "insyn-salj" };
     return { label: "Insyn", cls: "insyn" };
   }
+  if (signal === "blankning" && shortUntilDay) return { label: `Blankning t.o.m. ${dayMonth(shortUntilDay)}`, cls: signal };
   return { label: SIGNAL_LABELS[signal], cls: signal };
+}
+
+/** "2026-10-27" -> "27/10". */
+export function dayMonth(iso: string): string {
+  const [, m, d] = iso.split("-").map(Number);
+  return `${d}/${m}`;
+}
+
+/**
+ * Blankningsunderlagets sista dag om den ligger före veckans slut (då är blankningssignalen inte aktuell
+ * för hela veckan, t.ex. vecka 44 2026 när FI-hämtningen stoppades 29/10), annars null.
+ */
+export function shortUntil(shortAsOf: string | null, weekEnd: string): string | null {
+  return shortAsOf !== null && shortAsOf < weekEnd ? shortAsOf : null;
 }
 
 /** Signaler som ensamma räcker för "Starka signaler": de säger något utöver en rapportreaktion. */

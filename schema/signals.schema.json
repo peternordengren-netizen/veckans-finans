@@ -45,6 +45,10 @@
         "change_pct": { "type": "number" }
       }
     },
+    "short_as_of": {
+      "type": ["string", "null"], "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "description": "Dagen blankningsunderlaget gäller t.o.m.; före veckans slut visas \"blankning t.o.m. <dag>\" (saknas i äldre filer)."
+    },
     "companies": {
       "type": "array",
       "items": {

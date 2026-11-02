@@ -2,9 +2,11 @@
 # .github/workflows/fi.yml – ligger här under deploy/ så att den aldrig körs
 # i det publika repot.
 #
-# Hämtar Finansinspektionens blanknings- och insynsregister en gång per dygn
-# med scripts/fi_fetch.py från det publika repot (tre anrop: blankning aggregat,
-# blankning aktuella, insyn för gårdagen) och committar till det privata repot.
+# Hämtar Finansinspektionens insynsregister en gång per dygn med scripts/fi_fetch.py
+# från det publika repot (ett anrop: insyn för gårdagen) och committar till det
+# privata repot. Blankningsregistret hämtas inte här: FI avvisar sedan 2026-10-29
+# skriptade nedladdningar (404), så blankningen läses ur filer som laddats ner för
+# hand till data/fi_manual/ (se scripts/fi_fetch.py, --utan-blankning här).
 name: Hämta FI-register
 
 on:
@@ -49,7 +51,7 @@ jobs:
         id: fetch
         run: |
           set +e
-          python app/scripts/fi_fetch.py --raw-dir raw
+          python app/scripts/fi_fetch.py --raw-dir raw --utan-blankning
           echo "code=$?" >> "$GITHUB_OUTPUT"
 
       - name: Committa

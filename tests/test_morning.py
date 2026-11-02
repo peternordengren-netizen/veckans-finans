@@ -164,7 +164,9 @@ def test_saknad_blankningsbild_ar_fel_inte_noll_positioner():
     stale = short_checked({**base, "available": False, "from_as_of": "2026-10-27", "to_as_of": "2026-10-27",
                            "positions": []}, friday)
     assert stale["error"] and not stale["available"] and stale["positions"] == []
-    assert "kunde inte hämtas från FI" in stale["note"] and "2026-10-27" in stale["note"] and "2026-10-30" in stale["note"]
+    assert "Blankningsregistret saknas" in stale["note"] and "2026-10-27" in stale["note"] and "2026-10-30" in stale["note"]
+    # Instruktionen: var filerna laddas ner och var de ska sparas.
+    assert "data/fi_manual/" in stale["note"] and "Aktuella positioner" in stale["note"] and "--las-in" in stale["note"]
     none = short_checked({**base, "to_as_of": None, "from_as_of": None}, friday)
     assert none["error"] and "ingen ögonblicksbild" in none["note"]
 

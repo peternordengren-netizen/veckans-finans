@@ -2,13 +2,26 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { compareValues, defaultOrder, isStrong, ratio, sek, shortChange, signalChip, signedPct } from "../src/lib/signals.ts";
+import {
+  compareValues, dayMonth, defaultOrder, isStrong, ratio, sek, shortChange, shortUntil, signalChip, signedPct,
+} from "../src/lib/signals.ts";
 
 test("insynsetiketten följer nettot", () => {
   assert.deepEqual(signalChip("insyn", { insider_net_sek: 5_642_500 }), { label: "Insynsköp", cls: "insyn-kop" });
   assert.deepEqual(signalChip("insyn", { insider_net_sek: -190_680 }), { label: "Insynsförsäljning", cls: "insyn-salj" });
   assert.deepEqual(signalChip("insyn", { insider_net_sek: 0 }), { label: "Insyn", cls: "insyn" });
   assert.deepEqual(signalChip("omsättning", { insider_net_sek: null }), { label: "Hög omsättning", cls: "omsättning" });
+});
+
+test("blankning t.o.m.: signalen märks när underlaget slutar före veckans slut", () => {
+  assert.equal(shortUntil("2026-10-27", "2026-11-01"), "2026-10-27");
+  assert.equal(shortUntil("2026-11-01", "2026-11-01"), null); // hela veckan täckt
+  assert.equal(shortUntil(null, "2026-11-01"), null);
+  assert.equal(dayMonth("2026-10-27"), "27/10");
+  assert.deepEqual(signalChip("blankning", { insider_net_sek: null }, "2026-10-27"),
+    { label: "Blankning t.o.m. 27/10", cls: "blankning" });
+  assert.deepEqual(signalChip("blankning", { insider_net_sek: null }), { label: "Blankning", cls: "blankning" });
+  assert.equal(signalChip("omsättning", { insider_net_sek: null }, "2026-10-27").label, "Hög omsättning");
 });
 
 test("förvald ordning: flest signaler först, sedan namn", () => {

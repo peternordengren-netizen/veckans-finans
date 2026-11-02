@@ -4,7 +4,7 @@
  * "Starka signaler" (förvalt, src/lib/signals.isStrong); utan JavaScript visas alla bolag i filens ordning.
  */
 import type { SignalsView } from "../lib/data";
-import { defaultOrder, isStrong, ratio, sek, shortChange, signalChip, signedPct } from "../lib/signals";
+import { dayMonth, defaultOrder, isStrong, ratio, sek, shortChange, signalChip, signedPct } from "../lib/signals";
 
 interface Props {
   signals: SignalsView;
@@ -44,6 +44,15 @@ const DEFAULT_SORT = "count";
     Alla {rows.length} bolag i bevakningslistan, med veckans kurs, omsättning och 52-veckorsläge samt nyhetston, insyn och
     blankning. Klicka på en kolumnrubrik för att sortera.
   </p>
+  {
+    signals.shortUntil && (
+      <p class="warn-box">
+        Blankningen bygger bara på FI:s register t.o.m. {dayMonth(signals.shortUntil)}, inte hela veckan: FI tillåter inte
+        längre skriptad hämtning, och nyare filer har inte laddats ner (se morgonrapporten). Blankningssignalerna märks
+        "t.o.m. {dayMonth(signals.shortUntil)}".
+      </p>
+    )
+  }
   <details class="legend">
     <summary>Så räknas signalerna</summary>
     <ul>
@@ -117,7 +126,7 @@ const DEFAULT_SORT = "count";
         {
           rows.map((r) => {
             const s = shortChange(r);
-            const chips = r.signals.map((sig) => signalChip(sig, r));
+            const chips = r.signals.map((sig) => signalChip(sig, r, signals.shortUntil));
             return (
               <tr
                 data-flagged={r.signals.length > 0 ? "1" : "0"}
@@ -156,7 +165,8 @@ const DEFAULT_SORT = "count";
                 <td
                   class="num"
                   data-v={v(s)}
-                  title={r.short_positions_pp !== null ? "enskilda positioner över 0,5 %" : s !== null ? "sammanlagd blankning" : undefined}
+                  title={[r.short_positions_pp !== null ? "enskilda positioner över 0,5 %" : s !== null ? "sammanlagd blankning" : null,
+                    s !== null && signals.shortUntil ? `t.o.m. ${dayMonth(signals.shortUntil)}` : null].filter(Boolean).join(", ") || undefined}
                 >
                   {signedPct(s, 2)}
                 </td>

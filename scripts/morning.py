@@ -184,6 +184,9 @@ def short_since(raw_dirs: list[Path], prev_as_of: date, as_of: date, instruments
             "positions": positions, "aggregate": aggregate}
 
 
+BLANKNING_PAGE = "https://www.fi.se/sv/vara-register/blankningsregistret/"  # som fi_fetch.BLANKNING_PAGE
+
+
 def short_checked(short: dict, prev_business_day: date) -> dict:
     """Saknas registrets ögonblicksbild för förra handelsdagen är det ett hämtningsfel, inte "inga
     ändringar": blankningsdelen markeras som fel (visas som varning) i stället för 0 positioner."""
@@ -192,8 +195,10 @@ def short_checked(short: dict, prev_business_day: date) -> dict:
         return {**short, "error": False}
     since = f"senaste ögonblicksbild {latest}" if latest else "ingen ögonblicksbild finns"
     return {**short, "available": False, "error": True, "positions": [], "aggregate": [],
-            "note": f"Blankningsregistret kunde inte hämtas från FI ({since}, {prev_business_day} saknas). "
-                    "Ändringarna visas inte."}
+            "note": f"Blankningsregistret saknas ({since}, {prev_business_day} saknas). Ändringarna visas inte. "
+                    f"FI tillåter inte längre skriptad hämtning: ladda ner \"Aktuella positioner\" och "
+                    f"\"Aggregerade positioner\" på {BLANKNING_PAGE} och spara dem i data/fi_manual/. "
+                    "Nästa morgonkörning läser dem, eller kör direkt: python scripts/fi_fetch.py --las-in"}
 
 
 # --- Kurser ------------------------------------------------------------------
@@ -300,6 +305,13 @@ def fetch_local(today: date) -> list[str]:
         # 29/10 2026 medan insynen fungerade, och morgonrapporten visade då "0 positioner").
         errors += [f"FI {name}: {msg}" for name, msg in fi_fetch.last_errors.items()] or \
             ["fi_fetch.py: fel vid hämtning från FI"]
+    # Blankning ur manuellt nedladdade filer: till data/raw/ och det privata repot, så att veckans
+    # analys och signaler ser den.
+    if fi_fetch.last_written:
+        ok, msg = fi_fetch.backup_written(MORNING_RAW)
+        print(f"[blankning] säkerhetskopia: {msg}")
+        if not ok:
+            errors.append(f"blankning: säkerhetskopian till data/raw misslyckades: {msg}")
     _prune_morning_raw(today)
     return errors
 

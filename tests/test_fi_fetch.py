@@ -139,19 +139,71 @@ def test_insyn_url_har_formularets_falt():
 # --- Körning -----------------------------------------------------------------
 
 
-def test_daglig_korning_dateras_till_gardagen_och_ratt_vecka(tmp_path):
-    get = fake_get({fi_fetch.AGGREGATE_URL: AGGREGATE, fi_fetch.CURRENT_URL: CURRENT, fi_fetch.INSYN_URL: insyn()})
-    assert fi_fetch.main(["--raw-dir", str(tmp_path)], get=get, now=NOW) == 0
-    snap = read(tmp_path / "2026-W41" / "fi" / "blankning-2026-10-11.json")
-    assert snap["as_of"] == "2026-10-11" and len(snap["aggregate"]) == 2 and len(snap["current"]) == 2
-    ins = read(tmp_path / "2026-W41" / "fi" / "insyn-2026-10-11.json")
+def manual(tmp_path, **files):
+    """data/fi_manual/ med nedladdade filer, namngivna som FI:s knappar gör."""
+    d = tmp_path / "fi_manual"
+    d.mkdir(exist_ok=True)
+    names = {"aktuella": "AktuellaPositioner.ods", "aggregerade": "Aggregerade positioner.ods",
+             "historiska": "HistoriskaPositioner.ods"}
+    for kind, data in files.items():
+        (d / names[kind]).write_bytes(data)
+    return d
+
+
+def test_daglig_korning_last_manuella_filer_med_filens_datum(tmp_path):
+    """Blankningen läses ur nedladdade filer (FI avvisar skriptade nedladdningar sedan 29/10 2026), med
+    filens eget datum = senaste positionsdatumet; insynen hämtas och dateras till gårdagen."""
+    d = manual(tmp_path, aktuella=CURRENT, aggregerade=AGGREGATE)
+    raw = tmp_path / "raw"
+    get = fake_get({fi_fetch.INSYN_URL: insyn()})
+    assert fi_fetch.main(["--raw-dir", str(raw), "--manual-dir", str(d)], get=get, now=NOW) == 0
+    snap = read(raw / "2026-W41" / "fi" / "blankning-2026-10-09.json")  # senaste positionsdatum 9/10
+    assert snap["as_of"] == "2026-10-09" and len(snap["aggregate"]) == 2 and len(snap["current"]) == 2
+    assert "AktuellaPositioner.ods" in snap["sources"]["current"]
+    assert fi_fetch.last_written == [raw / "2026-W41" / "fi" / "blankning-2026-10-09.json"]
+    ins = read(raw / "2026-W41" / "fi" / "insyn-2026-10-11.json")
     assert ins["rows"] == [] and "Publiceringsdatum.From=2026-10-11" in ins["source"]
 
 
-def test_lordagsmorgon_hamnar_i_fredagens_vecka(tmp_path):
-    get = fake_get({fi_fetch.AGGREGATE_URL: AGGREGATE, fi_fetch.CURRENT_URL: CURRENT, fi_fetch.INSYN_URL: insyn()})
-    fi_fetch.main(["--raw-dir", str(tmp_path)], get=get, now=datetime(2026, 10, 10, 6, 0, tzinfo=fi_fetch.STOCKHOLM))
-    assert (tmp_path / "2026-W41" / "fi" / "blankning-2026-10-09.json").exists()
+def test_senaste_nedladdningen_lases(tmp_path):
+    import os
+
+    d = manual(tmp_path, aktuella=CURRENT, aggregerade=AGGREGATE)
+    newer = ods(TITLE + [
+        ["Innehavare av positionen (Position holder)", "Namn på emittent (Name of the issuer)", "ISIN",
+         "Position i procent(Position in per cent)", "Datum för positionen (Position date)", "Kommentar(Comment)"],
+        ["Exempelfonden LP", "Fjällhem AB", "SE0000000001", "1,2", "2026-10-12"],
+    ])
+    (d / "AktuellaPositioner (1).ods").write_bytes(newer)
+    os.utime(d / "AktuellaPositioner.ods", (1, 1))  # den gamla filen är äldst
+    fi_fetch.main(["--raw-dir", str(tmp_path / "raw"), "--manual-dir", str(d)], get=fake_get({fi_fetch.INSYN_URL: insyn()}),
+                  now=NOW)
+    snap = read(tmp_path / "raw" / "2026-W42" / "fi" / "blankning-2026-10-12.json")
+    assert [r["pct"] for r in snap["current"]] == [1.2]  # tvåspråkiga rubriker (FI 2026-11) läses
+
+
+def test_utan_nedladdade_filer_hoppas_blankningen_over_utan_fel(tmp_path):
+    get = fake_get({fi_fetch.INSYN_URL: insyn()})
+    assert fi_fetch.main(["--raw-dir", str(tmp_path / "raw"), "--manual-dir", str(tmp_path / "saknas")],
+                         get=get, now=NOW) == 0
+    assert not list((tmp_path / "raw").glob("*/fi/blankning-*.json"))
+
+
+def test_bara_en_av_filerna_ar_fel(tmp_path):
+    d = manual(tmp_path, aktuella=CURRENT)
+    code = fi_fetch.main(["--raw-dir", str(tmp_path / "raw"), "--manual-dir", str(d)],
+                         get=fake_get({fi_fetch.INSYN_URL: insyn()}), now=NOW)
+    assert code == 2 and "Aggregerade positioner" in fi_fetch.last_errors["blankning"]
+
+
+def test_utan_blankning_rors_inga_filer(tmp_path):
+    """Actions: --utan-blankning läser inga nedladdade filer, bara insynen hämtas."""
+    d = manual(tmp_path, aktuella=CURRENT, aggregerade=AGGREGATE)
+    get = fake_get({fi_fetch.INSYN_URL: insyn()})
+    assert fi_fetch.main(["--raw-dir", str(tmp_path / "raw"), "--manual-dir", str(d), "--utan-blankning"],
+                         get=get, now=NOW) == 0
+    assert not list((tmp_path / "raw").glob("*/fi/blankning-*.json"))
+    assert (tmp_path / "raw" / "2026-W41" / "fi" / "insyn-2026-10-11.json").exists()
 
 
 def test_efterhamtning_av_insyn_delas_per_publiceringsdag(tmp_path):
@@ -165,28 +217,29 @@ def test_efterhamtning_av_insyn_delas_per_publiceringsdag(tmp_path):
     assert read(tmp_path / "2026-W41" / "fi" / "insyn-2026-10-06.json")["rows"] == []
 
 
-def test_historik_filtreras_pa_datum(tmp_path):
-    get = fake_get({fi_fetch.HISTORY_URL: HISTORY})
-    fi_fetch.main(["--raw-dir", str(tmp_path), "--history", "--history-since", "2025-01-01"], get=get, now=NOW)
-    data = read(tmp_path / "fi-historik" / "blankning-historik-2026-10-12.json")
+def test_historik_med_filens_datum_och_filtrerad(tmp_path):
+    d = manual(tmp_path, historiska=HISTORY)
+    fi_fetch.main(["--raw-dir", str(tmp_path / "raw"), "--manual-dir", str(d), "--history-since", "2025-01-01"],
+                  get=fake_get({fi_fetch.INSYN_URL: insyn()}), now=NOW)
+    data = read(tmp_path / "raw" / "fi-historik" / "blankning-historik-2026-10-08.json")
+    assert data["as_of"] == "2026-10-08"
     assert [r["date"] for r in data["positions"]] == ["2026-10-08", "2026-09-30"]  # 2019 utesluten
 
 
 def test_en_del_fallerar_ovriga_sparas_och_fel_i_actions(tmp_path, monkeypatch, capsys):
-    """Ett fel i en del räknas (kod 2, ::error:: i Actions), och den andra delen sparas ändå
-    (blankningen gav 404 från 29/10 2026 medan körningen var grön)."""
+    """Ett fel i en del räknas (kod 2, ::error:: i Actions), och den andra delen sparas ändå."""
     monkeypatch.setenv("GITHUB_ACTIONS", "true")
-    get = fake_get({fi_fetch.AGGREGATE_URL: TimeoutError("timed out"), fi_fetch.INSYN_URL: insyn(ROW_MON)})
-    assert fi_fetch.main(["--raw-dir", str(tmp_path)], get=get, now=NOW) == 2
-    assert (tmp_path / "2026-W41" / "fi" / "insyn-2026-10-11.json").exists()
-    assert not (tmp_path / "2026-W41" / "fi" / "blankning-2026-10-11.json").exists()
-    assert "::error title=FI-fel: blankning::TimeoutError: timed out" in capsys.readouterr().out
-    assert fi_fetch.last_errors == {"blankning": "TimeoutError: timed out"}
+    d = manual(tmp_path, aktuella=CURRENT, aggregerade=AGGREGATE)
+    get = fake_get({fi_fetch.INSYN_URL: TimeoutError("timed out")})
+    assert fi_fetch.main(["--raw-dir", str(tmp_path / "raw"), "--manual-dir", str(d)], get=get, now=NOW) == 2
+    assert (tmp_path / "raw" / "2026-W41" / "fi" / "blankning-2026-10-09.json").exists()
+    assert "::error title=FI-fel: insyn::TimeoutError: timed out" in capsys.readouterr().out
+    assert fi_fetch.last_errors == {"insyn": "TimeoutError: timed out"}
 
 
 def test_allt_fallerar_ger_exitkod_1(tmp_path):
     get = fake_get({"https://": ConnectionError("nere")})
-    assert fi_fetch.main(["--raw-dir", str(tmp_path)], get=get, now=NOW) == 1
+    assert fi_fetch.main(["--raw-dir", str(tmp_path), "--utan-blankning"], get=get, now=NOW) == 1
 
 
 def test_efterhamtning_kraver_bada_datum(tmp_path):

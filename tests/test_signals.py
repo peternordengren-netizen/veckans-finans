@@ -99,6 +99,20 @@ def test_varden_och_signaler():
     assert validate_signals(data, WEEK, INSTRUMENTS).errors == []
 
 
+def test_blankningsunderlagets_sista_dag_sparas():
+    """short_as_of: sidan märker blankningssignalen "t.o.m. <dag>" när underlaget slutar före veckans slut."""
+    from signals import short_as_of
+
+    assert short_as_of(None) is None
+    agg = {"short_aggregate": {"available": True, "end_as_of": "2026-10-27"},
+           "short_positions": {"available": False, "end_as_of": "2026-11-01"}}
+    assert short_as_of(agg) == "2026-10-27"
+    assert short_as_of({"short_aggregate": {"available": False}, "short_positions": {"available": True,
+                                                                                      "end_as_of": "2026-11-01"}}) == "2026-11-01"
+    data = build(WEEK, INSTRUMENTS, None, None, fake_fetch, date(2026, 10, 19), NOW)
+    assert data["short_as_of"] is None and validate_signals(data, WEEK, INSTRUMENTS).errors == []
+
+
 def test_utan_vecko_och_analysfil():
     data = build(WEEK, INSTRUMENTS, None, None, fake_fetch, date(2026, 10, 19), NOW)
     c = by_ticker(data)
