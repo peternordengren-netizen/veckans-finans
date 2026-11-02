@@ -47,7 +47,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import report_calendar  # noqa: E402
-from registers import _aggregate_by_ticker, insyn_summary  # noqa: E402
+from registers import _aggregate_by_ticker, insyn_summary, snapshot_at  # noqa: E402
 from signals import THRESHOLDS, BarFetcher, price_stats, week_change, yahoo_bars  # noqa: E402
 from prices import INDEX_TICKER  # noqa: E402
 from validate import DATA_DIR, RAW_DIR, Instrument, load_instruments, validate_morning  # noqa: E402
@@ -149,13 +149,16 @@ def insider_since(raw_dirs: list[Path], days: list[str], instruments: dict[str, 
 def short_since(raw_dirs: list[Path], prev_as_of: date, as_of: date, instruments: dict[str, Instrument]) -> dict:
     """Ändringar mellan registrets ögonblicksbilder (senaste ≤ prev_as_of mot senaste ≤ as_of)."""
     paths = _fi_files(raw_dirs, "blankning")
-    this_key = max((d for d in paths if d <= as_of.isoformat()), default=None)
+    snaps = [json.loads(paths[d].read_text(encoding="utf-8")) for d in sorted(paths)]
+    # Läget vid as_of; finns bara en senare bild (manuell nedladdning med dagens ändringar) räknas
+    # läget fram ur den (registers.snapshot_at).
+    this = snapshot_at(snaps, as_of)
     prev_key = max((d for d in paths if d <= prev_as_of.isoformat()), default=None)
+    this_key = this["as_of"] if this else None
     empty = {"from_as_of": prev_key, "to_as_of": this_key, "positions": [], "aggregate": []}
     if this_key is None or prev_key is None or this_key == prev_key:
         return {"available": False, "note": "ingen ny ögonblicksbild av blankningsregistret sedan förra rapporten",
                 **empty}
-    this = json.loads(paths[this_key].read_text(encoding="utf-8"))
     prev = json.loads(paths[prev_key].read_text(encoding="utf-8"))
     isin_to_ticker = {isin: t for t, i in instruments.items() for isin in i.isin}
 

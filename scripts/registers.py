@@ -82,6 +82,30 @@ def _snapshots(raw_dir: Path) -> list[dict]:
     return sorted(snaps, key=lambda s: s["as_of"])
 
 
+def snapshot_at(snaps: list[dict], when: date) -> dict | None:
+    """Registrets läge vid slutet av dagen `when`.
+
+    Finns en ögonblicksbild för dagen, eller ingen senare, används den senaste ≤ when. Annars räknas
+    läget fram ur nästa senare ögonblicksbild (t.ex. en manuell nedladdning som också har dagens
+    ändringar, FI 2026-11-02): varje rad bär datumet för sin senaste ändring, så en rad daterad ≤ when
+    gällde redan då. En rad daterad efter when tas från ögonblicksbilden före (finns ingen där var
+    positionen ny och räknas inte). Positioner som försvunnit ur den senare bilden efter when kan inte
+    dateras och räknas inte.
+    """
+    w = when.isoformat()
+    before = [s for s in snaps if s["as_of"] <= w]
+    after = [s for s in snaps if s["as_of"] > w]
+    if not after or (before and before[-1]["as_of"] == w):
+        return before[-1] if before else None
+    nxt, old = after[0], (before[-1] if before else {})
+    old_agg = {r["issuer"]: r for r in old.get("aggregate", [])}
+    old_cur = {(r["holder"], r["isin"]): r for r in old.get("current", [])}
+    agg = [r if r["date"][:10] <= w else old_agg.get(r["issuer"]) for r in nxt["aggregate"]]
+    cur = [r if r["date"][:10] <= w else old_cur.get((r["holder"], r["isin"])) for r in nxt["current"]]
+    return {"as_of": w, "derived_from": nxt["as_of"], "aggregate": [r for r in agg if r],
+            "current": [r for r in cur if r]}
+
+
 def _latest_in(snaps: list[dict], start: date, end: date) -> dict | None:
     inside = [s for s in snaps if start.isoformat() <= s["as_of"] <= end.isoformat()]
     return inside[-1] if inside else None
@@ -187,6 +211,11 @@ def _aggregate_by_ticker(snap: dict, instruments: dict[str, Instrument],
 def aggregate_changes(snaps: list[dict], start: date, end: date, instruments: dict[str, Instrument],
                       isin_to_ticker: dict[str, str]) -> dict:
     this = _latest_in(snaps, start, end)
+    if this is None or this["as_of"] < end.isoformat():
+        # Ingen bild vid veckans slut men en senare: läget vid veckans slut räknas fram ur den.
+        at_end = snapshot_at(snaps, end)
+        if at_end is not None and at_end.get("derived_from"):
+            this = at_end
     prev = _latest_in(snaps, start - timedelta(days=7), start - timedelta(days=1))
     if this is None or prev is None:
         missing = "veckans" if this is None else "förra veckans"

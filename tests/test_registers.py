@@ -275,3 +275,29 @@ def test_validering_fangar_inkonsekvent_analys(tmp_path, instruments, breaker, m
     bad = copy.deepcopy(a)
     breaker(bad)
     assert any(message in e for e in validate.validate_analysis(bad, "2026-W41").errors)
+
+
+def test_laget_vid_dagens_slut_ur_en_senare_ogonblicksbild():
+    """Manuell nedladdning 2/11 2026 med en ändring samma dag: läget vid 1/11 räknas fram ur den (rader
+    daterade senast 1/11 gällde redan; senare rader tas från bilden före)."""
+    from datetime import date
+
+    old = {"as_of": "2026-10-27",
+           "aggregate": [{"issuer": "Fjällhem AB", "lei": "L1", "pct": 2.0, "date": "2026-10-20"},
+                         {"issuer": "Kustbanken AB", "lei": "L2", "pct": 1.0, "date": "2026-10-21"}],
+           "current": [{"holder": "Exempelfonden LP", "issuer": "Fjällhem AB", "isin": "SE0000000001", "pct": 1.0,
+                        "date": "2026-10-20", "comment": ""}]}
+    new = {"as_of": "2026-11-02",
+           "aggregate": [{"issuer": "Fjällhem AB", "lei": "L1", "pct": 2.6, "date": "2026-10-29"},
+                         {"issuer": "Kustbanken AB", "lei": "L2", "pct": 1.4, "date": "2026-11-02"},
+                         {"issuer": "Nybolaget AB", "lei": "L3", "pct": 0.3, "date": "2026-11-02"}],
+           "current": [{"holder": "Exempelfonden LP", "issuer": "Fjällhem AB", "isin": "SE0000000001", "pct": 1.6,
+                        "date": "2026-11-02", "comment": ""}]}
+    at = registers.snapshot_at([old, new], date(2026, 11, 1))
+    assert at["as_of"] == "2026-11-01" and at["derived_from"] == "2026-11-02"
+    assert {r["issuer"]: r["pct"] for r in at["aggregate"]} == {"Fjällhem AB": 2.6, "Kustbanken AB": 1.0}
+    assert [r["pct"] for r in at["current"]] == [1.0]
+    # Finns en bild för dagen, eller ingen senare, används den som den är.
+    assert registers.snapshot_at([old, new], date(2026, 11, 2)) is new
+    assert registers.snapshot_at([old], date(2026, 11, 1)) is old
+    assert registers.snapshot_at([new], date(2026, 10, 1))["aggregate"] == []
