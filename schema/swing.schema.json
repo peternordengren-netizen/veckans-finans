@@ -4,54 +4,361 @@
   "title": "Swing: lägesmått och beskrivande etiketter per bolag (scripts/swing.py, data/swing/<datum>.json)",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "date", "as_of", "generated_at", "thresholds", "labels", "short_as_of", "companies"],
+  "required": [
+    "schema_version",
+    "date",
+    "as_of",
+    "generated_at",
+    "thresholds",
+    "labels",
+    "short_as_of",
+    "companies"
+  ],
   "$defs": {
-    "num": { "type": ["number", "null"] }
+    "num": {
+      "type": [
+        "number",
+        "null"
+      ]
+    }
   },
   "properties": {
-    "schema_version": { "const": 1 },
-    "date": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
-    "as_of": { "type": ["string", "null"], "description": "Handelsdagen måtten gäller (förra handelsdagens stängning)." },
-    "generated_at": { "type": "string" },
-    "mock": { "const": true },
+    "schema_version": {
+      "const": 1
+    },
+    "date": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "as_of": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Handelsdagen måtten gäller (förra handelsdagens stängning)."
+    },
+    "generated_at": {
+      "type": "string"
+    },
+    "mock": {
+      "const": true
+    },
     "thresholds": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["volume_ratio", "rsi2_low", "rsi2_high", "report_days"],
+      "required": [
+        "volume_ratio",
+        "rsi2_low",
+        "rsi2_high",
+        "report_days"
+      ],
       "properties": {
-        "volume_ratio": { "type": "number", "exclusiveMinimum": 0 },
-        "rsi2_low": { "type": "number" },
-        "rsi2_high": { "type": "number" },
-        "report_days": { "type": "integer", "minimum": 1 }
+        "volume_ratio": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "rsi2_low": {
+          "type": "number"
+        },
+        "rsi2_high": {
+          "type": "number"
+        },
+        "report_days": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "pullback": {
+          "type": "object",
+          "description": "Trösklar för strategin Pullback i trend (scripts/pullback.py THRESHOLDS); saknas i äldre filer.",
+          "additionalProperties": false,
+          "required": [
+            "touch_pct",
+            "hammer_shadow",
+            "hammer_upper",
+            "stop_days",
+            "top_days",
+            "trigger_days",
+            "max_days",
+            "fee_pct"
+          ],
+          "properties": {
+            "touch_pct": {
+              "type": "number"
+            },
+            "hammer_shadow": {
+              "type": "number"
+            },
+            "hammer_upper": {
+              "type": "number"
+            },
+            "stop_days": {
+              "type": "number"
+            },
+            "top_days": {
+              "type": "number"
+            },
+            "trigger_days": {
+              "type": "number"
+            },
+            "max_days": {
+              "type": "number"
+            },
+            "fee_pct": {
+              "type": "number"
+            }
+          }
+        }
       }
     },
-    "labels": { "type": "object", "additionalProperties": { "type": "string" } },
-    "short_as_of": { "type": ["string", "null"] },
+    "labels": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "short_as_of": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
     "companies": {
       "type": "array",
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["ticker", "name", "sector", "day", "ma20_pct", "ma50_pct", "ma20_over_ma50", "rsi2", "rsi14", "atr_pct",
-          "volume_ratio", "above_high20", "report_published", "days_since_report", "report_verdict", "short_pct", "labels"],
+        "required": [
+          "ticker",
+          "name",
+          "sector",
+          "day",
+          "ma20_pct",
+          "ma50_pct",
+          "ma20_over_ma50",
+          "rsi2",
+          "rsi14",
+          "atr_pct",
+          "volume_ratio",
+          "above_high20",
+          "report_published",
+          "days_since_report",
+          "report_verdict",
+          "short_pct",
+          "labels"
+        ],
         "properties": {
-          "ticker": { "type": "string", "minLength": 1 },
-          "name": { "type": "string", "minLength": 1 },
-          "sector": { "type": ["string", "null"] },
-          "day": { "type": "string" },
-          "ma20_pct": { "type": "number" },
-          "ma50_pct": { "type": "number" },
-          "ma20_over_ma50": { "type": "boolean" },
-          "rsi2": { "$ref": "#/$defs/num" },
-          "rsi14": { "$ref": "#/$defs/num" },
-          "atr_pct": { "$ref": "#/$defs/num" },
-          "volume_ratio": { "$ref": "#/$defs/num" },
-          "above_high20": { "type": "boolean" },
-          "report_published": { "type": ["string", "null"] },
-          "days_since_report": { "type": ["integer", "null"] },
-          "report_verdict": { "type": ["string", "null"] },
-          "short_pct": { "$ref": "#/$defs/num" },
-          "labels": { "type": "array", "items": { "type": "string" }, "uniqueItems": true }
+          "ticker": {
+            "type": "string",
+            "minLength": 1
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sector": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "day": {
+            "type": "string"
+          },
+          "ma20_pct": {
+            "type": "number"
+          },
+          "ma50_pct": {
+            "type": "number"
+          },
+          "ma20_over_ma50": {
+            "type": "boolean"
+          },
+          "rsi2": {
+            "$ref": "#/$defs/num"
+          },
+          "rsi14": {
+            "$ref": "#/$defs/num"
+          },
+          "atr_pct": {
+            "$ref": "#/$defs/num"
+          },
+          "volume_ratio": {
+            "$ref": "#/$defs/num"
+          },
+          "above_high20": {
+            "type": "boolean"
+          },
+          "report_published": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "days_since_report": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "report_verdict": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "short_pct": {
+            "$ref": "#/$defs/num"
+          },
+          "labels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "uniqueItems": true
+          },
+          "pullback": {
+            "type": "object",
+            "description": "Pullback i trend: tillståndet (null utan 200 handelsdagar) och nivåerna vid träff. Saknas i äldre filer.",
+            "additionalProperties": false,
+            "required": [
+              "state",
+              "levels"
+            ],
+            "properties": {
+              "state": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "additionalProperties": false,
+                "required": [
+                  "open",
+                  "high",
+                  "low",
+                  "close",
+                  "prev_open",
+                  "prev_close",
+                  "ema20",
+                  "ma50",
+                  "ma200"
+                ],
+                "properties": {
+                  "open": {
+                    "type": "number"
+                  },
+                  "high": {
+                    "type": "number"
+                  },
+                  "low": {
+                    "type": "number"
+                  },
+                  "close": {
+                    "type": "number"
+                  },
+                  "prev_open": {
+                    "type": "number"
+                  },
+                  "prev_close": {
+                    "type": "number"
+                  },
+                  "ema20": {
+                    "type": "number"
+                  },
+                  "ma50": {
+                    "type": "number"
+                  },
+                  "ma200": {
+                    "type": "number"
+                  }
+                }
+              },
+              "levels": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "additionalProperties": false,
+                "required": [
+                  "level",
+                  "level_value",
+                  "signal",
+                  "trigger",
+                  "ref",
+                  "stop",
+                  "risk_pct",
+                  "risk_atr",
+                  "top",
+                  "r2",
+                  "r3"
+                ],
+                "properties": {
+                  "level": {
+                    "enum": [
+                      "ema20",
+                      "ma50"
+                    ]
+                  },
+                  "level_value": {
+                    "type": "number"
+                  },
+                  "signal": {
+                    "enum": [
+                      "hammer",
+                      "engulfing",
+                      null
+                    ]
+                  },
+                  "trigger": {
+                    "$ref": "#/$defs/num"
+                  },
+                  "ref": {
+                    "type": "number"
+                  },
+                  "stop": {
+                    "type": "number"
+                  },
+                  "risk_pct": {
+                    "$ref": "#/$defs/num"
+                  },
+                  "risk_atr": {
+                    "$ref": "#/$defs/num"
+                  },
+                  "top": {
+                    "type": "number"
+                  },
+                  "r2": {
+                    "type": "number"
+                  },
+                  "r3": {
+                    "type": "number"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "strategies": {
+      "type": "object",
+      "description": "Strategier i rullistan: namn och etiketterna som räknas som träff. Saknas i äldre filer.",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "labels"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "labels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
         }
       }
     }

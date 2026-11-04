@@ -11,6 +11,7 @@ export function labelClass(label: string): string {
   if (label.startsWith("utbrott")) return "breakout";
   if (label.startsWith("rsi2")) return "rsi";
   if (label.startsWith("trend")) return "trend";
+  if (label.startsWith("rekyl")) return "pullback";
   return "report";
 }
 
@@ -45,4 +46,47 @@ export function reportText(days: number | null, verdict: string | null): string 
   if (days === null) return "–";
   const when = days === 0 ? "reaktionsdag" : days === 1 ? "1 dag sedan" : `${days} dagar sedan`;
   return verdict === "över" || verdict === "under" ? `${when} (${verdict} förväntan)` : when;
+}
+
+/** Etikettens färgklass för strategin Pullback i trend. */
+export function isPullbackLabel(label: string): boolean {
+  return label === "rekyl-i-trend" || label === "rekyl-vandsignal";
+}
+
+const priceFmt = new Intl.NumberFormat("sv-SE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+/** Kursnivå med två decimaler, "–" utan värde. */
+export function priceText(v: number | null | undefined): string {
+  return v === null || v === undefined ? "–" : priceFmt.format(v);
+}
+
+/** "Hammer", "Bullish engulfing" eller "–". */
+export function signalText(s: "hammer" | "engulfing" | null): string {
+  return s === "hammer" ? "Hammer" : s === "engulfing" ? "Bullish engulfing" : "–";
+}
+
+/** "20 EMA" eller "50 MA". */
+export function levelText(l: "ema20" | "ma50"): string {
+  return l === "ema20" ? "20 EMA" : "50 MA";
+}
+
+/** Avstånd till stoppet: "2,8 % · 1,4 ATR". */
+export function riskText(pct: number | null, atr: number | null): string {
+  const p = pct === null ? "–" : `${pctFmt.format(pct)} %`;
+  return atr === null ? p : `${p} · ${pctFmt.format(atr)} ATR`;
+}
+
+/** Andel av de avgjorda fallen: "48,2 % (27 av 56)", "–" utan avgjorda; "(för få fall)" under MIN_CASES. */
+export function decidedShareText(n: number, decided: number): string {
+  if (decided === 0) return "–";
+  const share = `${pctFmt.format((n / decided) * 100)} % (${n} av ${decided})`;
+  return decided < MIN_CASES ? `${share}, för få fall` : share;
+}
+
+/** Snittresultat per avgjort fall efter courtage: "+0,4 % (+0,15 R)". */
+export function netText(pct: number | null, r: number | null): string {
+  if (pct === null) return "–";
+  const s = (v: number, d: number) =>
+    new Intl.NumberFormat("sv-SE", { minimumFractionDigits: d, maximumFractionDigits: d, signDisplay: "exceptZero" }).format(v);
+  return r === null ? `${s(pct, 1)} %` : `${s(pct, 1)} % (${s(r, 2)} R)`;
 }

@@ -77,7 +77,39 @@ export interface SwingRow {
   days_since_report: number | null;
   report_verdict: string | null;
   short_pct: number | null;
+  /** Pullback i trend (scripts/pullback.py): tillståndet och nivåerna vid träff; saknas i äldre filer. */
+  pullback?: { state: PullbackState | null; levels: PullbackLevels | null };
   labels: string[];
+}
+export interface PullbackState {
+  open: number; high: number; low: number; close: number; prev_open: number; prev_close: number;
+  ema20: number; ma50: number; ma200: number;
+}
+export interface PullbackLevels {
+  level: "ema20" | "ma50";
+  level_value: number;
+  signal: "hammer" | "engulfing" | null;
+  /** Gårdagens high vid vändsignal, annars null. */
+  trigger: number | null;
+  ref: number;
+  stop: number;
+  risk_pct: number | null;
+  risk_atr: number | null;
+  top: number;
+  r2: number;
+  r3: number;
+}
+export interface PullbackSummary {
+  cases: number;
+  decided: number;
+  r2_first: number;
+  stop_first: number;
+  open: number;
+  not_triggered: number;
+  r2_share: number | null;
+  stop_share: number | null;
+  mean_net_pct: number | null;
+  mean_net_r: number | null;
 }
 export interface SwingStat {
   n: number;
@@ -89,14 +121,26 @@ export interface SwingView {
   date: string;
   asOf: string | null;
   shortAsOf: string | null;
-  thresholds: { volume_ratio: number; rsi2_low: number; rsi2_high: number; report_days: number };
+  thresholds: {
+    volume_ratio: number; rsi2_low: number; rsi2_high: number; report_days: number;
+    /** Pullback i trend (saknas i äldre filer). */
+    pullback?: { touch_pct: number; hammer_shadow: number; hammer_upper: number; stop_days: number; top_days: number; trigger_days: number; max_days: number; fee_pct: number };
+  };
   labels: Record<string, string>;
+  /** Strategier i rullistan: namn och etiketterna som räknas som träff (saknas i äldre filer). */
+  strategies: Record<string, { name: string; labels: string[] }>;
   rows: SwingRow[];
   history: {
     period: { start: string; end: string };
     method: string;
     base: Record<string, SwingStat>;
     labels: Record<string, Record<string, SwingStat>>;
+    /** Pullback i trend: 2R före stoppet och tvärtom (saknas i äldre filer). */
+    pullback?: {
+      thresholds: { fee_pct: number; max_days: number; trigger_days: number };
+      labels: Record<string, PullbackSummary>;
+      all: PullbackSummary;
+    };
   } | null;
 }
 
@@ -115,6 +159,7 @@ export function loadLatestSwing(): SwingView | null {
       short_as_of: string | null;
       thresholds: SwingView["thresholds"];
       labels: Record<string, string>;
+      strategies?: SwingView["strategies"];
       companies: SwingRow[];
     }>(path);
     const historyPath = join(SWING_DIR, "history.json");
@@ -125,6 +170,7 @@ export function loadLatestSwing(): SwingView | null {
       shortAsOf: raw.short_as_of,
       thresholds: raw.thresholds,
       labels: raw.labels,
+      strategies: raw.strategies ?? {},
       rows: raw.companies,
       history,
     };

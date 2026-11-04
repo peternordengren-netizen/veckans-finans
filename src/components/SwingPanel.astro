@@ -7,7 +7,10 @@
 import type { SwingView } from "../lib/data";
 import { shortDate } from "../lib/format";
 import { signedPct } from "../lib/signals";
-import { MIN_CASES, labelClass, labelCounts, reportText, shareText, vsBaseText } from "../lib/swing";
+import {
+  MIN_CASES, decidedShareText, labelClass, labelCounts, levelText, netText, priceText, reportText, riskText, shareText,
+  signalText, vsBaseText,
+} from "../lib/swing";
 
 interface Props {
   swing: SwingView;
@@ -21,6 +24,15 @@ const num = (v: number | null, digits = 1) =>
 const v = (x: number | null) => (x === null ? "" : String(x));
 const t = swing.thresholds;
 const h = swing.history;
+const pt = t.pullback;
+const pbHist = h?.pullback ?? null;
+// Strategier i rullistan, med antal bolag som matchar någon av strategins etiketter.
+const strategies = Object.entries(swing.strategies).map(([key, s]) => ({
+  key,
+  ...s,
+  count: swing.rows.filter((r) => r.labels.some((l) => s.labels.includes(l))).length,
+}));
+const pbLabels = swing.strategies.pullback?.labels ?? [];
 
 const columns = [
   { key: "name", label: "Bolag", type: "text" },
@@ -33,14 +45,23 @@ const columns = [
   { key: "volume", label: "Omsättning", type: "num", title: "Senaste dagen mot snittet för de 20 dagarna före" },
   { key: "report", label: "Sedan rapport", type: "num" },
   { key: "short", label: "Blankning", type: "num", title: "Sammanlagd blankning enligt Finansinspektionen" },
+  // Strategin Pullback i trend: visas bara när strategin är vald i rullistan.
+  { key: "pb-signal", label: "Vändsignal", type: "text", pb: true, title: "Gårdagens candle och nivån rekylen nådde" },
+  { key: "pb-ref", label: "Referens", type: "num", pb: true, title: "Triggernivån (gårdagens high) vid vändsignal, annars gårdagens stängning" },
+  { key: "pb-stop", label: "Stopp", type: "num", pb: true },
+  { key: "pb-risk", label: "Till stopp", type: "num", pb: true, title: "Avstånd från referensnivån till stoppet (1 R), i procent och i ATR(14)" },
+  { key: "pb-top", label: "Föregående topp", type: "num", pb: true, title: "Högsta high de senaste 60 handelsdagarna" },
+  { key: "pb-r2", label: "2R", type: "num", pb: true },
+  { key: "pb-r3", label: "3R", type: "num", pb: true },
 ] as const;
 ---
 
 <div class="swing" data-swing>
   <p class="lead">
     Lägesmått per bolag vid stängningen {swing.asOf ? shortDate(swing.asOf) : "–"}, uppdaterade varje morgon. Etiketterna
-    beskriver vad som hänt i kursen, omsättningen och rapporterna. De är inga uppmaningar, och historiken under tabellen
-    visar att ingen av dem det senaste året följts av att aktien gått bättre än index oftare än vanligt.
+    beskriver vad som hänt i kursen, omsättningen och rapporterna. De är inga uppmaningar. Historiken under tabellen visar
+    hur ofta varje etikett det senaste året följts av att aktien gått bättre än index, jämfört med alla dagar, och för
+    strategin Pullback i trend hur ofta 2R nåddes före stoppet. Historiken säger inget om hur det går nästa gång.
   </p>
   <details class="legend">
     <summary>Så räknas måtten och etiketterna</summary>
@@ -63,6 +84,58 @@ const columns = [
         <strong>Blankning:</strong> sammanlagd blankning enligt Finansinspektionens register{swing.shortAsOf ? ` ${shortDate(swing.shortAsOf)}` : ""}.
       </li>
     </ul>
+    {
+      pt && (
+        <>
+          <p class="legend-head"><strong>Strategin Pullback i trend</strong> (välj den i rullistan)</p>
+          <ul>
+            <li>
+              <strong>Trend:</strong> stängningen ligger över 50 och 200 dagars glidande medelvärde, och 50 dagars MA ligger
+              över 200 dagars MA. Kräver 200 handelsdagars historik. Kurserna justeras för utdelningar och splittar som
+              övriga mått.
+            </li>
+            <li>
+              <strong>Rekyl i trend:</strong> gårdagens lägsta kurs (low) ligger högst {num(pt.touch_pct, 0)} % från 20 dagars
+              EMA eller 50 dagars MA, och gårdagens stängning ligger över samma nivå. Når rekylen båda nivåerna används den
+              lägre.
+            </li>
+            <li>
+              <strong>Rekyl med vändsignal:</strong> som ovan, och gårdagens candle är en hammer eller en bullish engulfing.
+              Triggernivån är gårdagens högsta kurs (high).
+              <ul>
+                <li>
+                  <em>Hammer:</em> den nedre skuggan (lägsta av öppning och stängning minus low) är minst
+                  {" "}{num(pt.hammer_shadow, 0)} gånger kroppen (skillnaden mellan öppning och stängning), och den övre skuggan
+                  (high minus högsta av öppning och stängning) är högst {num(pt.hammer_upper * 100, 0)} % av dagens spann
+                  (high minus low).
+                </li>
+                <li>
+                  <em>Bullish engulfing:</em> förra dagen stängde under sin öppning och gårdagen över sin, och gårdagens kropp
+                  omsluter förra dagens: gårdagens öppning är högst förra dagens stängning och gårdagens stängning minst förra
+                  dagens öppning.
+                </li>
+              </ul>
+            </li>
+            <li>
+              <strong>Referens:</strong> triggernivån vid vändsignal, annars gårdagens stängning.
+              <strong> Stopp:</strong> lägsta low under rekylen, alltså sedan den högsta toppen de senaste
+              {" "}{pt.stop_days} handelsdagarna, eller MA-nivån om den ligger lägre.
+              <strong> Till stopp</strong> = 1 R, avståndet från referensen till stoppet i procent och i ATR(14).
+              <strong> 2R och 3R:</strong> referensen plus två respektive tre gånger R.
+              <strong> Föregående topp:</strong> högsta high de senaste {pt.top_days} handelsdagarna.
+            </li>
+            <li>
+              <strong>Historiken</strong> under tabellen följer varje sådan dag det senaste året, ett fall i taget per bolag.
+              Fallet startar på nästa dags öppning; vid vändsignal i stället när triggernivån nås inom {pt.trigger_days}
+              {" "}handelsdagar, annars räknas det som ej utlöst. Det avgörs när 2R eller stoppet nås. Nås båda samma dag räknas
+              stoppet först, och öppnar en dag bortom nivån gäller öppningen. Efter {pt.max_days} handelsdagar utan
+              avgörande räknas fallet som öppet. Courtage {num(pt.fee_pct)} % per affär, två per fall, dras från
+              resultatet. Spread och glidning ingår inte.
+            </li>
+          </ul>
+        </>
+      )
+    }
   </details>
 
   <div class="controls">
@@ -71,11 +144,24 @@ const columns = [
       <select data-label-filter>
         <option value="" selected>alla bolag ({swing.rows.length})</option>
         <option value="*">bolag med etikett ({withLabel})</option>
-        {counts.map((c) => (
-          <option value={c.label} disabled={c.count === 0}>
-            {swing.labels[c.label]} ({c.count})
-          </option>
-        ))}
+        {
+          strategies.length > 0 && (
+            <optgroup label="Strategi">
+              {strategies.map((s) => (
+                <option value={`strategi:${s.key}`} data-strategy={s.key} data-strategy-labels={s.labels.join(" ")}>
+                  {s.name} ({s.count})
+                </option>
+              ))}
+            </optgroup>
+          )
+        }
+        <optgroup label="Etikett">
+          {counts.map((c) => (
+            <option value={c.label} disabled={c.count === 0}>
+              {swing.labels[c.label]} ({c.count})
+            </option>
+          ))}
+        </optgroup>
       </select>
     </label>
     <span class="shown" data-shown aria-live="polite">Visar alla {swing.rows.length} bolag</span>
@@ -88,7 +174,7 @@ const columns = [
           <tr>
             {
               columns.map((c) => (
-                <th scope="col" class={`col-${c.key}`} data-key={c.key} data-type={c.type} aria-sort="none">
+                <th scope="col" class:list={[`col-${c.key}`, "pb" in c && "col-pb"]} data-key={c.key} data-type={c.type} aria-sort="none">
                   <button type="button" title={"title" in c ? c.title : undefined}>{c.label}</button>
                 </th>
               ))
@@ -121,6 +207,25 @@ const columns = [
                 <td class="num" data-v={v(r.volume_ratio)}>{r.volume_ratio === null ? "–" : `${num(r.volume_ratio)}×`}</td>
                 <td class="num report" data-v={v(r.days_since_report)}>{reportText(r.days_since_report, r.report_verdict)}</td>
                 <td class="num" data-v={v(r.short_pct)}>{r.short_pct === null ? "–" : `${num(r.short_pct, 2)} %`}</td>
+                {(() => {
+                  const lv = r.labels.some((l) => pbLabels.includes(l)) ? (r.pullback?.levels ?? null) : null;
+                  return (
+                    <>
+                      <td class="col-pb" data-v={lv ? `${lv.signal ?? ""} ${lv.level}` : ""}>
+                        {lv ? `${signalText(lv.signal)}, vid ${levelText(lv.level)}` : "–"}
+                      </td>
+                      <td class="num col-pb" data-v={v(lv?.ref ?? null)}>
+                        {priceText(lv?.ref)}
+                        {lv && lv.trigger !== null && <span class="sub">trigger</span>}
+                      </td>
+                      <td class="num col-pb" data-v={v(lv?.stop ?? null)}>{priceText(lv?.stop)}</td>
+                      <td class="num col-pb" data-v={v(lv?.risk_pct ?? null)}>{lv ? riskText(lv.risk_pct, lv.risk_atr) : "–"}</td>
+                      <td class="num col-pb" data-v={v(lv?.top ?? null)}>{priceText(lv?.top)}</td>
+                      <td class="num col-pb" data-v={v(lv?.r2 ?? null)}>{priceText(lv?.r2)}</td>
+                      <td class="num col-pb" data-v={v(lv?.r3 ?? null)}>{priceText(lv?.r3)}</td>
+                    </>
+                  );
+                })()}
               </tr>
             ))
           }
@@ -128,6 +233,52 @@ const columns = [
       </table>
     </div>
   </div>
+
+  {
+    pbHist && h && (
+      <section class="history" aria-labelledby="swing-pullback">
+        <h3 id="swing-pullback">Pullback i trend: 2R eller stoppet först</h3>
+        <p class="note">
+          Varje dag med etiketten {shortDate(h.period.start)} {h.period.start.slice(0, 4)} – {shortDate(h.period.end)}{" "}
+          {h.period.end.slice(0, 4)}, ett fall i taget per bolag, med courtage {num(pbHist.thresholds.fee_pct)} % per affär.
+          Andelarna gäller de avgjorda fallen; öppna fall (inget avgörande inom {pbHist.thresholds.max_days} handelsdagar)
+          och ej utlösta (triggernivån nåddes inte inom {pbHist.thresholds.trigger_days} dagar) räknas inte in. Fallen
+          infaller ofta samma dagar och är inte oberoende. Historiken säger inget om hur det går nästa gång.
+        </p>
+        <div class="hist-wrap">
+          <table class="hist">
+            <thead>
+              <tr>
+                <th scope="col">Etikett</th>
+                <th scope="col" class="num">Fall</th>
+                <th scope="col" class="num">2R före stoppet</th>
+                <th scope="col" class="num">Stoppet först</th>
+                <th scope="col" class="num">Öppna</th>
+                <th scope="col" class="num">Ej utlösta</th>
+                <th scope="col" class="num">Snitt per avgjort fall efter courtage</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[...pbLabels.map((l) => ({ name: swing.labels[l], s: pbHist.labels[l], all: false })),
+                { name: "Båda", s: pbHist.all, all: true }].map(({ name, s, all }) =>
+                s && (
+                  <tr class:list={{ base: all }}>
+                    <th scope="row">{name}</th>
+                    <td class="num">{s.cases.toLocaleString("sv-SE")}</td>
+                    <td class="num">{decidedShareText(s.r2_first, s.decided)}</td>
+                    <td class="num">{decidedShareText(s.stop_first, s.decided)}</td>
+                    <td class="num">{s.open}</td>
+                    <td class="num">{s.not_triggered}</td>
+                    <td class="num">{netText(s.mean_net_pct, s.mean_net_r)}</td>
+                  </tr>
+                ),
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    )
+  }
 
   <section class="history" aria-labelledby="swing-historik">
     <h3 id="swing-historik">Historik per etikett</h3>
@@ -192,13 +343,22 @@ const columns = [
     const shown = root.querySelector<HTMLElement>("[data-shown]")!;
     const applyFilter = () => {
       const want = select.value;
+      // En strategi visar bolagen med någon av strategins etiketter, och strategins kolumner.
+      const opt = select.selectedOptions[0];
+      const strategy = opt?.dataset.strategy ?? "";
+      const strategyLabels = (opt?.dataset.strategyLabels ?? "").split(" ").filter(Boolean);
       let n = 0;
       for (const r of rows) {
         const labels = (r.dataset.labels ?? "").split(" ").filter(Boolean);
-        r.hidden = want === "" ? false : want === "*" ? labels.length === 0 : !labels.includes(want);
+        r.hidden = want === "" ? false : want === "*" ? labels.length === 0
+          : strategy ? !labels.some((l) => strategyLabels.includes(l)) : !labels.includes(want);
         if (!r.hidden) n++;
       }
+      if (strategy) root.dataset.strategy = strategy;
+      else delete root.dataset.strategy;
       shown.textContent = want === "" ? `Visar alla ${rows.length} bolag` : `Visar ${n} av ${rows.length} bolag`;
+      // Kolumnerna ändrades: den fasta rubrikraden räknar om sina bredder vid resize.
+      window.dispatchEvent(new Event("resize"));
     };
     select.addEventListener("change", applyFilter);
     applyFilter();
@@ -387,6 +547,24 @@ const columns = [
   }
   .chip.report {
     color: var(--direct-fg);
+  }
+  .chip.pullback {
+    color: var(--pos);
+  }
+  /* Strategikolumnerna (Pullback i trend) visas bara när strategin är vald i rullistan. */
+  .col-pb {
+    display: none;
+  }
+  .swing[data-strategy="pullback"] .col-pb {
+    display: table-cell;
+  }
+  .sub {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--muted);
+  }
+  .legend-head {
+    margin: 10px 0 2px;
   }
   .history {
     margin-top: 20px;

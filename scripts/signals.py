@@ -69,6 +69,9 @@ class Bar:
     high: float
     low: float
     volume: float
+    # Öppningskursen (för candlemönster i Swing, scripts/pullback.py); hämtas i samma batchanrop.
+    # None i äldre sparade hämtningar och i tester som inte behöver den.
+    open: float | None = None
 
 
 BarFetcher = Callable[[list[str], date, date], dict[str, list[Bar]]]
@@ -94,7 +97,8 @@ def _download_bars(tickers: list[str], start: date, end_inclusive: date) -> dict
             continue
         bars = [
             Bar(idx.date(), float(r["Close"]), float(r["Adj Close"]) if r["Adj Close"] == r["Adj Close"] else float(r["Close"]),
-                float(r["High"]), float(r["Low"]), float(r["Volume"]) if r["Volume"] == r["Volume"] else 0.0)
+                float(r["High"]), float(r["Low"]), float(r["Volume"]) if r["Volume"] == r["Volume"] else 0.0,
+                float(r["Open"]) if r["Open"] == r["Open"] else None)
             for idx, r in sub.iterrows()
         ]
         if bars:

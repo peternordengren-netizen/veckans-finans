@@ -3,7 +3,7 @@
 Skriver data/swing/<datum>.json (schema/swing.schema.json). Ett informationsverktyg: måtten och etiketterna
 beskriver vad som hänt fram till förra handelsdagens stängning och är inga uppmaningar. Historiken per etikett
 (scripts/swing_history.py, data/swing/history.json) visar hur ofta etiketten följts av att aktien gått bättre
-än index – det senaste årets test gav inte bättre än alla dagar.
+än index, jämfört med alla dagar.
 
 Körs av scripts/morning.py med samma dagsdata som morgonrapporten (ingen extra hämtning), eller fristående.
 
@@ -22,6 +22,8 @@ Etiketter (LABELS, trösklar i THRESHOLDS):
 - "trend-upp": kurs över 20-dagars MA och 20-dagars över 50-dagars; "trend-ned" omvänt
 - "efter-rapport-over" / "efter-rapport-under" / "efter-rapport": rapport inom report_days handelsdagar
   (reaktionsdagen räknas som dag 0), med utfallet mot förväntan för vinst per aktie där det finns
+- "rekyl-i-trend" / "rekyl-vandsignal": strategin "Pullback i trend" (scripts/pullback.py), med
+  stopp-, trigger-, topp-, 2R- och 3R-nivåer per bolag ("pullback") och strategin i "strategies"
 
 Användning:
     python scripts/swing.py                 # i dag (förra handelsdagens stängning)
@@ -39,6 +41,7 @@ from zoneinfo import ZoneInfo
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
+import pullback  # noqa: E402
 from prices import INDEX_TICKER  # noqa: E402
 from signals import Bar, BarFetcher, yahoo_bars  # noqa: E402
 from validate import DATA_DIR, RAW_DIR, Instrument, load_instruments, validate_swing  # noqa: E402
@@ -61,7 +64,10 @@ LABELS = {
     "efter-rapport-over": "Efter rapport, över förväntan",
     "efter-rapport-under": "Efter rapport, under förväntan",
     "efter-rapport": "Efter rapport",
+    **pullback.LABELS,
 }
+# Strategier i rullistan: namn och etiketterna som räknas som träff (scripts/pullback.py).
+STRATEGIES = {"pullback": {"name": "Pullback i trend", "labels": list(pullback.LABELS)}}
 
 
 # --- Lägesmått -------------------------------------------------------------------
@@ -218,6 +224,14 @@ def build(today: date, now: datetime, instruments: dict[str, Instrument], bars: 
         rl = report_label(days_since, rep["verdict"] if rep else None)
         if rl:
             labels.append(rl)
+        # Pullback i trend (kräver 200 handelsdagar): tillståndet sparas för valideringen, nivåerna vid träff.
+        o, h, lo, c = pullback.adjusted(b)
+        i = len(b) - 1
+        pb_state = pullback.state(o, h, lo, c, pullback.ema(c, 20), i)
+        pb_labels = pullback.labels(pb_state)
+        labels += pb_labels
+        atr = m["atr_pct"] / 100 * c[i] if m["atr_pct"] is not None else None
+        pb = {"state": pb_state, "levels": pullback.levels(h, lo, atr, i, pb_state) if pb_labels else None}
         companies.append({
             "ticker": t, "name": inst.namn, "sector": inst.sektor, "day": m["day"].isoformat(),
             **{k: m[k] for k in ("ma20_pct", "ma50_pct", "ma20_over_ma50", "rsi2", "rsi14", "atr_pct", "volume_ratio",
@@ -226,6 +240,7 @@ def build(today: date, now: datetime, instruments: dict[str, Instrument], bars: 
             "days_since_report": days_since,
             "report_verdict": rep["verdict"] if rep else None,
             "short_pct": short_pct.get(t),
+            "pullback": pb,
             "labels": labels,
         })
     companies.sort(key=lambda c: c["name"])
@@ -234,8 +249,9 @@ def build(today: date, now: datetime, instruments: dict[str, Instrument], bars: 
         "date": today.isoformat(),
         "as_of": as_of.isoformat() if as_of else None,
         "generated_at": now.isoformat(timespec="seconds"),
-        "thresholds": THRESHOLDS,
-        "labels": LABELS,
+        "thresholds": {**THRESHOLDS, "pullback": pullback.THRESHOLDS},
+        "labels": dict(LABELS),  # en kopia: filen får inte dela modulens dict
+        "strategies": STRATEGIES,
         "short_as_of": short_day,
         "companies": companies,
     }

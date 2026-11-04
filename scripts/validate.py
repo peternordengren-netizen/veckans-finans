@@ -904,7 +904,8 @@ def validate_swing(data: dict, instruments: dict[str, Instrument]) -> Result:
     if res.errors:
         return res
     _check_datetime(data["generated_at"], "generated_at", res)
-    for k, text in data["labels"].items():
+    names = [*data["labels"].items(), *((f"strategi {k}", s["name"]) for k, s in data.get("strategies", {}).items())]
+    for k, text in names:
         if re.search(r"\b(köp|sälj|kursmål|rekommend)", text, re.IGNORECASE):
             res.errors.append(f"etiketten {k!r} innehåller en uppmaning: {text!r}")
     seen = set()
@@ -921,12 +922,41 @@ def validate_swing(data: dict, instruments: dict[str, Instrument]) -> Result:
         rl = report_label(c["days_since_report"], c["report_verdict"], data["thresholds"])
         if rl:
             expected.append(rl)
+        if "pullback" in c:
+            _check_pullback(c, data["thresholds"].get("pullback"), where, expected, res)
         if sorted(c["labels"]) != sorted(expected):
             res.errors.append(f"{where}: etiketterna {c['labels']} stämmer inte med måtten (väntat {expected})")
         unknown = set(c["labels"]) - set(data["labels"])
         if unknown:
             res.errors.append(f"{where}: okända etiketter {sorted(unknown)}")
     return res
+
+
+def _check_pullback(c: dict, th: dict | None, where: str, expected: list[str], res: Result) -> None:
+    """Pullback i trend: etiketten räknas om ur det sparade tillståndet (scripts/pullback.py), och nivåerna
+    ska finnas vid träff och hänga ihop (stopp < referens, 2R/3R = referens + 2/3 × R, trigger = high)."""
+    import pullback
+
+    pb = c["pullback"]
+    labels = pullback.labels(pb["state"], th or pullback.THRESHOLDS)
+    expected += labels
+    lv = pb["levels"]
+    if bool(labels) != (lv is not None):
+        res.errors.append(f"{where}: pullback-nivåerna ska finnas om och endast om etiketten finns")
+        return
+    if lv is None:
+        return
+    risk = lv["ref"] - lv["stop"]
+    if risk <= 0:
+        res.errors.append(f"{where}: stoppet {lv['stop']} ligger inte under referensnivån {lv['ref']}")
+    for key, k in (("r2", 2), ("r3", 3)):
+        if abs(lv[key] - (lv["ref"] + k * risk)) > 1e-3:
+            res.errors.append(f"{where}: {key} {lv[key]} ≠ referens + {k}R")
+    sig = pullback.signal(pb["state"], th or pullback.THRESHOLDS)
+    if lv["signal"] != sig or (sig and lv["trigger"] != pb["state"]["high"]) or (not sig and lv["trigger"] is not None):
+        res.errors.append(f"{where}: vändsignal eller triggernivå stämmer inte med gårdagens candle")
+    if lv["stop"] > lv["level_value"] + 1e-9:
+        res.errors.append(f"{where}: stoppet ligger över MA-nivån")
 
 
 def validate_signals(data: dict, expected_week: str | None, instruments: dict[str, Instrument]) -> Result:

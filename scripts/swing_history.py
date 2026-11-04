@@ -13,6 +13,11 @@ oktober 2026) och räknas på reaktionsdagen: få fall, visas med antal.
 Ett 95-procentsintervall (±) räknas som om fallen vore oberoende; de infaller ofta samma dagar, så den
 verkliga osäkerheten är större.
 
+Pullback i trend (scripts/pullback.py): varje dag med etiketten "Rekyl i trend" eller "Rekyl med vändsignal"
+under samma år följs fram till att 2R eller stoppet nås (högst 60 handelsdagar), ett fall i taget per bolag.
+Andelen 2R först och stopp först räknas på de avgjorda fallen, med snittresultat efter courtage 0,2 % per affär.
+Dagsdatan hämtas med öppningskurser i samma batchanrop.
+
 Användning:
     python scripts/swing_history.py                    # hämtar dagsdata (ett batchanrop till Yahoo)
     python scripts/swing_history.py --cache bars.pkl   # återanvänder en sparad hämtning
@@ -33,6 +38,7 @@ from zoneinfo import ZoneInfo
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
+import pullback  # noqa: E402
 from prices import INDEX_TICKER  # noqa: E402
 from signals import yahoo_bars  # noqa: E402
 from swing import LABELS, SWING_DIR, THRESHOLDS, latest_reports, reaction_day, report_label, series, technical_labels  # noqa: E402
@@ -40,7 +46,8 @@ from validate import load_instruments  # noqa: E402
 
 STOCKHOLM = ZoneInfo("Europe/Stockholm")
 TEST_DAYS = 252
-FETCH_DAYS = 520
+# 200 dagars MA (Pullback i trend) ska finnas redan vid årets början: cirka 200 + 252 handelsdagar.
+FETCH_DAYS = 760
 HORIZONS = (2, 5)
 
 
@@ -60,6 +67,7 @@ def build(bars: dict, instruments: dict, today: date, results_dir: Path | None =
     start_day, end_day = days[max(0, end_i - TEST_DAYS + 1)], days[end_i]
     base: dict[int, list[float]] = defaultdict(list)
     per_label: dict[str, dict[int, list[float]]] = {k: defaultdict(list) for k in LABELS}
+    pb_cases: dict[str, list[dict]] = {k: [] for k in pullback.LABELS}
     reports = latest_reports(today, results_dir) if results_dir else latest_reports(today)
     report_days: dict[str, date] = {}
     for t, r in reports.items():
@@ -72,7 +80,19 @@ def build(bars: dict, instruments: dict, today: date, results_dir: Path | None =
         closes = [x.adj_close for x in b]
         rday = report_days.get(t)
         reacted = False
+        o, h, lo, c = pullback.adjusted(b)
+        e20 = pullback.ema(c, 20)
+        busy_until = -1  # ett pullback-fall i taget per bolag
         for i, m in enumerate(ms):
+            # Pullback i trend: utfall mot stopp och 2R, oberoende av indexjämförelsen nedan (som kräver 5 dagar framåt).
+            if m is not None and start_day <= m["day"] <= end_day and i > busy_until:
+                st = pullback.state(o, h, lo, c, e20, i)
+                pls = pullback.labels(st)
+                if pls:
+                    stop = pullback.stop_level(h, lo, i, pullback.touched(st)[1])
+                    case = pullback.simulate(o, h, lo, i, st, stop)
+                    pb_cases[pls[0]].append(case)
+                    busy_until = case["end"]
             if m is None or not start_day <= m["day"] <= end_day or i + max(HORIZONS) >= len(b):
                 continue
             fwd = {}
@@ -83,7 +103,7 @@ def build(bars: dict, instruments: dict, today: date, results_dir: Path | None =
                 fwd[k] = (closes[i + k] / closes[i] - 1) - (idx[dk] / idx[d0] - 1)
             if len(fwd) < len(HORIZONS):
                 continue
-            labels = technical_labels(m)
+            labels = technical_labels(m) + pullback.labels(pullback.state(o, h, lo, c, e20, i))
             # Rapportetiketten räknas en gång per rapport, på reaktionsdagen (dag 0).
             if rday and not reacted and m["day"] >= rday:
                 reacted = True
@@ -103,6 +123,12 @@ def build(bars: dict, instruments: dict, today: date, results_dir: Path | None =
                   "stängning), jämfört med alla aktie-dagar. Dagens bevakningslista, bara aktier i kronor, utan "
                   "courtage och spread. Rapportetiketterna bygger på rapportutfallen sedan oktober 2026.",
         "base": {str(k): _stats(base.get(k, [])) for k in HORIZONS},
+        # Pullback i trend: hur ofta 2R nåddes före stoppet och tvärtom, efter courtage (scripts/pullback.py).
+        "pullback": {
+            "thresholds": pullback.THRESHOLDS,
+            "labels": {k: pullback.summarize(v) for k, v in pb_cases.items()},
+            "all": pullback.summarize([x for v in pb_cases.values() for x in v]),
+        },
         "labels": {lbl: {str(k): _stats(per_label[lbl].get(k, [])) for k in HORIZONS} for lbl in LABELS},
     }
 
