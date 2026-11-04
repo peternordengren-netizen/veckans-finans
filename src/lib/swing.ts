@@ -79,7 +79,7 @@ export function riskText(pct: number | null, atr: number | null): string {
 /** Andel av de avgjorda fallen: "48,2 % (27 av 56)", "–" utan avgjorda; "(för få fall)" under MIN_CASES. */
 export function decidedShareText(n: number, decided: number): string {
   if (decided === 0) return "–";
-  const share = `${pctFmt.format((n / decided) * 100)} % (${n} av ${decided})`;
+  const share = `${pctFmt.format((n / decided) * 100)} % (${n.toLocaleString("sv-SE")} av ${decided.toLocaleString("sv-SE")})`;
   return decided < MIN_CASES ? `${share}, för få fall` : share;
 }
 

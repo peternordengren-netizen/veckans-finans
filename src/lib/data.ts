@@ -140,6 +140,14 @@ export interface SwingView {
       thresholds: { fee_pct: number; max_days: number; trigger_days: number };
       labels: Record<string, PullbackSummary>;
       all: PullbackSummary;
+      /** Samma fall med marknadsfilter (indexet över sitt 50- och 200-dagars MA); saknas i äldre filer. */
+      market_filter?: {
+        description: string;
+        days_up: number;
+        days: number;
+        labels: Record<string, PullbackSummary>;
+        all: PullbackSummary;
+      };
     };
   } | null;
 }

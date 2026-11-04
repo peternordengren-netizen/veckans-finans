@@ -235,3 +235,20 @@ def test_historiken_har_pullback():
     assert set(pb["labels"]) == {"rekyl-i-trend", "rekyl-vandsignal"}
     assert pb["thresholds"]["fee_pct"] == 0.2 and pb["all"]["cases"] >= 0
     assert set(hist["labels"]) >= {"rekyl-i-trend", "rekyl-vandsignal"}
+
+
+def test_marknadsfilter():
+    """Indexet över sitt 50- och 200-dagars MA: stigande index uppfyller filtret, fallande inte; dagar utan 200
+    dagars historik saknas."""
+    up = swing_history.market_filter(make_bars([1000.0 + i for i in range(260)]))
+    down = swing_history.market_filter(make_bars([2000.0 - i for i in range(260)]))
+    assert len(up) == 61 and all(up.values())
+    assert not any(down.values())
+    # Med fallande index blir inga fall kvar med filtret; utan filter finns de som förut.
+    n = 500
+    bars = {"^OMXSPI": make_bars([3000.0 - i for i in range(n)]), "ALFA.ST": make_ohlc_trend_with_pullback(),
+            "BETA.ST": make_bars([600.0 - i for i in range(n)])}
+    hist = swing_history.build(bars, INSTRUMENTS, date(2028, 1, 1))
+    mf = hist["pullback"]["market_filter"]
+    assert mf["all"]["cases"] == 0 and mf["days_up"] == 0
+    assert hist["pullback"]["all"]["cases"] >= mf["all"]["cases"]

@@ -60,6 +60,17 @@ def _stats(values: list[float]) -> dict:
             "mean": round(sum(values) / n, 5)}
 
 
+def market_filter(index_bars: list) -> dict[date, bool]:
+    """Per dag: ligger indexets (justerade) stängning över både 50- och 200-dagars MA? Dagar utan 200 dagars
+    historik saknas (räknas som inte uppfyllt)."""
+    closes = [b.adj_close for b in index_bars]
+    out = {}
+    for i in range(199, len(closes)):
+        ma50, ma200 = sum(closes[i - 49:i + 1]) / 50, sum(closes[i - 199:i + 1]) / 200
+        out[index_bars[i].day] = closes[i] > ma50 and closes[i] > ma200
+    return out
+
+
 def build(bars: dict, instruments: dict, today: date, results_dir: Path | None = None) -> dict:
     idx = {b.day: b.adj_close for b in bars.get(INDEX_TICKER, [])}
     days = sorted(idx)
@@ -68,6 +79,9 @@ def build(bars: dict, instruments: dict, today: date, results_dir: Path | None =
     base: dict[int, list[float]] = defaultdict(list)
     per_label: dict[str, dict[int, list[float]]] = {k: defaultdict(list) for k in LABELS}
     pb_cases: dict[str, list[dict]] = {k: [] for k in pullback.LABELS}
+    # Marknadsfilter: bara fall när indexet vid rekyldagens stängning ligger över sitt 50- och 200-dagars MA.
+    market_up = market_filter(bars.get(INDEX_TICKER, []))
+    pb_filtered: dict[str, list[dict]] = {k: [] for k in pullback.LABELS}
     reports = latest_reports(today, results_dir) if results_dir else latest_reports(today)
     report_days: dict[str, date] = {}
     for t, r in reports.items():
@@ -82,17 +96,23 @@ def build(bars: dict, instruments: dict, today: date, results_dir: Path | None =
         reacted = False
         o, h, lo, c = pullback.adjusted(b)
         e20 = pullback.ema(c, 20)
-        busy_until = -1  # ett pullback-fall i taget per bolag
+        # Ett pullback-fall i taget per bolag, räknat var för sig utan och med marknadsfilter (ett bortfiltrerat
+        # fall ska inte spärra nästa fall som klarar filtret).
+        busy_until, busy_filtered = -1, -1
         for i, m in enumerate(ms):
             # Pullback i trend: utfall mot stopp och 2R, oberoende av indexjämförelsen nedan (som kräver 5 dagar framåt).
-            if m is not None and start_day <= m["day"] <= end_day and i > busy_until:
+            if m is not None and start_day <= m["day"] <= end_day and (i > busy_until or i > busy_filtered):
                 st = pullback.state(o, h, lo, c, e20, i)
                 pls = pullback.labels(st)
                 if pls:
                     stop = pullback.stop_level(h, lo, i, pullback.touched(st)[1])
                     case = pullback.simulate(o, h, lo, i, st, stop)
-                    pb_cases[pls[0]].append(case)
-                    busy_until = case["end"]
+                    if i > busy_until:
+                        pb_cases[pls[0]].append(case)
+                        busy_until = case["end"]
+                    if i > busy_filtered and market_up.get(m["day"], False):
+                        pb_filtered[pls[0]].append(case)
+                        busy_filtered = case["end"]
             if m is None or not start_day <= m["day"] <= end_day or i + max(HORIZONS) >= len(b):
                 continue
             fwd = {}
@@ -128,6 +148,14 @@ def build(bars: dict, instruments: dict, today: date, results_dir: Path | None =
             "thresholds": pullback.THRESHOLDS,
             "labels": {k: pullback.summarize(v) for k, v in pb_cases.items()},
             "all": pullback.summarize([x for v in pb_cases.values() for x in v]),
+            "market_filter": {
+                "description": "Bara fall när OMX Stockholm PI vid rekyldagens stängning låg över sitt 50- och "
+                               "200-dagars glidande medelvärde.",
+                "days_up": sum(1 for d, up in market_up.items() if up and start_day <= d <= end_day),
+                "days": sum(1 for d in market_up if start_day <= d <= end_day),
+                "labels": {k: pullback.summarize(v) for k, v in pb_filtered.items()},
+                "all": pullback.summarize([x for v in pb_filtered.values() for x in v]),
+            },
         },
         "labels": {lbl: {str(k): _stats(per_label[lbl].get(k, [])) for k in HORIZONS} for lbl in LABELS},
     }

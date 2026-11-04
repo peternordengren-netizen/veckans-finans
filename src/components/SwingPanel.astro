@@ -39,12 +39,12 @@ const columns = [
   { key: "labels", label: "Etiketter", type: "text" },
   { key: "ma20", label: "Mot 20 d MA", type: "num" },
   { key: "ma50", label: "Mot 50 d MA", type: "num" },
-  { key: "rsi2", label: "RSI(2)", type: "num" },
-  { key: "rsi14", label: "RSI(14)", type: "num" },
+  { key: "rsi2", label: "RSI(2)", type: "num", nopb: true },
+  { key: "rsi14", label: "RSI(14)", type: "num", nopb: true },
   { key: "atr", label: "ATR(14)", type: "num", title: "Genomsnittlig daglig rörelse, i procent av kursen" },
-  { key: "volume", label: "Omsättning", type: "num", title: "Senaste dagen mot snittet för de 20 dagarna före" },
+  { key: "volume", label: "Omsättning", type: "num", nopb: true, title: "Senaste dagen mot snittet för de 20 dagarna före" },
   { key: "report", label: "Sedan rapport", type: "num" },
-  { key: "short", label: "Blankning", type: "num", title: "Sammanlagd blankning enligt Finansinspektionen" },
+  { key: "short", label: "Blankning", type: "num", nopb: true, title: "Sammanlagd blankning enligt Finansinspektionen" },
   // Strategin Pullback i trend: visas bara när strategin är vald i rullistan.
   { key: "pb-signal", label: "Vändsignal", type: "text", pb: true, title: "Gårdagens candle och nivån rekylen nådde" },
   { key: "pb-ref", label: "Referens", type: "num", pb: true, title: "Triggernivån (gårdagens high) vid vändsignal, annars gårdagens stängning" },
@@ -174,7 +174,7 @@ const columns = [
           <tr>
             {
               columns.map((c) => (
-                <th scope="col" class:list={[`col-${c.key}`, "pb" in c && "col-pb"]} data-key={c.key} data-type={c.type} aria-sort="none">
+                <th scope="col" class:list={[`col-${c.key}`, "pb" in c && "col-pb", "nopb" in c && "col-nopb"]} data-key={c.key} data-type={c.type} aria-sort="none">
                   <button type="button" title={"title" in c ? c.title : undefined}>{c.label}</button>
                 </th>
               ))
@@ -201,25 +201,28 @@ const columns = [
                 <td class:list={["num", r.ma50_pct > 0 ? "pos" : r.ma50_pct < 0 ? "neg" : ""]} data-v={r.ma50_pct}>
                   {signedPct(r.ma50_pct)}
                 </td>
-                <td class="num" data-v={v(r.rsi2)}>{num(r.rsi2, 0)}</td>
-                <td class="num" data-v={v(r.rsi14)}>{num(r.rsi14, 0)}</td>
+                <td class="num col-nopb" data-v={v(r.rsi2)}>{num(r.rsi2, 0)}</td>
+                <td class="num col-nopb" data-v={v(r.rsi14)}>{num(r.rsi14, 0)}</td>
                 <td class="num" data-v={v(r.atr_pct)}>{r.atr_pct === null ? "–" : `${num(r.atr_pct)} %`}</td>
-                <td class="num" data-v={v(r.volume_ratio)}>{r.volume_ratio === null ? "–" : `${num(r.volume_ratio)}×`}</td>
+                <td class="num col-nopb" data-v={v(r.volume_ratio)}>{r.volume_ratio === null ? "–" : `${num(r.volume_ratio)}×`}</td>
                 <td class="num report" data-v={v(r.days_since_report)}>{reportText(r.days_since_report, r.report_verdict)}</td>
-                <td class="num" data-v={v(r.short_pct)}>{r.short_pct === null ? "–" : `${num(r.short_pct, 2)} %`}</td>
+                <td class="num col-nopb" data-v={v(r.short_pct)}>{r.short_pct === null ? "–" : `${num(r.short_pct, 2)} %`}</td>
                 {(() => {
                   const lv = r.labels.some((l) => pbLabels.includes(l)) ? (r.pullback?.levels ?? null) : null;
                   return (
                     <>
-                      <td class="col-pb" data-v={lv ? `${lv.signal ?? ""} ${lv.level}` : ""}>
-                        {lv ? `${signalText(lv.signal)}, vid ${levelText(lv.level)}` : "–"}
+                      <td class="col-pb wrap" data-v={lv ? `${lv.signal ?? ""} ${lv.level}` : ""}>
+                        {lv ? (lv.signal ? `${signalText(lv.signal)}, vid ${levelText(lv.level)}` : `Vid ${levelText(lv.level)}`) : "–"}
                       </td>
                       <td class="num col-pb" data-v={v(lv?.ref ?? null)}>
                         {priceText(lv?.ref)}
                         {lv && lv.trigger !== null && <span class="sub">trigger</span>}
                       </td>
                       <td class="num col-pb" data-v={v(lv?.stop ?? null)}>{priceText(lv?.stop)}</td>
-                      <td class="num col-pb" data-v={v(lv?.risk_pct ?? null)}>{lv ? riskText(lv.risk_pct, lv.risk_atr) : "–"}</td>
+                      <td class="num col-pb" data-v={v(lv?.risk_pct ?? null)}>
+                        {lv ? riskText(lv.risk_pct, null) : "–"}
+                        {lv && lv.risk_atr !== null && <span class="sub">{riskText(lv.risk_atr, null).replace(" %", " ATR")}</span>}
+                      </td>
                       <td class="num col-pb" data-v={v(lv?.top ?? null)}>{priceText(lv?.top)}</td>
                       <td class="num col-pb" data-v={v(lv?.r2 ?? null)}>{priceText(lv?.r2)}</td>
                       <td class="num col-pb" data-v={v(lv?.r3 ?? null)}>{priceText(lv?.r3)}</td>
@@ -245,6 +248,15 @@ const columns = [
           och ej utlösta (triggernivån nåddes inte inom {pbHist.thresholds.trigger_days} dagar) räknas inte in. Fallen
           infaller ofta samma dagar och är inte oberoende. Historiken säger inget om hur det går nästa gång.
         </p>
+        {
+          pbHist.market_filter && (
+            <p class="note">
+              <strong>Med marknadsfilter:</strong> bara fall när OMX Stockholm PI vid rekyldagens stängning låg över sitt 50-
+              och 200-dagars glidande medelvärde ({pbHist.market_filter.days_up} av {pbHist.market_filter.days} handelsdagar).
+              Ett fall i taget per bolag räknas för sig med filtret.
+            </p>
+          )
+        }
         <div class="hist-wrap">
           <table class="hist">
             <thead>
@@ -259,8 +271,16 @@ const columns = [
               </tr>
             </thead>
             <tbody>
-              {[...pbLabels.map((l) => ({ name: swing.labels[l], s: pbHist.labels[l], all: false })),
-                { name: "Båda", s: pbHist.all, all: true }].map(({ name, s, all }) =>
+              {[
+                ...pbLabels.map((l) => ({ name: swing.labels[l], s: pbHist.labels[l], all: false })),
+                { name: "Båda", s: pbHist.all, all: true },
+                ...(pbHist.market_filter
+                  ? [
+                      ...pbLabels.map((l) => ({ name: `${swing.labels[l]}, med marknadsfilter`, s: pbHist.market_filter!.labels[l], all: false })),
+                      { name: "Båda, med marknadsfilter", s: pbHist.market_filter.all, all: true },
+                    ]
+                  : []),
+              ].map(({ name, s, all }) =>
                 s && (
                   <tr class:list={{ base: all }}>
                     <th scope="row">{name}</th>
@@ -558,10 +578,19 @@ const columns = [
   .swing[data-strategy="pullback"] .col-pb {
     display: table-cell;
   }
+  /* Med strategin vald döljs måtten strategin inte använder, så att tabellen ryms. */
+  .swing[data-strategy="pullback"] .col-nopb {
+    display: none;
+  }
   .sub {
     display: block;
     font-size: 0.75rem;
     color: var(--muted);
+  }
+  td.wrap {
+    white-space: normal;
+    min-width: 7rem;
+    max-width: 9rem;
   }
   .legend-head {
     margin: 10px 0 2px;

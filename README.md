@@ -404,6 +404,51 @@ Testet 20 okt 2025 – 21 okt 2026 gav ingen etikett som klart slår alla dagar:
 finns sedan oktober 2026. Historiken räknas om i måndagens veckokörning (`run_weekly.ps1`), så rapportetiketterna
 får fler fall efter hand.
 
+#### Strategin "Pullback i trend" (`scripts/pullback.py`)
+
+Strategin är ett val under "Strategi" i flikens rullista. Den visar bolagen med någon av strategins två etiketter och
+strategins kolumner. Mått som strategin inte använder (RSI, omsättning, blankning) döljs då, så att tabellen ryms.
+Reglerna gäller förra handelsdagen, med kurser justerade som övriga mått. Öppningskursen hämtas i samma batchanrop som
+resten av dagsdatan.
+
+1. **Trend:** stängningen över 50 och 200 dagars MA, och 50 dagars MA över 200 dagars MA. Kräver 200 handelsdagar.
+2. **Rekyl i trend:** dagens low högst 1 % från 20 dagars EMA eller 50 dagars MA, och stängningen över samma nivå.
+   Når rekylen båda nivåerna används den lägre.
+3. **Rekyl med vändsignal:** dessutom en hammer eller bullish engulfing. Triggernivån är dagens high.
+   - Hammer: nedre skuggan minst 2 × kroppen, och övre skuggan högst 25 % av dagens spann.
+   - Bullish engulfing: förra dagen röd och dagen grön, och dagens kropp omsluter förra dagens.
+4. **Nivåer per bolag:**
+   - Referens: triggernivån vid vändsignal, annars stängningen.
+   - Stopp: lägsta low sedan den högsta toppen de senaste 10 dagarna, eller MA-nivån om den ligger lägre.
+   - Avstånd till stoppet (1 R) i procent och i ATR(14).
+   - Föregående topp: högsta high på 60 dagar.
+   - 2R och 3R: referensen plus två respektive tre R.
+5. **Historik** (`history.json` → `pullback`): varje dag med etiketten det senaste året, ett fall i taget per bolag.
+   - Start: nästa dags öppning. Vid vändsignal i stället när triggernivån nås inom 3 dagar, annars räknas fallet som
+     ej utlöst.
+   - Avgjort när 2R eller stoppet nås. Nås båda samma dag räknas stoppet först.
+   - Utan avgörande efter 60 dagar räknas fallet som öppet.
+   - Courtage 0,2 % per affär, två per fall. Spread och glidning ingår inte.
+   - Samma fall räknas också med marknadsfilter: bara när OMX Stockholm PI ligger över sitt 50- och 200-dagars MA.
+
+Etiketterna och strategins namn valideras som övriga etiketter, utan uppmanande ord. Nivåerna kontrolleras inbördes:
+stoppet ligger under referensen och högst på MA-nivån, 2R och 3R stämmer, och triggernivån är dagens high.
+
+Testet 24 okt 2025 – 27 okt 2026. Med 2R måste mer än 33,3 % av fallen nå 2R först för att gå jämnt ut före courtage.
+
+| | Avgjorda fall | 2R före stoppet | Snitt efter courtage |
+|---|---|---|---|
+| Rekyl i trend | 1 497 | 32,6 % (± 2,4) | −0,18 R |
+| Rekyl med vändsignal | 190 | 36,8 % (± 6,9) | +0,08 R |
+| Båda | 1 687 | 33,1 % | −0,14 R |
+| Båda, med marknadsfilter | 1 384 | 31,3 % | −0,19 R |
+| Rekyl med vändsignal, med marknadsfilter | 158 | 34,2 % (± 7,4) | +0,01 R |
+
+Marknadsfiltret gjorde utfallet sämre. Indexet låg över båda medelvärdena 187 av 252 dagar, så filtret tog bara bort
+ungefär en fjärdedel av fallen, och de fallen gick bättre än genomsnittet. Vändsignalen ligger över jämviktsnivån, men
+osäkerheten är för stor för att skilja den från rekyler utan vändsignal. Fallen är dessutom inte oberoende, eftersom
+många infaller samma dagar.
+
 ## Sidan (Astro)
 
 Kräver Node 22 eller senare.
