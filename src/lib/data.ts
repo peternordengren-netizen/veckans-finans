@@ -124,7 +124,7 @@ export interface SwingView {
   thresholds: {
     volume_ratio: number; rsi2_low: number; rsi2_high: number; report_days: number;
     /** Pullback i trend (saknas i äldre filer). */
-    pullback?: { touch_pct: number; hammer_shadow: number; hammer_upper: number; stop_days: number; top_days: number; trigger_days: number; max_days: number; fee_pct: number };
+    pullback?: { touch_pct: number; hammer_shadow: number; hammer_upper: number; stop_days: number; top_days: number; trigger_days: number; max_days: number };
   };
   labels: Record<string, string>;
   /** Strategier i rullistan: namn och etiketterna som räknas som träff (saknas i äldre filer). */
@@ -137,7 +137,7 @@ export interface SwingView {
     labels: Record<string, Record<string, SwingStat>>;
     /** Pullback i trend: 2R före stoppet och tvärtom (saknas i äldre filer). */
     pullback?: {
-      thresholds: { fee_pct: number; max_days: number; trigger_days: number };
+      thresholds: { max_days: number; trigger_days: number };
       labels: Record<string, PullbackSummary>;
       all: PullbackSummary;
       /** Samma fall med marknadsfilter (indexet över sitt 50- och 200-dagars MA); saknas i äldre filer. */
@@ -761,4 +761,39 @@ export function weekLabel(week: string): string {
 
 export function formatDate(iso: string): string {
   return new Date(`${iso}T12:00:00`).toLocaleDateString("sv-SE", { day: "numeric", month: "long" });
+}
+
+const BOLLINGER_DIR = IS_MOCK ? join(DATA, "mock", "bollinger") : join(DATA, "bollinger");
+
+export interface BollingerRow {
+  ticker: string;
+  name: string;
+  price: number;
+  upper: number;
+  /** Kursen mot övre bandet i procent (≥ 0 vid eller över, negativ inom 1 % under). */
+  vs_upper_pct: number;
+}
+export interface BollingerCheck {
+  date: string;
+  checked_at: string;
+  delay_note: string;
+  thresholds: { period: number; width: number; near_pct: number };
+  checked: number;
+  missing: number;
+  over: BollingerRow[];
+  near: BollingerRow[];
+}
+
+/** Senaste Bollingerkontrollen (data/bollinger/<datum>-<hhmm>.json, scripts/bollinger.py), eller null. */
+export function loadLatestBollinger(): BollingerCheck | null {
+  if (!existsSync(BOLLINGER_DIR)) return null;
+  const files = readdirSync(BOLLINGER_DIR).filter((f) => /^\d{4}-\d{2}-\d{2}-\d{4}\.json$/.test(f)).sort();
+  if (files.length === 0) return null;
+  const path = join(BOLLINGER_DIR, files[files.length - 1]);
+  try {
+    return readJson<BollingerCheck>(path);
+  } catch (err) {
+    console.warn(`[veckans-finans] kunde inte läsa ${path}, visar sidan utan Bollingerkontroll:`, err);
+    return null;
+  }
 }

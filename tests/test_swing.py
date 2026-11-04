@@ -168,13 +168,13 @@ def test_simulering_2r_stopp_och_ej_utlost():
     lo = [99.5, 99.5, 100.5, 102.5]
     case = pullback.simulate(o, h, lo, 0, st, stop=98.0)
     assert case["outcome"] == "2R" and case["end"] == 3
-    assert case["net_pct"] == round((104 / 100 - 1) * 100 - 0.4, 3) and case["risk_pct"] == 2.0
+    assert case["net_pct"] == round((104 / 100 - 1) * 100, 3) and case["risk_pct"] == 2.0
     # Stoppet först; nås båda samma dag räknas stoppet.
     case = pullback.simulate([100, 100, 99], [101, 101, 104.5], [99.5, 99.5, 97.0], 0, st, stop=98.0)
-    assert case["outcome"] == "stopp" and case["net_pct"] == round((98 / 100 - 1) * 100 - 0.4, 3)
+    assert case["outcome"] == "stopp" and case["net_pct"] == round((98 / 100 - 1) * 100, 3)
     # Öppnar under stoppet efter start: öppningen gäller.
     case = pullback.simulate([100, 100, 96], [101, 101, 97], [99.5, 99.5, 95.5], 0, st, stop=98.0)
-    assert case["net_pct"] == round((96 / 100 - 1) * 100 - 0.4, 3)
+    assert case["net_pct"] == round((96 / 100 - 1) * 100, 3)
     # Vändsignal: triggernivån (gårdagens high 101) nås inte inom 3 dagar -> ej utlöst.
     hammer = {**st, "open": 100.6, "high": 101.0, "low": 99.6, "close": 100.9}
     case = pullback.simulate([100, 100.5, 100.4, 100.3, 100.2], [101, 100.9, 100.8, 100.7, 102],
@@ -233,7 +233,7 @@ def test_historiken_har_pullback():
     hist = swing_history.build(bars, INSTRUMENTS, date(2028, 1, 1))
     pb = hist["pullback"]
     assert set(pb["labels"]) == {"rekyl-i-trend", "rekyl-vandsignal"}
-    assert pb["thresholds"]["fee_pct"] == 0.2 and pb["all"]["cases"] >= 0
+    assert "fee_pct" not in pb["thresholds"] and pb["all"]["cases"] >= 0
     assert set(hist["labels"]) >= {"rekyl-i-trend", "rekyl-vandsignal"}
 
 

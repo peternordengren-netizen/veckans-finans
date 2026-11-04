@@ -8,7 +8,7 @@ export const MIN_CASES = 30;
 
 /** Etikettens färgklass: utbrott, RSI, trend eller rapport. */
 export function labelClass(label: string): string {
-  if (label.startsWith("utbrott")) return "breakout";
+  if (label.startsWith("utbrott") || label.startsWith("bollinger")) return "breakout";
   if (label.startsWith("rsi2")) return "rsi";
   if (label.startsWith("trend")) return "trend";
   if (label.startsWith("rekyl")) return "pullback";
@@ -83,7 +83,7 @@ export function decidedShareText(n: number, decided: number): string {
   return decided < MIN_CASES ? `${share}, för få fall` : share;
 }
 
-/** Snittresultat per avgjort fall efter courtage: "+0,4 % (+0,15 R)". */
+/** Snittresultat per avgjort fall (utan courtage): "+0,4 % (+0,15 R)". */
 export function netText(pct: number | null, r: number | null): string {
   if (pct === null) return "–";
   const s = (v: number, d: number) =>

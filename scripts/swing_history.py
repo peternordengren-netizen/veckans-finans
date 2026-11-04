@@ -15,7 +15,7 @@ verkliga osäkerheten är större.
 
 Pullback i trend (scripts/pullback.py): varje dag med etiketten "Rekyl i trend" eller "Rekyl med vändsignal"
 under samma år följs fram till att 2R eller stoppet nås (högst 60 handelsdagar), ett fall i taget per bolag.
-Andelen 2R först och stopp först räknas på de avgjorda fallen, med snittresultat efter courtage 0,2 % per affär.
+Andelen 2R först och stopp först räknas på de avgjorda fallen, med snittresultat utan courtage.
 Dagsdatan hämtas med öppningskurser i samma batchanrop.
 
 Användning:
@@ -143,7 +143,7 @@ def build(bars: dict, instruments: dict, today: date, results_dir: Path | None =
                   "stängning), jämfört med alla aktie-dagar. Dagens bevakningslista, bara aktier i kronor, utan "
                   "courtage och spread. Rapportetiketterna bygger på rapportutfallen sedan oktober 2026.",
         "base": {str(k): _stats(base.get(k, [])) for k in HORIZONS},
-        # Pullback i trend: hur ofta 2R nåddes före stoppet och tvärtom, efter courtage (scripts/pullback.py).
+        # Pullback i trend: hur ofta 2R nåddes före stoppet och tvärtom (scripts/pullback.py).
         "pullback": {
             "thresholds": pullback.THRESHOLDS,
             "labels": {k: pullback.summarize(v) for k, v in pb_cases.items()},

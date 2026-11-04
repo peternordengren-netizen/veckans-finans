@@ -13,6 +13,8 @@
 # - VeckansFinansEftermiddag: vardagar 17:45, kör scripts\run_update.ps1 -Scheduled. Samma väckning,
 #   högst en timme. Också vid inloggning och upplåsning (gör då bara något om dagens kursreaktion
 #   saknas eller är ofullständig).
+# - VeckansFinansBollinger: vardagar 09:20 och 13:20, kör scripts\run_bollinger.ps1 -Scheduled (utan Claude):
+#   Bollingerkontroll, Windows-notis och bygget. Inget på börsens stängda dagar eller utanför 09:00-17:30.
 # - Skrivbordsgenvägen "Uppdatera nu" kör scripts\run_update.ps1 -Open i ett synligt fönster.
 # Alla körs som den inloggade användaren, bara när hen är inloggad, utan förhöjd behörighet.
 # - Skrivbordsgenvägen "Veckans finans" kör scripts\open_site.ps1 dolt.
@@ -98,6 +100,23 @@ Register-ScheduledTask -TaskName "VeckansFinansEftermiddag" -Force `
     -Description "Veckans finans: eftermiddagsuppdatering (rapportutfall sedan morgonen med Claude Code om det finns nya rapporter, dagens kursreaktion), bygger sedan om sidan. Loggar i logs\updates\." `
     -Action $afternoonAction -Trigger @($afternoon, $atLogon, $atUnlock) `
     -Principal $Principal -Settings $afternoonSettings | Out-Null
+
+# Vardagar 09:20 och 13:20 lokal tid: Bollingerkontrollen under handelsdagen (run_bollinger.ps1 -Scheduled, utan
+# Claude). Samma väckning; skriptet gör ingenting på börsens stängda dagar eller utanför 09:00-17:30. Ingen
+# inloggnings-/upplåsningsutlösare: en missad kontroll tas inte igen senare under dagen. Högst 15 minuter.
+$bbMorning = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Monday, Tuesday, Wednesday, Thursday, Friday -At "09:20"
+$bbMorning.StartBoundary = (Get-Date "09:20").ToString("yyyy-MM-dd'T'HH:mm:ss")
+$bbMidday = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Monday, Tuesday, Wednesday, Thursday, Friday -At "13:20"
+$bbMidday.StartBoundary = (Get-Date "13:20").ToString("yyyy-MM-dd'T'HH:mm:ss")
+$bollingerSettings = New-ScheduledTaskSettingsSet -WakeToRun -StartWhenAvailable `
+    -ExecutionTimeLimit (New-TimeSpan -Minutes 15) -MultipleInstances IgnoreNew `
+    -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
+$bollingerAction = New-ScheduledTaskAction -Execute $Conhost -WorkingDirectory $Root `
+    -Argument "--headless `"$Ps`" -NoProfile -File `"$(Join-Path $Root 'scripts\run_bollinger.ps1')`" -Scheduled"
+Register-ScheduledTask -TaskName "VeckansFinansBollinger" -Force `
+    -Description "Veckans finans: Bollingerkontroll under handelsdagen (bolag vid eller nära övre bandet), Windows-notis och bygget av sidan. Utan Claude. Loggar i logs\bollinger\." `
+    -Action $bollingerAction -Trigger @($bbMorning, $bbMidday) `
+    -Principal $Principal -Settings $bollingerSettings | Out-Null
 
 $shell = New-Object -ComObject WScript.Shell
 # "Uppdatera nu": samma flöde direkt, i ett synligt fönster så att förloppet syns; öppnar sidan när den är klar.

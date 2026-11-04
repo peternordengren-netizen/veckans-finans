@@ -78,8 +78,7 @@
             "stop_days",
             "top_days",
             "trigger_days",
-            "max_days",
-            "fee_pct"
+            "max_days"
           ],
           "properties": {
             "touch_pct": {
@@ -104,7 +103,8 @@
               "type": "number"
             },
             "fee_pct": {
-              "type": "number"
+              "type": "number",
+              "description": "Courtage i äldre filer; räknas inte längre."
             }
           }
         }
@@ -335,6 +335,10 @@
                 }
               }
             }
+          },
+          "bb_upper_pct": {
+            "$ref": "#/$defs/num",
+            "description": "Stängningen mot övre Bollingerbandet i procent (saknas i äldre filer)."
           }
         }
       }

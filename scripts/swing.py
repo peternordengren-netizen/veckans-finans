@@ -20,6 +20,8 @@ Etiketter (LABELS, trösklar i THRESHOLDS):
   med respektive utan omsättning minst volume_ratio gånger snittet
 - "rsi2-under-10" / "rsi2-over-90"
 - "trend-upp": kurs över 20-dagars MA och 20-dagars över 50-dagars; "trend-ned" omvänt
+- "bollinger-ovre": stängningen vid eller över övre Bollingerbandet (20 dagars stängningar, 2 standardavvikelser;
+  bb_upper_pct = stängningen mot bandet i procent)
 - "efter-rapport-over" / "efter-rapport-under" / "efter-rapport": rapport inom report_days handelsdagar
   (reaktionsdagen räknas som dag 0), med utfallet mot förväntan för vinst per aktie där det finns
 - "rekyl-i-trend" / "rekyl-vandsignal": strategin "Pullback i trend" (scripts/pullback.py), med
@@ -42,6 +44,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import pullback  # noqa: E402
+from bollinger import upper_band  # noqa: E402
 from prices import INDEX_TICKER  # noqa: E402
 from signals import Bar, BarFetcher, yahoo_bars  # noqa: E402
 from validate import DATA_DIR, RAW_DIR, Instrument, load_instruments, validate_swing  # noqa: E402
@@ -64,6 +67,7 @@ LABELS = {
     "efter-rapport-over": "Efter rapport, över förväntan",
     "efter-rapport-under": "Efter rapport, under förväntan",
     "efter-rapport": "Efter rapport",
+    "bollinger-ovre": "Vid övre Bollingerband",
     **pullback.LABELS,
 }
 # Strategier i rullistan: namn och etiketterna som räknas som träff (scripts/pullback.py).
@@ -125,6 +129,8 @@ def series(bars: list[Bar]) -> list[dict | None]:
             "atr_pct": round(atr[i] / c[i] * 100, 2) if atr[i] is not None and c[i] else None,
             "volume_ratio": round(v[i] / avg_v, 2) if avg_v > 0 else None,
             "above_high20": c[i] > max(h[i - 20:i]),
+            # Gårdagens stängning mot övre Bollingerbandet (20 dagar, 2 standardavvikelser, scripts/bollinger.py).
+            "bb_upper_pct": round((c[i] / upper_band(c[:i + 1]) - 1) * 100, 2),
         })
     return out
 
@@ -142,6 +148,8 @@ def technical_labels(m: dict, th: dict = THRESHOLDS) -> list[str]:
         out.append("trend-upp")
     if m["ma20_pct"] < 0 and not m["ma20_over_ma50"]:
         out.append("trend-ned")
+    if m.get("bb_upper_pct") is not None and m["bb_upper_pct"] >= 0:  # saknas i äldre filer
+        out.append("bollinger-ovre")
     return out
 
 
@@ -235,7 +243,7 @@ def build(today: date, now: datetime, instruments: dict[str, Instrument], bars: 
         companies.append({
             "ticker": t, "name": inst.namn, "sector": inst.sektor, "day": m["day"].isoformat(),
             **{k: m[k] for k in ("ma20_pct", "ma50_pct", "ma20_over_ma50", "rsi2", "rsi14", "atr_pct", "volume_ratio",
-                                 "above_high20")},
+                                 "above_high20", "bb_upper_pct")},
             "report_published": rep["published"] if rep else None,
             "days_since_report": days_since,
             "report_verdict": rep["verdict"] if rep else None,

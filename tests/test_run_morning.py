@@ -57,3 +57,18 @@ def test_fran_0810_startar_flodet(tmp_path, now):
     assert "före 08:10" not in out
     log = next((tmp_path / "logs" / "morning").glob("*.log")).read_text(encoding="utf-8-sig")
     assert "Startar morning.py" in log  # i den tomma katalogen finns ingen morning.py, så den fallerar
+
+
+@pytest.mark.parametrize("now", ["2026-11-04 08:30", "2026-11-04 18:00"])
+def test_bollinger_utanfor_handelstid_gor_ingenting(tmp_path, now):
+    """run_bollinger.ps1 -Scheduled: en körning som tas igen utanför 09:00-17:30 gör ingenting."""
+    scripts = tmp_path / "scripts"
+    scripts.mkdir()
+    shutil.copy(ROOT / "scripts" / "run_bollinger.ps1", scripts)
+    p = subprocess.run(
+        ["powershell.exe", "-NoProfile", "-File", str(scripts / "run_bollinger.ps1"), "-Scheduled", "-Now", now],
+        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120,
+    )
+    assert p.returncode == 0
+    assert "utanför handelstid" in p.stdout
+    assert not (tmp_path / "logs").exists()

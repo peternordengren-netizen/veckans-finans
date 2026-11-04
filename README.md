@@ -391,6 +391,8 @@ dagsdata, utan extra hämtning, och skrivs till `data/swing/<datum>.json`, som �
 - utbrott över 20-dagarshögsta, med eller utan hög omsättning (≥ 2×)
 - RSI(2) under 10 eller över 90
 - trend upp eller ned (kurs, 20- och 50-dagars MA i ordning)
+- vid övre Bollingerband: gårdagens stängning vid eller över snittet av de 20 senaste stängningarna plus
+  2 standardavvikelser (`bb_upper_pct`)
 - efter rapport, över eller under förväntan, inom fem handelsdagar
 
 Tabellen kan sorteras och filtreras per etikett och har fast rubrikrad.
@@ -403,6 +405,22 @@ Testet 20 okt 2025 – 21 okt 2026 gav ingen etikett som klart slår alla dagar:
 47,3 % efter 5 dagar, ± 3,6 procentenheter. Rapportetiketterna har för få fall, eftersom utfall mot förväntan bara
 finns sedan oktober 2026. Historiken räknas om i måndagens veckokörning (`run_weekly.ps1`), så rapportetiketterna
 får fler fall efter hand.
+
+#### Bollinger under dagen (`scripts/bollinger.py`, `scripts/run_bollinger.ps1`)
+
+Uppgiften **VeckansFinansBollinger** kör vardagar 09:20 och 13:20, utan Claude.
+- Varje kontroll gör ett batchanrop till Yahoo för alla bolag i listan. Kurserna är fördröjda ca 15 minuter, och
+  det står i notisen och på sidan.
+- Övre bandet: snittet av de 20 senaste stängningskurserna plus 2 standardavvikelser (populationens), med den
+  aktuella kursen som den tjugonde.
+- Windows-notisen listar bolagen vid eller över bandet och, separat, de som ligger högst 1 % under. Ett klick
+  öppnar sidan.
+- Senaste kontrollen visas överst på startsidan, med tid (`data/bollinger/<datum>-<hhmm>.json`, git-ignorerad).
+- Inget körs på börsens stängda dagar eller utanför 09:00–17:30. En missad kontroll tas inte igen senare.
+- Logg i `logs/bollinger/`.
+
+Etiketten "Vid övre Bollingerband" ovan räknas på samma sätt men på gårdagens stängning. I historiken gick den
+bättre än index efter 5 dagar i 48,3 % av fallen, mot 47,1 % för alla dagar.
 
 #### Strategin "Pullback i trend" (`scripts/pullback.py`)
 
@@ -428,21 +446,21 @@ resten av dagsdatan.
      ej utlöst.
    - Avgjort när 2R eller stoppet nås. Nås båda samma dag räknas stoppet först.
    - Utan avgörande efter 60 dagar räknas fallet som öppet.
-   - Courtage 0,2 % per affär, två per fall. Spread och glidning ingår inte.
+   - Courtage, spread och glidning ingår inte.
    - Samma fall räknas också med marknadsfilter: bara när OMX Stockholm PI ligger över sitt 50- och 200-dagars MA.
 
 Etiketterna och strategins namn valideras som övriga etiketter, utan uppmanande ord. Nivåerna kontrolleras inbördes:
 stoppet ligger under referensen och högst på MA-nivån, 2R och 3R stämmer, och triggernivån är dagens high.
 
-Testet 24 okt 2025 – 27 okt 2026. Med 2R måste mer än 33,3 % av fallen nå 2R först för att gå jämnt ut före courtage.
+Testet 24 okt 2025 – 27 okt 2026, utan courtage. Med 2R måste mer än 33,3 % av fallen nå 2R först för att gå jämnt ut.
 
-| | Avgjorda fall | 2R före stoppet | Snitt efter courtage |
+| | Avgjorda fall | 2R före stoppet | Snitt per fall |
 |---|---|---|---|
-| Rekyl i trend | 1 497 | 32,6 % (± 2,4) | −0,18 R |
-| Rekyl med vändsignal | 190 | 36,8 % (± 6,9) | +0,08 R |
-| Båda | 1 687 | 33,1 % | −0,14 R |
-| Båda, med marknadsfilter | 1 384 | 31,3 % | −0,19 R |
-| Rekyl med vändsignal, med marknadsfilter | 158 | 34,2 % (± 7,4) | +0,01 R |
+| Rekyl i trend | 1 497 | 32,7 % (± 2,4) | −0,03 R |
+| Rekyl med vändsignal | 189 | 36,5 % (± 6,9) | +0,17 R |
+| Båda | 1 686 | 33,1 % | +0,00 R |
+| Båda, med marknadsfilter | 1 383 | 31,3 % | −0,05 R |
+| Rekyl med vändsignal, med marknadsfilter | 157 | 33,8 % (± 7,4) | +0,09 R |
 
 Marknadsfiltret gjorde utfallet sämre. Indexet låg över båda medelvärdena 187 av 252 dagar, så filtret tog bara bort
 ungefär en fjärdedel av fallen, och de fallen gick bättre än genomsnittet. Vändsignalen ligger över jämviktsnivån, men

@@ -19,8 +19,8 @@ Allt gäller den senaste handelsdagen i serien ("gårdagen" i morgonens fil).
    Start: nästa dags öppning; vid vändsignal i stället när triggernivån nås inom trigger_days dagar (till
    triggernivån, eller öppningen om den ligger över), annars "ej utlöst". Stopp och 2R räknas om från
    startkursen med samma stopp. Avgjort när 2R eller stoppet nås (nås båda samma dag räknas stoppet
-   först; öppnar dagen bortom nivån gäller öppningen); efter max_days dagar "öppet". Courtage fee_pct %
-   per affär (två per fall) dras från resultatet.
+   först; öppnar dagen bortom nivån gäller öppningen); efter max_days dagar "öppet". Resultatet räknas
+   utan courtage, spread och glidning.
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ from __future__ import annotations
 from signals import Bar
 
 THRESHOLDS = {"touch_pct": 1.0, "hammer_shadow": 2.0, "hammer_upper": 0.25, "stop_days": 10, "top_days": 60,
-              "trigger_days": 3, "max_days": 60, "fee_pct": 0.2}
+              "trigger_days": 3, "max_days": 60}
 LABELS = {"rekyl-i-trend": "Rekyl i trend", "rekyl-vandsignal": "Rekyl med vändsignal"}
 MIN_BARS = 200
 
@@ -155,7 +155,6 @@ def simulate(o: list[float], h: list[float], lo: list[float], i: int, p: dict, s
     if risk <= 0:  # öppnade under stoppet: inget fall
         return {"outcome": "ej utlöst", "net_pct": None, "risk_pct": None, "end": start}
     target = entry + 2 * risk
-    fee = 2 * th["fee_pct"]
     for j in range(start, min(n, start + th["max_days"])):
         # Ordningen inom en dag är okänd: nås stoppet samma dag som 2R (eller startdagen) räknas stoppet först.
         # Från dagen efter start gäller öppningen om den ligger bortom nivån.
@@ -163,17 +162,17 @@ def simulate(o: list[float], h: list[float], lo: list[float], i: int, p: dict, s
         hit_target = h[j] >= target
         if hit_stop:
             exit_px = min(o[j], stop) if j > start else stop
-            return {"outcome": "stopp", "net_pct": round((exit_px / entry - 1) * 100 - fee, 3),
+            return {"outcome": "stopp", "net_pct": round((exit_px / entry - 1) * 100, 3),
                     "risk_pct": risk / entry * 100, "end": j}
         if hit_target:
             exit_px = max(o[j], target) if j > start else target
-            return {"outcome": "2R", "net_pct": round((exit_px / entry - 1) * 100 - fee, 3),
+            return {"outcome": "2R", "net_pct": round((exit_px / entry - 1) * 100, 3),
                     "risk_pct": risk / entry * 100, "end": j}
     return {"outcome": "öppet", "net_pct": None, "risk_pct": None, "end": min(n - 1, start + th["max_days"] - 1)}
 
 
 def summarize(cases: list[dict]) -> dict:
-    """Antal per utfall, andelar av de avgjorda, och snittresultat efter courtage (procent och R)."""
+    """Antal per utfall, andelar av de avgjorda, och snittresultat (procent och R), utan courtage."""
     decided = [c for c in cases if c["outcome"] in ("2R", "stopp")]
     n2 = sum(c["outcome"] == "2R" for c in cases)
     ns = sum(c["outcome"] == "stopp" for c in cases)

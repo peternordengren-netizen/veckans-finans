@@ -38,6 +38,7 @@ test("dagar sedan rapport", () => {
 
 test("pullback i trend: texter", () => {
   assert.equal(labelClass("rekyl-vandsignal"), "pullback");
+  assert.equal(labelClass("bollinger-ovre"), "breakout");
   assert.ok(isPullbackLabel("rekyl-i-trend") && !isPullbackLabel("trend-upp"));
   assert.equal(priceText(195.234), "195,23");
   assert.equal(priceText(null), "–");

@@ -77,6 +77,10 @@ const columns = [
       <li><strong>RSI(2) under {num(t.rsi2_low, 0)} / över {num(t.rsi2_high, 0)}:</strong> kraftig nedgång respektive uppgång de senaste dagarna.</li>
       <li><strong>Trend upp / ned:</strong> kursen över (under) 20 dagars MA, som ligger över (under) 50 dagars MA.</li>
       <li>
+        <strong>Vid övre Bollingerband:</strong> gårdagens stängning ligger vid eller över det övre Bollingerbandet,
+        snittet av de 20 senaste stängningskurserna (gårdagens inräknad) plus 2 standardavvikelser.
+      </li>
+      <li>
         <strong>Efter rapport:</strong> rapport inom {t.report_days} handelsdagar (reaktionsdagen räknas som dag 0), med
         utfallet mot förväntan för vinst per aktie där det finns.
       </li>
@@ -129,8 +133,7 @@ const columns = [
               Fallet startar på nästa dags öppning; vid vändsignal i stället när triggernivån nås inom {pt.trigger_days}
               {" "}handelsdagar, annars räknas det som ej utlöst. Det avgörs när 2R eller stoppet nås. Nås båda samma dag räknas
               stoppet först, och öppnar en dag bortom nivån gäller öppningen. Efter {pt.max_days} handelsdagar utan
-              avgörande räknas fallet som öppet. Courtage {num(pt.fee_pct)} % per affär, två per fall, dras från
-              resultatet. Spread och glidning ingår inte.
+              avgörande räknas fallet som öppet. Courtage, spread och glidning ingår inte.
             </li>
           </ul>
         </>
@@ -243,7 +246,7 @@ const columns = [
         <h3 id="swing-pullback">Pullback i trend: 2R eller stoppet först</h3>
         <p class="note">
           Varje dag med etiketten {shortDate(h.period.start)} {h.period.start.slice(0, 4)} – {shortDate(h.period.end)}{" "}
-          {h.period.end.slice(0, 4)}, ett fall i taget per bolag, med courtage {num(pbHist.thresholds.fee_pct)} % per affär.
+          {h.period.end.slice(0, 4)}, ett fall i taget per bolag, utan courtage.
           Andelarna gäller de avgjorda fallen; öppna fall (inget avgörande inom {pbHist.thresholds.max_days} handelsdagar)
           och ej utlösta (triggernivån nåddes inte inom {pbHist.thresholds.trigger_days} dagar) räknas inte in. Fallen
           infaller ofta samma dagar och är inte oberoende. Historiken säger inget om hur det går nästa gång.
@@ -267,7 +270,7 @@ const columns = [
                 <th scope="col" class="num">Stoppet först</th>
                 <th scope="col" class="num">Öppna</th>
                 <th scope="col" class="num">Ej utlösta</th>
-                <th scope="col" class="num">Snitt per avgjort fall efter courtage</th>
+                <th scope="col" class="num">Snitt per avgjort fall</th>
               </tr>
             </thead>
             <tbody>
