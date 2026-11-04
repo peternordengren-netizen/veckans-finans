@@ -20,6 +20,67 @@
         "number",
         "null"
       ]
+    },
+    "level": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "low",
+        "high",
+        "mid",
+        "touches",
+        "bottoms",
+        "tops",
+        "dist_pct",
+        "dist_atr"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "zon",
+            "20 EMA",
+            "50 MA",
+            "200 MA"
+          ]
+        },
+        "low": {
+          "type": "number"
+        },
+        "high": {
+          "type": "number"
+        },
+        "mid": {
+          "type": "number"
+        },
+        "touches": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "bottoms": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "tops": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "dist_pct": {
+          "$ref": "#/$defs/num"
+        },
+        "dist_atr": {
+          "$ref": "#/$defs/num"
+        }
+      }
     }
   },
   "properties": {
@@ -105,6 +166,31 @@
             "fee_pct": {
               "type": "number",
               "description": "Courtage i äldre filer; räknas inte längre."
+            }
+          }
+        },
+        "levels": {
+          "type": "object",
+          "description": "Trösklar för stöd och motstånd (scripts/levels.py THRESHOLDS); saknas i äldre filer.",
+          "additionalProperties": false,
+          "required": [
+            "lookback",
+            "pivot",
+            "merge_atr",
+            "stop_buffer_atr"
+          ],
+          "properties": {
+            "lookback": {
+              "type": "number"
+            },
+            "pivot": {
+              "type": "number"
+            },
+            "merge_atr": {
+              "type": "number"
+            },
+            "stop_buffer_atr": {
+              "type": "number"
             }
           }
         }
@@ -339,6 +425,38 @@
           "bb_upper_pct": {
             "$ref": "#/$defs/num",
             "description": "Stängningen mot övre Bollingerbandet i procent (saknas i äldre filer)."
+          },
+          "sr": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "Stöd och motstånd (scripts/levels.py): närmaste stöd och motstånd, triggernivå, stopp under stödet och motstånd i R; null utan ATR. Saknas i äldre filer.",
+            "additionalProperties": false,
+            "required": [
+              "support",
+              "resistance",
+              "trigger",
+              "stop",
+              "resistance_r"
+            ],
+            "properties": {
+              "support": {
+                "$ref": "#/$defs/level"
+              },
+              "resistance": {
+                "$ref": "#/$defs/level"
+              },
+              "trigger": {
+                "type": "number"
+              },
+              "stop": {
+                "$ref": "#/$defs/num"
+              },
+              "resistance_r": {
+                "$ref": "#/$defs/num"
+              }
+            }
           }
         }
       }

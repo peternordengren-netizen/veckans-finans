@@ -90,3 +90,32 @@ export function netText(pct: number | null, r: number | null): string {
     new Intl.NumberFormat("sv-SE", { minimumFractionDigits: d, maximumFractionDigits: d, signDisplay: "exceptZero" }).format(v);
   return r === null ? `${s(pct, 1)} %` : `${s(pct, 1)} % (${s(r, 2)} R)`;
 }
+
+/** Stöd- eller motståndsnivå: "180,20 (zon, 3 vändningar)" eller "182,39 (20 EMA)"; "–" utan nivå. */
+export function srLevelText(
+  l: { kind: string; low: number; high: number; touches: number | null } | null | undefined,
+  side: "support" | "resistance",
+): string {
+  if (!l) return "–";
+  const edge = side === "support" ? l.high : l.low;
+  const what = l.kind === "zon" ? `zon, ${l.touches} ${l.touches === 1 ? "vändning" : "vändningar"}` : l.kind;
+  return `${priceText(edge)} (${what})`;
+}
+
+/** Avstånd till nivån: "−1,5 % · 0,6 ATR" under kursen, "+3,2 % · 1,4 ATR" över. */
+export function srDistText(dist_pct: number | null, dist_atr: number | null, side: "support" | "resistance"): string {
+  if (dist_pct === null) return "–";
+  const sign = side === "support" && dist_pct > 0 ? "−" : side === "resistance" && dist_pct > 0 ? "+" : "";
+  const atr = dist_atr === null ? "" : ` · ${pctFmt.format(dist_atr)} ATR`;
+  return `${sign}${pctFmt.format(dist_pct)} %${atr}`;
+}
+
+/** Avstånd i R: "2,4 R"; "–" utan värde. */
+export function rText(r: number | null | undefined): string {
+  return r === null || r === undefined ? "–" : `${pctFmt.format(r)} R`;
+}
+
+/** Nivåns slag kort: "zon, 3 vändn." eller "20 EMA". */
+export function srKindText(l: { kind: string; touches: number | null }): string {
+  return l.kind === "zon" ? `zon, ${l.touches} vändn.` : l.kind;
+}

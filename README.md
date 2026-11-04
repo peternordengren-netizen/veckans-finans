@@ -406,6 +406,40 @@ Testet 20 okt 2025 – 21 okt 2026 gav ingen etikett som klart slår alla dagar:
 finns sedan oktober 2026. Historiken räknas om i måndagens veckokörning (`run_weekly.ps1`), så rapportetiketterna
 får fler fall efter hand.
 
+#### Stöd och motstånd (`scripts/levels.py`)
+
+Fliken visar för alla bolag närmaste stöd under och närmaste motstånd över gårdagens stängning. Kurserna är justerade
+som övriga mått.
+1. **Vändpunkter:** de senaste 120 handelsdagarna. En botten är en dag vars low är lägst bland de 3 dagarna före och
+   de 3 efter; en topp är en dag vars high är högst bland samma dagar. De 3 sista dagarna kan inte bli vändpunkter.
+2. **Zoner:** alla vändpunkter, bottnar och toppar, sorteras efter pris. En zon börjar vid den lägsta, och nästa
+   punkt tas med så länge den ligger högst 1 ATR(14) över zonens nedre kant. Antalet vändningar är antalet punkter i
+   zonen.
+3. **Stöd och motstånd:**
+   - En zon under stängningen är stöd och en zon över är motstånd. Ligger stängningen i zonen avgör zonens mitt.
+     En bruten topp blir alltså stöd och en bruten botten motstånd.
+   - 20 EMA, 50 MA och 200 MA räknas som stöd under kursen och motstånd över.
+4. **Per bolag:** närmaste stöd (avstånd till dess övre kant) och motstånd (till dess nedre kant), i procent och i
+   ATR.
+5. **I strategikolumnerna för Pullback i trend:**
+   - Stopp under stöd: stödets nedre kant minus 0,1 ATR.
+   - 1 R: triggernivån (gårdagens high) minus det stoppet.
+   - Motstånd i R: avståndet från triggernivån till motståndets nedre kant, delat med R.
+
+Valideringen kontrollerar att stödets mitt ligger under motståndets, att stoppet ligger under stödet och att
+motståndet i R stämmer. Kanterna kan överlappa när stängningen ligger i en zon.
+
+**Test i historiken:** Pullback-fall med en stödzon högst 1 ATR under stängningen och närmaste motstånd minst 2R över
+referensen, mot övriga fall. Strategins egen R och 2R-nivå används. Stödet räknas bara med zoner, eftersom rekylen
+till 20 EMA eller 50 MA annars alltid ger ett stöd nära. Resultatet 24 okt 2025 – 27 okt 2026, utan courtage:
+
+| | Avgjorda fall | 2R före stoppet | Snitt per fall |
+|---|---|---|---|
+| Stöd nära och motstånd minst 2R bort | 230 | 30,9 % (± 6,0) | +0,04 R |
+| Övriga | 1 457 | 33,4 % (± 2,4) | −0,00 R |
+
+Kombinationen klarade sig alltså inte bättre. Skillnaden ligger väl inom osäkerheten.
+
 #### Bollinger under dagen (`scripts/bollinger.py`, `scripts/run_bollinger.ps1`)
 
 Uppgiften **VeckansFinansBollinger** kör vardagar 09:20 och 13:20, utan Claude.

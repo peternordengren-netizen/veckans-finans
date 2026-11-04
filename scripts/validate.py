@@ -924,12 +924,29 @@ def validate_swing(data: dict, instruments: dict[str, Instrument]) -> Result:
             expected.append(rl)
         if "pullback" in c:
             _check_pullback(c, data["thresholds"].get("pullback"), where, expected, res)
+        if c.get("sr"):
+            _check_sr(c["sr"], where, res)
         if sorted(c["labels"]) != sorted(expected):
             res.errors.append(f"{where}: etiketterna {c['labels']} stämmer inte med måtten (väntat {expected})")
         unknown = set(c["labels"]) - set(data["labels"])
         if unknown:
             res.errors.append(f"{where}: okända etiketter {sorted(unknown)}")
     return res
+
+
+def _check_sr(sr: dict, where: str, res: Result) -> None:
+    """Stöd och motstånd (scripts/levels.py): stödets mitt under motståndets (kanterna kan överlappa när stängningen
+    ligger i en zon, t.ex. stödzon 74,50–75,15 och 20 EMA 75,00 strax över stängningen), stoppet under stödet, och
+    motståndet i R = (motståndets nedre kant − triggernivå) / (triggernivå − stopp)."""
+    sup, rst = sr["support"], sr["resistance"]
+    if sup and rst and sup["mid"] > rst["mid"] + 1e-9:
+        res.errors.append(f"{where}: stödet (mitt {sup['mid']}) ligger över motståndet (mitt {rst['mid']})")
+    if sup and (sr["stop"] is None or sr["stop"] >= sup["low"]):
+        res.errors.append(f"{where}: stoppet {sr['stop']} ligger inte under stödet {sup['low']}")
+    if rst and sr["stop"] is not None and sr["trigger"] > sr["stop"]:
+        expected = round((rst["low"] - sr["trigger"]) / (sr["trigger"] - sr["stop"]), 2)
+        if sr["resistance_r"] is None or abs(sr["resistance_r"] - expected) > 0.011:
+            res.errors.append(f"{where}: motståndet i R {sr['resistance_r']} ≠ {expected}")
 
 
 def _check_pullback(c: dict, th: dict | None, where: str, expected: list[str], res: Result) -> None:

@@ -79,7 +79,31 @@ export interface SwingRow {
   short_pct: number | null;
   /** Pullback i trend (scripts/pullback.py): tillståndet och nivåerna vid träff; saknas i äldre filer. */
   pullback?: { state: PullbackState | null; levels: PullbackLevels | null };
+  /** Stöd och motstånd (scripts/levels.py); null utan ATR, saknas i äldre filer. */
+  sr?: SupportResistance | null;
   labels: string[];
+}
+export interface SrLevel {
+  kind: "zon" | "20 EMA" | "50 MA" | "200 MA";
+  low: number;
+  high: number;
+  mid: number;
+  /** Antal vändningar i zonen (null för medelvärdena). */
+  touches: number | null;
+  bottoms: number | null;
+  tops: number | null;
+  dist_pct: number | null;
+  dist_atr: number | null;
+}
+export interface SupportResistance {
+  support: SrLevel | null;
+  resistance: SrLevel | null;
+  /** Gårdagens high. */
+  trigger: number;
+  /** Stödets nedre kant minus 0,1 ATR. */
+  stop: number | null;
+  /** (Motståndets nedre kant − triggernivå) / (triggernivå − stopp). */
+  resistance_r: number | null;
 }
 export interface PullbackState {
   open: number; high: number; low: number; close: number; prev_open: number; prev_close: number;
@@ -125,6 +149,8 @@ export interface SwingView {
     volume_ratio: number; rsi2_low: number; rsi2_high: number; report_days: number;
     /** Pullback i trend (saknas i äldre filer). */
     pullback?: { touch_pct: number; hammer_shadow: number; hammer_upper: number; stop_days: number; top_days: number; trigger_days: number; max_days: number };
+    /** Stöd och motstånd (saknas i äldre filer). */
+    levels?: { lookback: number; pivot: number; merge_atr: number; stop_buffer_atr: number };
   };
   labels: Record<string, string>;
   /** Strategier i rullistan: namn och etiketterna som räknas som träff (saknas i äldre filer). */
@@ -140,6 +166,8 @@ export interface SwingView {
       thresholds: { max_days: number; trigger_days: number };
       labels: Record<string, PullbackSummary>;
       all: PullbackSummary;
+      /** Stöd nära och motstånd minst 2R bort, mot övriga fall; saknas i äldre filer. */
+      sr_filter?: { description: string; with: PullbackSummary; without: PullbackSummary };
       /** Samma fall med marknadsfilter (indexet över sitt 50- och 200-dagars MA); saknas i äldre filer. */
       market_filter?: {
         description: string;

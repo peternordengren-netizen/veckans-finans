@@ -20,6 +20,9 @@ Etiketter (LABELS, trösklar i THRESHOLDS):
   med respektive utan omsättning minst volume_ratio gånger snittet
 - "rsi2-under-10" / "rsi2-over-90"
 - "trend-upp": kurs över 20-dagars MA och 20-dagars över 50-dagars; "trend-ned" omvänt
+Stöd och motstånd per bolag ("sr", scripts/levels.py): närmaste stöd under och motstånd över gårdagens stängning
+(zoner av tidigare vändpunkter de senaste 120 dagarna, och 20 EMA, 50 och 200 MA), avstånd i procent och ATR,
+triggernivå, stopp under stödet och avstånd till motståndet i R.
 - "bollinger-ovre": stängningen vid eller över övre Bollingerbandet (20 dagars stängningar, 2 standardavvikelser;
   bb_upper_pct = stängningen mot bandet i procent)
 - "efter-rapport-over" / "efter-rapport-under" / "efter-rapport": rapport inom report_days handelsdagar
@@ -43,6 +46,7 @@ from zoneinfo import ZoneInfo
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
+import levels  # noqa: E402
 import pullback  # noqa: E402
 from bollinger import upper_band  # noqa: E402
 from prices import INDEX_TICKER  # noqa: E402
@@ -240,6 +244,11 @@ def build(today: date, now: datetime, instruments: dict[str, Instrument], bars: 
         labels += pb_labels
         atr = m["atr_pct"] / 100 * c[i] if m["atr_pct"] is not None else None
         pb = {"state": pb_state, "levels": pullback.levels(h, lo, atr, i, pb_state) if pb_labels else None}
+        # Stöd och motstånd (scripts/levels.py), för alla bolag.
+        e20 = pullback.ema(c, 20)[i]
+        ma50 = sum(c[i - 49:i + 1]) / 50
+        ma200 = sum(c[i - 199:i + 1]) / 200 if i >= 199 else None
+        sr = levels.summary(h, lo, c[i], i, atr, e20, ma50, ma200)
         companies.append({
             "ticker": t, "name": inst.namn, "sector": inst.sektor, "day": m["day"].isoformat(),
             **{k: m[k] for k in ("ma20_pct", "ma50_pct", "ma20_over_ma50", "rsi2", "rsi14", "atr_pct", "volume_ratio",
@@ -249,6 +258,7 @@ def build(today: date, now: datetime, instruments: dict[str, Instrument], bars: 
             "report_verdict": rep["verdict"] if rep else None,
             "short_pct": short_pct.get(t),
             "pullback": pb,
+            "sr": sr,
             "labels": labels,
         })
     companies.sort(key=lambda c: c["name"])
@@ -257,7 +267,7 @@ def build(today: date, now: datetime, instruments: dict[str, Instrument], bars: 
         "date": today.isoformat(),
         "as_of": as_of.isoformat() if as_of else None,
         "generated_at": now.isoformat(timespec="seconds"),
-        "thresholds": {**THRESHOLDS, "pullback": pullback.THRESHOLDS},
+        "thresholds": {**THRESHOLDS, "pullback": pullback.THRESHOLDS, "levels": levels.THRESHOLDS},
         "labels": dict(LABELS),  # en kopia: filen får inte dela modulens dict
         "strategies": STRATEGIES,
         "short_as_of": short_day,

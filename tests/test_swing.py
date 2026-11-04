@@ -235,6 +235,8 @@ def test_historiken_har_pullback():
     assert set(pb["labels"]) == {"rekyl-i-trend", "rekyl-vandsignal"}
     assert "fee_pct" not in pb["thresholds"] and pb["all"]["cases"] >= 0
     assert set(hist["labels"]) >= {"rekyl-i-trend", "rekyl-vandsignal"}
+    sr = pb["sr_filter"]  # stöd nära och motstånd minst 2R bort, mot övriga fall
+    assert sr["with"]["cases"] + sr["without"]["cases"] == pb["all"]["cases"]
 
 
 def test_marknadsfilter():

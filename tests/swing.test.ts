@@ -4,7 +4,7 @@ import { test } from "node:test";
 
 import {
   decidedShareText, isPullbackLabel, labelClass, labelCounts, levelText, netText, priceText, reportText, riskText, shareText,
-  signalText, vsBaseText,
+  rText, signalText, srDistText, srLevelText, vsBaseText,
 } from "../src/lib/swing.ts";
 
 test("etiketternas klasser och antal", () => {
@@ -54,4 +54,18 @@ test("pullback i trend: texter", () => {
   assert.equal(netText(0.42, 0.153), "+0,4 % (+0,15 R)");
   assert.equal(netText(-1.2, null), "−1,2 %");
   assert.equal(netText(null, null), "–");
+});
+
+test("stöd och motstånd: texter", () => {
+  const zon = { kind: "zon", low: 178.5, high: 180.2, touches: 3 };
+  assert.equal(srLevelText(zon, "support"), "180,20 (zon, 3 vändningar)"); // övre kanten för stöd
+  assert.equal(srLevelText(zon, "resistance"), "178,50 (zon, 3 vändningar)"); // nedre kanten för motstånd
+  assert.equal(srLevelText({ kind: "20 EMA", low: 182.39, high: 182.39, touches: null }, "support"), "182,39 (20 EMA)");
+  assert.equal(srLevelText({ ...zon, touches: 1 }, "support"), "180,20 (zon, 1 vändning)");
+  assert.equal(srLevelText(null, "support"), "–");
+  assert.equal(srDistText(1.52, 0.61, "support"), "−1,5 % · 0,6 ATR");
+  assert.equal(srDistText(3.2, 1.4, "resistance"), "+3,2 % · 1,4 ATR");
+  assert.equal(srDistText(0, 0, "support"), "0,0 % · 0,0 ATR"); // stängningen i zonen
+  assert.equal(rText(2.44), "2,4 R");
+  assert.equal(rText(null), "–");
 });

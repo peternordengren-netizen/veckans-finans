@@ -38,6 +38,7 @@ from zoneinfo import ZoneInfo
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
+import levels  # noqa: E402
 import pullback  # noqa: E402
 from prices import INDEX_TICKER  # noqa: E402
 from signals import yahoo_bars  # noqa: E402
@@ -58,6 +59,23 @@ def _stats(values: list[float]) -> dict:
     p = sum(v > 0 for v in values) / n
     return {"n": n, "better": round(p, 4), "ci": round(1.96 * math.sqrt(p * (1 - p) / n), 4) if n > 1 else None,
             "mean": round(sum(values) / n, 5)}
+
+
+def sr_ok(h: list[float], lo: list[float], c: list[float], i: int, m: dict, st: dict, stop: float) -> bool:
+    """Stöd nära och motstånd långt bort för ett Pullback-fall på dag i (se "sr_filter" i build).
+    Stödet räknas bara med zoner: rekylen till 20 EMA eller 50 MA ger annars alltid ett stöd nära."""
+    atr = m["atr_pct"] / 100 * c[i] if m["atr_pct"] is not None else None
+    zones_only = levels.summary(h, lo, c[i], i, atr, None, None, None, zones_only=True)
+    full = levels.summary(h, lo, c[i], i, atr, st["ema20"], st["ma50"], st["ma200"])
+    if zones_only is None or full is None:
+        return False
+    sup = zones_only["support"]
+    if sup is None or sup["dist_atr"] is None or sup["dist_atr"] > 1.0:
+        return False
+    ref = st["high"] if pullback.signal(st) else st["close"]
+    risk = ref - stop
+    res = full["resistance"]
+    return res is None or (risk > 0 and res["low"] - ref >= 2 * risk)
 
 
 def market_filter(index_bars: list) -> dict[date, bool]:
@@ -82,6 +100,9 @@ def build(bars: dict, instruments: dict, today: date, results_dir: Path | None =
     # Marknadsfilter: bara fall när indexet vid rekyldagens stängning ligger över sitt 50- och 200-dagars MA.
     market_up = market_filter(bars.get(INDEX_TICKER, []))
     pb_filtered: dict[str, list[dict]] = {k: [] for k in pullback.LABELS}
+    # Stöd och motstånd: fall med en stödzon inom 1 ATR under stängningen och närmaste motstånd minst 2R över
+    # referensen, mot övriga fall (samma fall som utan filter).
+    pb_sr: dict[str, list[dict]] = {"with": [], "without": []}
     reports = latest_reports(today, results_dir) if results_dir else latest_reports(today)
     report_days: dict[str, date] = {}
     for t, r in reports.items():
@@ -110,6 +131,7 @@ def build(bars: dict, instruments: dict, today: date, results_dir: Path | None =
                     if i > busy_until:
                         pb_cases[pls[0]].append(case)
                         busy_until = case["end"]
+                        pb_sr["with" if sr_ok(h, lo, c, i, m, st, stop) else "without"].append(case)
                     if i > busy_filtered and market_up.get(m["day"], False):
                         pb_filtered[pls[0]].append(case)
                         busy_filtered = case["end"]
@@ -148,6 +170,13 @@ def build(bars: dict, instruments: dict, today: date, results_dir: Path | None =
             "thresholds": pullback.THRESHOLDS,
             "labels": {k: pullback.summarize(v) for k, v in pb_cases.items()},
             "all": pullback.summarize([x for v in pb_cases.values() for x in v]),
+            "sr_filter": {
+                "description": "Fall med en stödzon (tidigare vändpunkter, inte medelvärdena) högst 1 ATR under "
+                               "stängningen och närmaste motstånd (zoner och medelvärden) minst 2R över referensen, "
+                               "eller inget motstånd inom 120 dagar, mot övriga fall.",
+                "with": pullback.summarize(pb_sr["with"]),
+                "without": pullback.summarize(pb_sr["without"]),
+            },
             "market_filter": {
                 "description": "Bara fall när OMX Stockholm PI vid rekyldagens stängning låg över sitt 50- och "
                                "200-dagars glidande medelvärde.",

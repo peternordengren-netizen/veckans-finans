@@ -9,7 +9,7 @@ import { shortDate } from "../lib/format";
 import { signedPct } from "../lib/signals";
 import {
   MIN_CASES, decidedShareText, labelClass, labelCounts, levelText, netText, priceText, reportText, riskText, shareText,
-  signalText, vsBaseText,
+  rText, signalText, srDistText, srKindText, srLevelText, vsBaseText,
 } from "../lib/swing";
 
 interface Props {
@@ -45,6 +45,8 @@ const columns = [
   { key: "volume", label: "Omsättning", type: "num", nopb: true, title: "Senaste dagen mot snittet för de 20 dagarna före" },
   { key: "report", label: "Sedan rapport", type: "num" },
   { key: "short", label: "Blankning", type: "num", nopb: true, title: "Sammanlagd blankning enligt Finansinspektionen" },
+  { key: "support", label: "Närmaste stöd", type: "num", title: "Närmaste stöd under gårdagens stängning och avståndet dit" },
+  { key: "resistance", label: "Närmaste motstånd", type: "num", title: "Närmaste motstånd över gårdagens stängning och avståndet dit" },
   // Strategin Pullback i trend: visas bara när strategin är vald i rullistan.
   { key: "pb-signal", label: "Vändsignal", type: "text", pb: true, title: "Gårdagens candle och nivån rekylen nådde" },
   { key: "pb-ref", label: "Referens", type: "num", pb: true, title: "Triggernivån (gårdagens high) vid vändsignal, annars gårdagens stängning" },
@@ -53,6 +55,8 @@ const columns = [
   { key: "pb-top", label: "Föregående topp", type: "num", pb: true, title: "Högsta high de senaste 60 handelsdagarna" },
   { key: "pb-r2", label: "2R", type: "num", pb: true },
   { key: "pb-r3", label: "3R", type: "num", pb: true },
+  { key: "pb-srstop", label: "Stopp under stöd", type: "num", pb: true, title: "Närmaste stödets nedre kant minus 0,1 ATR, och R från triggernivån (gårdagens high)" },
+  { key: "pb-resr", label: "Motstånd i R", type: "num", pb: true, title: "Avståndet från triggernivån till närmaste motstånd, i R med stoppet under stödet" },
 ] as const;
 ---
 
@@ -88,6 +92,44 @@ const columns = [
         <strong>Blankning:</strong> sammanlagd blankning enligt Finansinspektionens register{swing.shortAsOf ? ` ${shortDate(swing.shortAsOf)}` : ""}.
       </li>
     </ul>
+    {
+      swing.thresholds.levels && (
+        <>
+          <p class="legend-head"><strong>Stöd och motstånd</strong> (alla bolag)</p>
+          <ul>
+            <li>
+              <strong>Vändpunkter:</strong> de senaste {swing.thresholds.levels.lookback} handelsdagarna fram till gårdagen.
+              En dag är en botten om dess lägsta kurs (low) är lägst bland de {swing.thresholds.levels.pivot} dagarna före
+              och de {swing.thresholds.levels.pivot} dagarna efter, och en topp om dess högsta kurs (high) är högst bland
+              samma dagar. De {swing.thresholds.levels.pivot} sista dagarna kan därför inte bli vändpunkter än.
+            </li>
+            <li>
+              <strong>Zoner:</strong> alla vändpunkter, bottnar och toppar, sorteras efter pris. En zon börjar vid den
+              lägsta, och nästa punkt tas med så länge den ligger högst {num(swing.thresholds.levels.merge_atr, 0)} ATR(14)
+              över zonens nedre kant; annars börjar en ny zon. Zonens kanter är dess lägsta och högsta punkt, och antalet
+              vändningar är antalet punkter i den.
+            </li>
+            <li>
+              <strong>Stöd och motstånd:</strong> en zon under gårdagens stängning är stöd, en zon över är motstånd. Ligger
+              stängningen i zonen avgör zonens mitt (medelvärdet av punkterna). En bruten topp blir alltså stöd och en
+              bruten botten motstånd. 20 dagars EMA och 50 och 200 dagars MA räknas också, som stöd under kursen och
+              motstånd över.
+            </li>
+            <li>
+              <strong>Närmaste stöd</strong> är det högsta stödet under kursen (avstånd till dess övre kant),
+              <strong> närmaste motstånd</strong> det lägsta över (avstånd till dess nedre kant), i procent och i ATR(14).
+              Ligger stängningen i zonen är avståndet 0.
+            </li>
+            <li>
+              <strong>Stopp under stöd</strong> (strategikolumnerna): närmaste stödets nedre kant minus
+              {" "}{num(swing.thresholds.levels.stop_buffer_atr)} ATR. 1 R = triggernivån (gårdagens high) minus det stoppet.
+              <strong> Motstånd i R:</strong> avståndet från triggernivån till närmaste motstånds nedre kant, delat med R;
+              negativt om motståndet ligger under triggernivån.
+            </li>
+          </ul>
+        </>
+      )
+    }
     {
       pt && (
         <>
@@ -210,6 +252,16 @@ const columns = [
                 <td class="num col-nopb" data-v={v(r.volume_ratio)}>{r.volume_ratio === null ? "–" : `${num(r.volume_ratio)}×`}</td>
                 <td class="num report" data-v={v(r.days_since_report)}>{reportText(r.days_since_report, r.report_verdict)}</td>
                 <td class="num col-nopb" data-v={v(r.short_pct)}>{r.short_pct === null ? "–" : `${num(r.short_pct, 2)} %`}</td>
+                {(["support", "resistance"] as const).map((side) => {
+                  const l = r.sr?.[side] ?? null;
+                  return (
+                    <td class="num sr" data-v={v(l?.dist_pct ?? null)} title={l ? srLevelText(l, side) : undefined}>
+                      {l ? priceText(side === "support" ? l.high : l.low) : "–"}
+                      {l && <span class="sub">{srKindText(l)}</span>}
+                      {l && <span class="sub">{srDistText(l.dist_pct, l.dist_atr, side)}</span>}
+                    </td>
+                  );
+                })}
                 {(() => {
                   const lv = r.labels.some((l) => pbLabels.includes(l)) ? (r.pullback?.levels ?? null) : null;
                   return (
@@ -229,6 +281,15 @@ const columns = [
                       <td class="num col-pb" data-v={v(lv?.top ?? null)}>{priceText(lv?.top)}</td>
                       <td class="num col-pb" data-v={v(lv?.r2 ?? null)}>{priceText(lv?.r2)}</td>
                       <td class="num col-pb" data-v={v(lv?.r3 ?? null)}>{priceText(lv?.r3)}</td>
+                      <td class="num col-pb" data-v={v(lv && r.sr?.stop != null ? r.sr.stop : null)}>
+                        {lv && r.sr?.stop != null ? priceText(r.sr.stop) : "–"}
+                        {lv && r.sr?.stop != null && (
+                          <span class="sub">1 R = {priceText(r.sr.trigger - r.sr.stop)}</span>
+                        )}
+                      </td>
+                      <td class="num col-pb wrap" data-v={v(lv ? (r.sr?.resistance_r ?? null) : null)}>
+                        {lv ? (r.sr?.resistance ? rText(r.sr.resistance_r) : "inget inom 120 d") : "–"}
+                      </td>
                     </>
                   );
                 })()}
@@ -251,6 +312,16 @@ const columns = [
           och ej utlösta (triggernivån nåddes inte inom {pbHist.thresholds.trigger_days} dagar) räknas inte in. Fallen
           infaller ofta samma dagar och är inte oberoende. Historiken säger inget om hur det går nästa gång.
         </p>
+        {
+          pbHist.sr_filter && (
+            <p class="note">
+              <strong>Stöd nära och motstånd minst 2R bort:</strong> en stödzon (tidigare vändpunkter, inte medelvärdena,
+              eftersom rekylen till 20 EMA eller 50 MA annars alltid ger ett stöd nära) högst 1 ATR under stängningen, och
+              närmaste motstånd minst 2R över referensen eller inget motstånd inom 120 dagar. R är strategins egen
+              (referens minus stopp), så 2R-nivån är densamma som i utfallet.
+            </p>
+          )
+        }
         {
           pbHist.market_filter && (
             <p class="note">
@@ -277,6 +348,12 @@ const columns = [
               {[
                 ...pbLabels.map((l) => ({ name: swing.labels[l], s: pbHist.labels[l], all: false })),
                 { name: "Båda", s: pbHist.all, all: true },
+                ...(pbHist.sr_filter
+                  ? [
+                      { name: "Båda, stöd nära och motstånd minst 2R bort", s: pbHist.sr_filter.with, all: false },
+                      { name: "Båda, övriga", s: pbHist.sr_filter.without, all: false },
+                    ]
+                  : []),
                 ...(pbHist.market_filter
                   ? [
                       ...pbLabels.map((l) => ({ name: `${swing.labels[l]}, med marknadsfilter`, s: pbHist.market_filter!.labels[l], all: false })),
@@ -498,7 +575,7 @@ const columns = [
     width: 100%;
     text-align: left;
     white-space: normal;
-    min-width: 4.5rem;
+    min-width: 4rem;
   }
   thead th:first-child {
     left: 0;
@@ -517,7 +594,7 @@ const columns = [
     background: var(--surface);
     white-space: normal;
     min-width: 9rem;
-    max-width: 13rem;
+    max-width: 11.5rem;
   }
   .hist tbody th {
     font-weight: normal;
@@ -539,7 +616,7 @@ const columns = [
   }
   td.report {
     white-space: normal;
-    min-width: 7rem;
+    min-width: 6rem;
   }
   .pos {
     color: var(--pos);
@@ -589,6 +666,11 @@ const columns = [
     display: block;
     font-size: 0.75rem;
     color: var(--muted);
+  }
+  td.sr {
+    min-width: 5.5rem;
+    padding-left: 8px;
+    padding-right: 8px;
   }
   td.wrap {
     white-space: normal;
