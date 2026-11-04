@@ -10,7 +10,7 @@ export const MIN_CASES = 30;
 export function labelClass(label: string): string {
   if (label.startsWith("utbrott") || label.startsWith("bollinger")) return "breakout";
   if (label.startsWith("rsi2")) return "rsi";
-  if (label.startsWith("trend")) return "trend";
+  if (label.startsWith("trend") || label.endsWith("-cross")) return "trend";
   if (label.startsWith("rekyl")) return "pullback";
   return "report";
 }
@@ -118,4 +118,12 @@ export function rText(r: number | null | undefined): string {
 /** Nivåns slag kort: "zon, 3 vändn." eller "20 EMA". */
 export function srKindText(l: { kind: string; touches: number | null }): string {
   return l.kind === "zon" ? `zon, ${l.touches} vändn.` : l.kind;
+}
+
+/** Etikettens text i tabellen: golden och death cross med dagar sedan korsningen, "Golden cross (3 d)". */
+export function chipText(label: string, name: string, crossDays: number | null | undefined): string {
+  if ((label === "golden-cross" || label === "death-cross") && crossDays !== null && crossDays !== undefined) {
+    return `${name} (${crossDays === 0 ? "i går" : `${crossDays} d`})`;
+  }
+  return name;
 }

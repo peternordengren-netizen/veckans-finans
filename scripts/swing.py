@@ -23,6 +23,8 @@ Etiketter (LABELS, trösklar i THRESHOLDS):
 Stöd och motstånd per bolag ("sr", scripts/levels.py): närmaste stöd under och motstånd över gårdagens stängning
 (zoner av tidigare vändpunkter de senaste 120 dagarna, och 20 EMA, 50 och 200 MA), avstånd i procent och ATR,
 triggernivå, stopp under stödet och avstånd till motståndet i R.
+- "golden-cross" / "death-cross": 50 dagars MA har korsat upp över (ned under) 200 dagars MA de senaste 10
+  handelsdagarna; ma_cross_days = handelsdagar sedan korsningen (0 = gårdagen)
 - "bollinger-ovre": stängningen vid eller över övre Bollingerbandet (20 dagars stängningar, 2 standardavvikelser;
   bb_upper_pct = stängningen mot bandet i procent)
 - "efter-rapport-over" / "efter-rapport-under" / "efter-rapport": rapport inom report_days handelsdagar
@@ -61,6 +63,7 @@ HISTORY_DAYS = 400  # samma hämtning som morgonrapporten
 MIN_BARS = 51
 MARKET_CLOSE = time(17, 30)
 THRESHOLDS = {"volume_ratio": 2.0, "rsi2_low": 10.0, "rsi2_high": 90.0, "report_days": 5}
+CROSS_DAYS = 10  # golden/death cross: korsningen högst så många handelsdagar bakåt (gårdagen = dag 0)
 LABELS = {
     "utbrott-omsattning": "Utbrott, hög omsättning",
     "utbrott": "Utbrott",
@@ -72,6 +75,8 @@ LABELS = {
     "efter-rapport-under": "Efter rapport, under förväntan",
     "efter-rapport": "Efter rapport",
     "bollinger-ovre": "Vid övre Bollingerband",
+    "golden-cross": "Golden cross",
+    "death-cross": "Death cross",
     **pullback.LABELS,
 }
 # Strategier i rullistan: namn och etiketterna som räknas som träff (scripts/pullback.py).
@@ -114,6 +119,7 @@ def series(bars: list[Bar]) -> list[dict | None]:
     v = [b.volume for b in bars]
     tr = [h[0] - lo[0]] + [max(h[i] - lo[i], abs(h[i] - c[i - 1]), abs(lo[i] - c[i - 1])) for i in range(1, len(bars))]
     atr, rsi2, rsi14 = _wilder(tr, 14), rsi(c, 2), rsi(c, 14)
+    cross = ma_crosses(c)
     out: list[dict | None] = []
     for i in range(len(bars)):
         if i < MIN_BARS - 1:
@@ -135,7 +141,30 @@ def series(bars: list[Bar]) -> list[dict | None]:
             "above_high20": c[i] > max(h[i - 20:i]),
             # Gårdagens stängning mot övre Bollingerbandet (20 dagar, 2 standardavvikelser, scripts/bollinger.py).
             "bb_upper_pct": round((c[i] / upper_band(c[:i + 1]) - 1) * 100, 2),
+            # Senaste korsningen mellan 50 och 200 dagars MA inom CROSS_DAYS dagar: "golden" (upp), "death" (ned).
+            "ma_cross": cross[i][0] if cross[i] else None,
+            "ma_cross_days": cross[i][1] if cross[i] else None,
         })
+    return out
+
+
+def ma_crosses(c: list[float], days: int = CROSS_DAYS) -> list[tuple[str, int] | None]:
+    """Per dag i: ("golden" | "death", dagar sedan) för den senaste korsningen mellan 50 och 200 dagars MA
+    under dagarna i−days+1 … i, eller None. Korsning på dag j: 50 MA över 200 MA dag j men inte dag j−1
+    (golden), eller omvänt (death). Kräver 201 dagar (200 MA både dag j och dag j−1)."""
+    pre = [0.0]
+    for x in c:
+        pre.append(pre[-1] + x)
+    above: list[bool | None] = [None] * len(c)
+    for j in range(199, len(c)):
+        above[j] = (pre[j + 1] - pre[j - 49]) / 50 > (pre[j + 1] - pre[j - 199]) / 200
+    out: list[tuple[str, int] | None] = [None] * len(c)
+    last: tuple[str, int] | None = None  # (slag, dag) för senaste korsningen
+    for j in range(len(c)):
+        if j >= 200 and above[j] is not None and above[j - 1] is not None and above[j] != above[j - 1]:
+            last = ("golden" if above[j] else "death", j)
+        if last and j - last[1] < days:
+            out[j] = (last[0], j - last[1])
     return out
 
 
@@ -154,6 +183,10 @@ def technical_labels(m: dict, th: dict = THRESHOLDS) -> list[str]:
         out.append("trend-ned")
     if m.get("bb_upper_pct") is not None and m["bb_upper_pct"] >= 0:  # saknas i äldre filer
         out.append("bollinger-ovre")
+    if m.get("ma_cross") == "golden":  # saknas i äldre filer
+        out.append("golden-cross")
+    if m.get("ma_cross") == "death":
+        out.append("death-cross")
     return out
 
 
@@ -252,7 +285,7 @@ def build(today: date, now: datetime, instruments: dict[str, Instrument], bars: 
         companies.append({
             "ticker": t, "name": inst.namn, "sector": inst.sektor, "day": m["day"].isoformat(),
             **{k: m[k] for k in ("ma20_pct", "ma50_pct", "ma20_over_ma50", "rsi2", "rsi14", "atr_pct", "volume_ratio",
-                                 "above_high20", "bb_upper_pct")},
+                                 "above_high20", "bb_upper_pct", "ma_cross", "ma_cross_days")},
             "report_published": rep["published"] if rep else None,
             "days_since_report": days_since,
             "report_verdict": rep["verdict"] if rep else None,
@@ -269,7 +302,7 @@ def build(today: date, now: datetime, instruments: dict[str, Instrument], bars: 
         "generated_at": now.isoformat(timespec="seconds"),
         "thresholds": {**THRESHOLDS, "pullback": pullback.THRESHOLDS, "levels": levels.THRESHOLDS},
         "labels": dict(LABELS),  # en kopia: filen får inte dela modulens dict
-        "strategies": STRATEGIES,
+        "strategies": {k: {**v, "labels": list(v["labels"])} for k, v in STRATEGIES.items()},  # kopia, som labels
         "short_as_of": short_day,
         "companies": companies,
     }

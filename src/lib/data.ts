@@ -79,6 +79,9 @@ export interface SwingRow {
   short_pct: number | null;
   /** Pullback i trend (scripts/pullback.py): tillståndet och nivåerna vid träff; saknas i äldre filer. */
   pullback?: { state: PullbackState | null; levels: PullbackLevels | null };
+  /** Senaste korsningen mellan 50 och 200 dagars MA de senaste 10 dagarna, och dagar sedan (saknas i äldre filer). */
+  ma_cross?: "golden" | "death" | null;
+  ma_cross_days?: number | null;
   /** Stöd och motstånd (scripts/levels.py); null utan ATR, saknas i äldre filer. */
   sr?: SupportResistance | null;
   labels: string[];

@@ -254,3 +254,52 @@ def test_marknadsfilter():
     mf = hist["pullback"]["market_filter"]
     assert mf["all"]["cases"] == 0 and mf["days_up"] == 0
     assert hist["pullback"]["all"]["cases"] >= mf["all"]["cases"]
+
+
+def _cross_day(closes, up):
+    """Direkt uträkning: sista dagen j där 50 MA gick över (up) eller under 200 MA."""
+    ma = lambda n, j: sum(closes[j - n + 1:j + 1]) / n  # noqa: E731
+    days = [j for j in range(200, len(closes))
+            if (ma(50, j) > ma(200, j)) == up and (ma(50, j - 1) > ma(200, j - 1)) != up]
+    return days[-1] if days else None
+
+
+def test_golden_och_death_cross():
+    # Lång nedgång, sedan uppgång: 50 MA korsar upp över 200 MA (golden cross).
+    up = [300.0 - i for i in range(220)] + [80.0 + 3 * i for i in range(80)]
+    j = _cross_day(up, True)
+    assert j is not None
+    crosses = swing.ma_crosses(up)
+    assert crosses[j] == ("golden", 0) and crosses[j + 9] == ("golden", 9) and crosses[j + 10] is None
+    assert crosses[j - 1] is None or crosses[j - 1][0] != "golden"
+    m = swing.series(make_bars(up[:j + 4]))[-1]
+    assert (m["ma_cross"], m["ma_cross_days"]) == ("golden", 3) and "golden-cross" in swing.technical_labels(m)
+    # Omvänt: lång uppgång, sedan nedgång (death cross).
+    down = [100.0 + i for i in range(220)] + [320.0 - 3 * i for i in range(80)]
+    k = _cross_day(down, False)
+    m = swing.series(make_bars(down[:k + 1]))[-1]
+    assert (m["ma_cross"], m["ma_cross_days"]) == ("death", 0)
+    assert swing.technical_labels(m)[-1] == "death-cross" and "golden-cross" not in swing.technical_labels(m)
+    # Under 201 dagar: ingen korsning kan avgöras.
+    assert all(x is None for x in swing.ma_crosses(up[:200]))
+    old = {k2: v for k2, v in m.items() if k2 not in ("ma_cross", "ma_cross_days")}  # äldre filer
+    assert "death-cross" not in swing.technical_labels(old)
+
+
+def test_korsning_valideras_och_finns_i_historiken():
+    closes = [300.0 - i for i in range(220)] + [80.0 + 3 * i for i in range(80)]
+    j = _cross_day(closes, True)
+    bars = {"ALFA.ST": make_bars(closes[:j + 2]), "BETA.ST": make_bars([100.0] * 60)}
+    today = bars["ALFA.ST"][-1].day + timedelta(days=1)
+    data = swing.build(today, datetime.now(TZ), INSTRUMENTS, bars, {}, (None, {}))
+    a = next(c for c in data["companies"] if c["ticker"] == "ALFA")
+    assert "golden-cross" in a["labels"] and a["ma_cross_days"] == 1
+    assert data["labels"]["golden-cross"] == "Golden cross" and data["labels"]["death-cross"] == "Death cross"
+    assert validate_swing(data, INSTRUMENTS).errors == []
+    a["ma_cross"] = "death"
+    assert any("stämmer inte" in e for e in validate_swing(data, INSTRUMENTS).errors)
+    n = 500
+    hist_bars = {"^OMXSPI": make_bars([1000.0] * n), "ALFA.ST": make_bars(closes + [closes[-1]] * (n - len(closes))),
+                 "BETA.ST": make_bars([600.0 - i for i in range(n)])}
+    hist = swing_history.build(hist_bars, INSTRUMENTS, date(2028, 1, 1))
+    assert {"golden-cross", "death-cross"} <= set(hist["labels"])

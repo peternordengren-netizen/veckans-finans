@@ -457,6 +457,22 @@
                 "$ref": "#/$defs/num"
               }
             }
+          },
+          "ma_cross": {
+            "enum": [
+              "golden",
+              "death",
+              null
+            ],
+            "description": "Senaste korsningen mellan 50 och 200 dagars MA de senaste 10 handelsdagarna (saknas i äldre filer)."
+          },
+          "ma_cross_days": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "description": "Handelsdagar sedan korsningen, 0 = gårdagen (saknas i äldre filer)."
           }
         }
       }

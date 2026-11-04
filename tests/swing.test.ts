@@ -4,7 +4,7 @@ import { test } from "node:test";
 
 import {
   decidedShareText, isPullbackLabel, labelClass, labelCounts, levelText, netText, priceText, reportText, riskText, shareText,
-  rText, signalText, srDistText, srLevelText, vsBaseText,
+  chipText, rText, signalText, srDistText, srLevelText, vsBaseText,
 } from "../src/lib/swing.ts";
 
 test("etiketternas klasser och antal", () => {
@@ -68,4 +68,13 @@ test("stöd och motstånd: texter", () => {
   assert.equal(srDistText(0, 0, "support"), "0,0 % · 0,0 ATR"); // stängningen i zonen
   assert.equal(rText(2.44), "2,4 R");
   assert.equal(rText(null), "–");
+});
+
+test("golden och death cross: dagar sedan korsningen", () => {
+  assert.equal(chipText("golden-cross", "Golden cross", 3), "Golden cross (3 d)");
+  assert.equal(chipText("death-cross", "Death cross", 0), "Death cross (i går)");
+  assert.equal(chipText("golden-cross", "Golden cross", null), "Golden cross"); // äldre filer
+  assert.equal(chipText("trend-upp", "Trend upp", 3), "Trend upp");
+  assert.equal(labelClass("golden-cross"), "trend");
+  assert.equal(labelClass("death-cross"), "trend");
 });

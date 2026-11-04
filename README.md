@@ -393,6 +393,10 @@ dagsdata, utan extra hämtning, och skrivs till `data/swing/<datum>.json`, som �
 - trend upp eller ned (kurs, 20- och 50-dagars MA i ordning)
 - vid övre Bollingerband: gårdagens stängning vid eller över snittet av de 20 senaste stängningarna plus
   2 standardavvikelser (`bb_upper_pct`)
+- golden cross / death cross: 50 dagars MA har korsat upp över (ned under) 200 dagars MA någon av de 10 senaste
+  handelsdagarna, med antal dagar sedan korsningen (`ma_cross`, `ma_cross_days`). I historiken 24 okt 2025 – 27 okt
+  2026 gick bolag med golden cross bättre än index efter 5 dagar i 45,9 % av fallen (± 2,2, n = 1 926) och med death
+  cross i 49,3 % (± 2,3, n = 1 805), mot 47,1 % för alla dagar.
 - efter rapport, över eller under förväntan, inom fem handelsdagar
 
 Tabellen kan sorteras och filtreras per etikett och har fast rubrikrad.

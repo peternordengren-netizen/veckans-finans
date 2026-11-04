@@ -9,7 +9,7 @@ import { shortDate } from "../lib/format";
 import { signedPct } from "../lib/signals";
 import {
   MIN_CASES, decidedShareText, labelClass, labelCounts, levelText, netText, priceText, reportText, riskText, shareText,
-  rText, signalText, srDistText, srKindText, srLevelText, vsBaseText,
+  chipText, rText, signalText, srDistText, srKindText, srLevelText, vsBaseText,
 } from "../lib/swing";
 
 interface Props {
@@ -80,6 +80,12 @@ const columns = [
       </li>
       <li><strong>RSI(2) under {num(t.rsi2_low, 0)} / över {num(t.rsi2_high, 0)}:</strong> kraftig nedgång respektive uppgång de senaste dagarna.</li>
       <li><strong>Trend upp / ned:</strong> kursen över (under) 20 dagars MA, som ligger över (under) 50 dagars MA.</li>
+      <li>
+        <strong>Golden cross / Death cross:</strong> 50 dagars glidande medelvärde har korsat upp över (golden) eller ned
+        under (death) 200 dagars medelvärde någon av de 10 senaste handelsdagarna, gårdagen inräknad. Korsningsdagen är
+        den första dagen 50 MA ligger över (under) 200 MA efter en dag då det låg tvärtom. Antalet dagar sedan
+        korsningen står inom parentes ("i går" = gårdagen). Kräver 201 handelsdagars historik.
+      </li>
       <li>
         <strong>Vid övre Bollingerband:</strong> gårdagens stängning ligger vid eller över det övre Bollingerbandet,
         snittet av de 20 senaste stängningskurserna (gårdagens inräknad) plus 2 standardavvikelser.
@@ -236,7 +242,7 @@ const columns = [
                 <td class="col-labels" data-v={r.labels.map((l) => swing.labels[l]).join(", ")}>
                   <span class="chips">
                     {r.labels.map((l) => (
-                      <span class:list={["chip", labelClass(l)]}>{swing.labels[l] ?? l}</span>
+                      <span class:list={["chip", labelClass(l)]}>{chipText(l, swing.labels[l] ?? l, r.ma_cross_days)}</span>
                     ))}
                   </span>
                 </td>
