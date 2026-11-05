@@ -27,6 +27,14 @@ Workflow-mallen ligger i [`deploy/raw-repo/`](deploy/raw-repo/). Lokalt klonas d
 | MFN | `https://mfn.se/all/s/nordic.rss?limit=200` (odokumenterad, men flödet anger själv adressen); morgonflödet använder `limit=500` (`--mfn-limit`), fortfarande ett anrop | fulltext |
 | Cision | `https://news.cision.com/se/ListItems?format=rss` | utdrag, ca 600 tecken |
 | Riksbanken | `https://api.riksbank.se/swea/v1/Observations/SECBREPOEFF/<från>/<till>`, fem år bakåt i ett anrop (ingen nyckel krävs) | nyckeltal |
+| Riksbankens räntebeslut | `https://www.riksbank.se/sv/rss/pressmeddelanden/` (Riksbankens egen RSS, kontrollerad 2026-11-05); för ett nytt beslut också pressmeddelandet, en gång, för dagen beslutet tillämpas | beslut |
+
+Ett bolag som inte publicerar via MFN eller Cision, till exempel ABB, kan få ett pressmeddelande från sin egen
+webbplats inlagt för hand med `scripts/add_raw_item.py`:
+- Posten får källan "bolag", texten ordagrant och ett citat, som kontrolleras mot texten.
+- Den skrivs till både morgonens och veckans rådata och pushas till det privata repot.
+- Morgonrapporten visar citatet under rubriken, och veckosammanfattningen behandlar posten som bolagets eget
+  pressmeddelande.
 
 - Varje körning gör ett anrop per källa, med en timeout på 30 s och User-Agent `veckans-finans-fetch/0.1 (+repo-URL)`.
 - MFN filtreras till `scope SE`, svenska eller engelska. Insynshandel (`sub:ci:insider`) sparas inte.
@@ -71,6 +79,12 @@ Workflow-mallen ligger i [`deploy/raw-repo/`](deploy/raw-repo/). Lokalt klonas d
   observation. Makrosammanfattningen får hänvisa till värdena, men styrräntan är aldrig en nyhet.
   Serien har en observation per bankdag, så "föregående värde" betyder värdet före senaste *ändringen*,
   inte gårdagens observation.
+  - **Beslut som ännu inte gäller:** serien visar bara gällande ränta. Därför hämtas Riksbankens senaste räntebeslut ur
+    RSS-flödet för pressmeddelanden, med dagen det tillämpas ur själva pressmeddelandet ("Beslutet om styrräntan
+    tillämpas från den 11 november 2026"). Morgonrapporten för in beslutet (`policy_decision`).
+  - På den senaste veckans sida står då "Beslutad: 2,00 % från 11 nov" bredvid gällande ränta, med länk till
+    pressmeddelandet, så länge beslutet inte gällde den dag nyckeltalet avser. Ett beslut om oförändrad ränta visas
+    inte.
 - [`schema/prices.schema.json`](schema/prices.schema.json): kursförändring per `yahoo_ticker`. Sidan fungerar utan filen.
 - [`data/instruments.csv`](data/instruments.csv): `namn,alias,ticker,yahoo_ticker,börs,sektor,isin,mfn_slug`.
   `isin` innehåller alla bolagets aktieslag, åtskilda med `|`. Värdena kommer från samma Nasdaq-hämtning (2026-10-05)

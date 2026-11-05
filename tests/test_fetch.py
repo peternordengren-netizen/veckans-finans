@@ -57,6 +57,22 @@ RIKSBANK = (
 )
 
 
+def riksbank_rss(*items):
+    """Riksbankens RSS för pressmeddelanden: (rubrik, pubDate, länk)."""
+    body = "".join(f"<item><title>{t}</title><link>{link}</link><pubDate>{d}</pubDate><description>x</description></item>"
+                   for t, d, link in items)
+    return f'<?xml version="1.0"?><rss version="2.0"><channel>{body}</channel></rss>'.encode()
+
+
+RIKSBANK_RSS = riksbank_rss(("Riksbanken planerar något annat", "Wed, 30 Sep 2026 09:29:00 +0200",
+                             "https://www.riksbank.se/sv/x/annat/"))
+DECISION_LINK = "https://www.riksbank.se/sv/press-och-publicerat/nyheter-och-pressmeddelanden/pressmeddelanden/2026/styrrantan-hojs-till-2-procent/"
+DECISION_PAGE = ("<html><body><script>var x=1;</script><p>PRESSMEDDELANDE Ett starkare konjunkturläge gör att "
+                 "inflationen förväntas stiga. Direktionen har därför beslutat att höja styrräntan med 0,25 "
+                 "procentenheter till 2 procent.</p><p>Beslutet om styrräntan tillämpas från den 11 november 2026. "
+                 "Protokollet publiceras den 10 november 2026.</p></body></html>").encode()
+
+
 def fake_get(responses):
     """responses: url (eller url-prefix) -> bytes eller Exception."""
 
@@ -274,11 +290,12 @@ def test_nyckeltal_sparas_strukturerat_i_index(tmp_path):
 # --- Lagring, dubbletter och fel -------------------------------------------
 
 
-def run(tmp_path, mfn=None, cision=None, riksbank=RIKSBANK, now=NOW):
+def run(tmp_path, mfn=None, cision=None, riksbank=RIKSBANK, now=NOW, rss=RIKSBANK_RSS):
     get = fake_get({
         fetch.MFN_URL: mfn if mfn is not None else mfn_feed(),
         fetch.CISION_URL: cision if cision is not None else cision_feed(),
         fetch.RIKSBANK_URL: riksbank,
+        fetch.RIKSBANK_RSS_URL: rss,
     })
     return fetch.main(["--raw-dir", str(tmp_path)], get=get, now=now)
 
@@ -286,11 +303,12 @@ def run(tmp_path, mfn=None, cision=None, riksbank=RIKSBANK, now=NOW):
 def test_mfn_limit_ett_anrop_med_storre_flode(tmp_path):
     """--mfn-limit (morgonflödet: 500) ändrar bara antalet poster; fortfarande ett anrop per källa."""
     urls = []
-    get = fake_get({"https://mfn.se/": mfn_feed(), fetch.CISION_URL: cision_feed(), fetch.RIKSBANK_URL: RIKSBANK})
+    get = fake_get({"https://mfn.se/": mfn_feed(), fetch.CISION_URL: cision_feed(), fetch.RIKSBANK_URL: RIKSBANK,
+                    fetch.RIKSBANK_RSS_URL: RIKSBANK_RSS})
     assert fetch.main(["--raw-dir", str(tmp_path), "--mfn-limit", "500"],
                       get=lambda u: urls.append(u) or get(u), now=NOW) == 0
     assert [u for u in urls if u.startswith("https://mfn.se/")] == ["https://mfn.se/all/s/nordic.rss?limit=500"]
-    assert len(urls) == 3
+    assert len(urls) == 4  # MFN, Cision, Riksbankens serie och RSS (inget nytt beslut: inget pressmeddelande)
     urls.clear()
     fetch.main(["--raw-dir", str(tmp_path)], get=lambda u: urls.append(u) or get(u), now=NOW)
     assert fetch.MFN_URL in urls and fetch.MFN_URL.endswith("limit=200")
@@ -438,5 +456,52 @@ def test_trasigt_flode_raknas_som_kallfel(tmp_path):
 
 def test_alla_kallor_fallerar_ger_exitkod_1(tmp_path):
     err = ConnectionError("nere")
-    assert run(tmp_path, mfn=err, cision=err, riksbank=err) == 1
+    assert run(tmp_path, mfn=err, cision=err, riksbank=err, rss=err) == 1
     assert read_index(tmp_path, "2026-W40")["runs"][0]["sources"]["mfn"]["status"] == "fel"
+
+
+def test_rantebeslut_ur_rss_och_pressmeddelandet(tmp_path):
+    """Riksbankens beslut 4/11 2026: höjning till 2 procent, tillämpas från 11/11 (står bara i pressmeddelandet)."""
+    rss = riksbank_rss(("Styrräntan höjs till 2 procent", "Wed, 04 Nov 2026 09:30:40 +0100", DECISION_LINK),
+                       ("Styrräntan oförändrad på 1,75 procent", "Thu, 24 Sep 2026 09:30:36 +0200",
+                        "https://www.riksbank.se/sv/x/oforandrad/"))
+    urls = []
+    get = fake_get({fetch.RIKSBANK_RSS_URL: rss, DECISION_LINK: DECISION_PAGE})
+    today = datetime(2026, 11, 5).date()
+    items = fetch.parse_riksbank_decision(rss, lambda u: urls.append(u) or get(u), set(), today)
+    assert urls == [DECISION_LINK]  # bara det senaste beslutets pressmeddelande
+    (it,) = items
+    assert it.id == "styrrantebeslut-2026-11-04" and it.url == DECISION_LINK
+    assert it.data["policy_decision"] == {"value": 2.0, "decided_on": "2026-11-04", "effective_from": "2026-11-11",
+                                          "change": "höjs", "url": DECISION_LINK}
+    assert "Direktionen har därför beslutat att höja styrräntan med 0,25 procentenheter till 2 procent." in it.text
+    assert "tillämpas från den 11 november 2026" in it.text
+    # Finns beslutet redan i rådatan hämtas pressmeddelandet inte igen.
+    urls.clear()
+    assert fetch.parse_riksbank_decision(rss, lambda u: urls.append(u) or get(u), {it.id}, today) == []
+    assert urls == []
+    # Ett gammalt beslut (har redan börjat gälla) hämtas inte.
+    assert fetch.parse_riksbank_decision(rss, get, set(), datetime(2027, 3, 1).date()) == []
+
+
+def test_rantebeslut_utan_datum_ar_fel():
+    rss = riksbank_rss(("Styrräntan sänks till 1,5 procent", "Wed, 04 Nov 2026 09:30:40 +0100", DECISION_LINK))
+    page = b"<p>Direktionen har beslutat att s\xc3\xa4nka styrr\xc3\xa4ntan till 1,5 procent.</p>"
+    try:
+        fetch.parse_riksbank_decision(rss, fake_get({DECISION_LINK: page}), set(), datetime(2026, 11, 5).date())
+    except ValueError as e:
+        assert "tillämpas" in str(e)
+    else:
+        raise AssertionError("väntade fel")
+
+
+def test_rantebeslut_sparas_i_radatan(tmp_path):
+    rss = riksbank_rss(("Styrräntan höjs till 2 procent", "Wed, 04 Nov 2026 09:30:40 +0100", DECISION_LINK))
+    get = fake_get({fetch.MFN_URL: mfn_feed(), fetch.CISION_URL: cision_feed(), fetch.RIKSBANK_URL: RIKSBANK,
+                    fetch.RIKSBANK_RSS_URL: rss, DECISION_LINK: DECISION_PAGE})
+    now = datetime(2026, 11, 5, 8, 10, tzinfo=fetch.STOCKHOLM)
+    assert fetch.main(["--raw-dir", str(tmp_path)], get=get, now=now) == 0
+    idx = read_index(tmp_path, "2026-W45")
+    e = next(x for x in idx["items"] if x["id"] == "styrrantebeslut-2026-11-04")
+    assert e["data"]["policy_decision"]["effective_from"] == "2026-11-11" and e["source"] == "riksbanken"
+    assert fetch.known_ids(tmp_path) >= {"styrrantebeslut-2026-11-04"}

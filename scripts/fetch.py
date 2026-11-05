@@ -69,6 +69,18 @@ RIKSBANK_URL = f"https://api.riksbank.se/swea/v1/Observations/{RIKSBANK_SERIES}/
 RIKSBANK_LOOKBACK_DAYS = 5 * 366
 # Riksbankens webbsida om styrräntan – källänken som visas för läsaren (inte API:et).
 RIKSBANK_PAGE_URL = "https://www.riksbank.se/sv/statistik/rantor-och-valutakurser/styrranta-in--och-utlaningsranta/"
+# Räntebesluten: Riksbankens RSS för pressmeddelanden (från sidan "Prenumerera på utskick", kontrollerat
+# 2026-11-05). Beslut som ännu inte börjat gälla syns inte i API:ets serie. Dagen beslutet tillämpas står bara
+# i själva pressmeddelandet ("Beslutet om styrräntan tillämpas från den 11 november 2026."); det hämtas en gång
+# per nytt beslut (inte om beslutets id redan finns i rådatan).
+RIKSBANK_RSS_URL = "https://www.riksbank.se/sv/rss/pressmeddelanden/"
+DECISION_TITLE_RE = re.compile(
+    r"^Styrräntan (?:(?P<dir>höjs|sänks) till|(?P<same>oförändrad) på) (?P<value>\d+(?:,\d+)?) procent", re.IGNORECASE)
+DECISION_SENTENCE_RE = re.compile(r"Direktionen har (?:därför )?beslutat att [^.]*styrräntan[^.]*\.")
+EFFECTIVE_RE = re.compile(r"Beslutet om styrräntan tillämpas från (?:och med )?den (\d{1,2}) (\w+) (\d{4})")
+SV_MONTHS = {m: i for i, m in enumerate(["januari", "februari", "mars", "april", "maj", "juni", "juli", "augusti",
+                                          "september", "oktober", "november", "december"], start=1)}
+DECISION_MAX_AGE_DAYS = 60  # äldre beslut har redan börjat gälla och syns i API:ets serie
 
 MFN_NS = "{https://mfn.se/schemas/rss-ns-x/}"
 MFN_SCOPES = {"SE"}
@@ -292,6 +304,62 @@ def parse_riksbank(data: bytes) -> list[Item]:
     )]
 
 
+def _html_text(data: bytes) -> str:
+    """Löptext ur en HTML-sida (taggar bort, entiteter avkodade, blanksteg sammanslagna)."""
+    s = data.decode("utf-8", "replace")
+    s = re.sub(r"(?is)<(script|style)[^>]*>.*?</\1>", " ", s)
+    s = re.sub(r"(?s)<[^>]+>", " ", s)
+    return " ".join(html.unescape(s).split())
+
+
+def parse_riksbank_decision(data: bytes, get: Callable[[str], bytes], known_ids: set[str],
+                            today: date) -> list[Item]:
+    """Senaste räntebeslutet ur Riksbankens RSS för pressmeddelanden, med dagen det tillämpas (ur
+    pressmeddelandet). Tomt om inget beslut finns de senaste DECISION_MAX_AGE_DAYS dagarna eller om beslutet
+    redan finns i rådatan (då hämtas inte pressmeddelandet igen)."""
+    root = ET.fromstring(data)
+    decisions = []
+    for el in root.iter("item"):
+        title = (el.findtext("title") or "").strip()
+        m = DECISION_TITLE_RE.match(title)
+        if m:
+            decisions.append((parsedate_to_datetime(el.findtext("pubDate")).astimezone(STOCKHOLM), title, m,
+                              (el.findtext("link") or "").strip()))
+    if not decisions:
+        return []
+    published, title, m, link = max(decisions, key=lambda d: d[0])
+    decided_on = published.date()
+    item_id = f"styrrantebeslut-{decided_on}"
+    if item_id in known_ids or (today - decided_on).days > DECISION_MAX_AGE_DAYS:
+        return []
+    page = _html_text(get(link))
+    eff = EFFECTIVE_RE.search(page)
+    if not eff or eff.group(2).lower() not in SV_MONTHS:
+        raise ValueError(f"hittar inte dagen beslutet tillämpas i {link}")
+    effective = date(int(eff.group(3)), SV_MONTHS[eff.group(2).lower()], int(eff.group(1)))
+    sentence = DECISION_SENTENCE_RE.search(page)
+    value = float(m.group("value").replace(",", "."))
+    decision = {"value": value, "decided_on": decided_on.isoformat(), "effective_from": effective.isoformat(),
+                "change": "oförändrad" if m.group("same") else m.group("dir").lower(), "url": link}
+    text = " ".join(x for x in (title + ".", sentence.group(0) if sentence else "", eff.group(0) + ".") if x)
+    return [Item(
+        id=item_id,
+        source="riksbanken",
+        source_name="Riksbanken",
+        url=link,
+        published=published,
+        title=title,
+        company=None,
+        language="sv",
+        tags=["nyckeltal", "styrräntebeslut"],
+        text=text,
+        text_kind="utdrag",
+        data={"policy_decision": decision},
+    )]
+
+
+parse_riksbank_decision.needs_context = True  # får get, kända id:n och dagens datum
+
 # --- Hämtning ----------------------------------------------------------------
 
 
@@ -311,17 +379,21 @@ SOURCES: list[Source] = [
     ("mfn", MFN_URL, parse_mfn),  # MFN först, så att den vinner dubbletter inom samma körning
     ("cision", CISION_URL, parse_cision),
     ("riksbanken", riksbank_url, parse_riksbank),
+    ("riksbanken-beslut", RIKSBANK_RSS_URL, parse_riksbank_decision),
 ]
 
 
 def fetch_all(sources: list[Source] = SOURCES, get: Callable[[str], bytes] = http_get,
-              today: date | None = None) -> RunResult:
-    """Ett anrop per källa. Fel loggas och övriga källor körs ändå."""
+              today: date | None = None, known_ids: set[str] | None = None) -> RunResult:
+    """Ett anrop per källa (räntebeslutet: RSS, och pressmeddelandet en gång per nytt beslut). Fel loggas och
+    övriga källor körs ändå."""
     res = RunResult()
     today = today or datetime.now(STOCKHOLM).date()
     for name, url, parse in sources:
         try:
-            items = parse(get(url(today) if callable(url) else url))
+            raw = get(url(today) if callable(url) else url)
+            items = (parse(raw, get, known_ids or set(), today) if getattr(parse, "needs_context", False)
+                     else parse(raw))
         except Exception as err:  # noqa: BLE001 – varje källfel ska loggas, inte stoppa körningen
             res.log[name] = {"status": "fel", "error": f"{type(err).__name__}: {err}"[:300]}
             print(f"[{name}] FEL: {err}", file=sys.stderr)
@@ -517,6 +589,16 @@ def store(result: RunResult, raw_dir: Path, now: datetime) -> dict[str, int]:
     return new_counts
 
 
+def known_ids(raw_dir: Path) -> set[str]:
+    """Postid:n i rådatans index för de senaste veckorna (så att ett räntebeslut inte hämtas igen)."""
+    out: set[str] = set()
+    for p in sorted(raw_dir.glob("*-W*/index.json"))[-12:]:
+        try:
+            out |= {it["id"] for it in json.loads(p.read_text(encoding="utf-8")).get("items", [])}
+        except (OSError, ValueError, KeyError):
+            continue
+    return out
+
 def main(argv: list[str] | None = None, get: Callable[[str], bytes] = http_get, now: datetime | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--raw-dir", type=Path, default=ROOT / "data" / "raw")
@@ -527,7 +609,7 @@ def main(argv: list[str] | None = None, get: Callable[[str], bytes] = http_get, 
     now = now or datetime.now(STOCKHOLM)
     sources = [(name, MFN_URL.replace(f"limit={MFN_LIMIT}", f"limit={args.mfn_limit}") if name == "mfn" else url, parse)
                for name, url, parse in SOURCES]
-    result = fetch_all(sources, get=get, today=now.astimezone(STOCKHOLM).date())
+    result = fetch_all(sources, get=get, today=now.astimezone(STOCKHOLM).date(), known_ids=known_ids(args.raw_dir))
     new = store(result, args.raw_dir, now)
     print("nya poster:", new)
     if len(result.failed) == len(result.log):

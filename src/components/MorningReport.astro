@@ -113,6 +113,11 @@ const meetings = report.reports_today.filter((e) => e.kind === "stämma");
                   <span class="sr-only"> ({it.source}, öppnas i ny flik)</span>
                   <span aria-hidden="true"> ↗</span>
                 </a>
+                {it.quote && (
+                  <blockquote class="quote">
+                    ”{it.quote}” <span class="muted">– {it.source}, bolagets webbplats</span>
+                  </blockquote>
+                )}
               </li>
             ))}
           </ul>
@@ -480,5 +485,12 @@ const meetings = report.reports_today.filter((e) => e.kind === "stämma");
     overflow: hidden;
     clip: rect(0 0 0 0);
     white-space: nowrap;
+  }
+  .quote {
+    margin: 4px 0 2px 0;
+    padding-left: 10px;
+    border-left: 3px solid var(--border);
+    font-size: 0.875rem;
+    max-width: 75ch;
   }
 </style>

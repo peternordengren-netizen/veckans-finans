@@ -5,6 +5,7 @@
  * och data/prices/. Rådata och evidence-fältet läses aldrig in i sidan:
  * toWeekView plockar bara ut de fält som visas.
  */
+import type { PolicyDecision } from "./policyRate";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -31,9 +32,11 @@ export interface MorningChange {
 export interface MorningReport {
   date: string;
   generated_at: string;
+  /** Riksbankens senaste räntebeslut (saknas i äldre filer). */
+  policy_decision?: PolicyDecision | null;
   news_since: string;
   reports_today: (CalendarEvent & { kind: "rapport" | "stämma" })[];
-  news: { ticker: string; name: string; report_today: boolean; items: { published: string; title: string; url: string; source: string }[] }[];
+  news: { ticker: string; name: string; report_today: boolean; items: { published: string; title: string; url: string; source: string; quote?: string }[] }[];
   insider: { threshold_sek: number; days: string[]; days_missing: string[]; companies: InsiderCompany[] };
   short: { available: boolean; error?: boolean; note: string | null; from_as_of: string | null; to_as_of: string | null; positions: MorningChange[]; aggregate: MorningChange[] };
   price: {

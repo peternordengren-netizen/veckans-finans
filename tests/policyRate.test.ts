@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { changedThisWeek, describePolicyRate } from "../src/lib/policyRate.ts";
+import { changedThisWeek, describePolicyRate, formatShortDate, pendingDecisionText } from "../src/lib/policyRate.ts";
 
 const W41 = ["2026-10-05", "2026-10-11"] as const;
 
@@ -31,4 +31,17 @@ test("ändring dagen efter veckan räknas inte", () => {
 test("ingen ändring i hämtad period", () => {
   const pr = { value: 1.75, previousValue: null, changedOn: null };
   assert.equal(describePolicyRate(pr, ...W41), "oförändrad under hämtad period");
+});
+
+test("räntebeslut som ännu inte börjat gälla", () => {
+  const rate = { value: 1.75, previousValue: 2.0, changedOn: "2025-10-01", date: "2026-11-01" };
+  const hike = { value: 2.0, decided_on: "2026-11-04", effective_from: "2026-11-11", change: "höjs" as const, url: "https://www.riksbank.se/x" };
+  assert.equal(pendingDecisionText(hike, rate), "Beslutad: 2,00 % från 11 nov");
+  // Har börjat gälla den dag nyckeltalet avser: ingen rad.
+  assert.equal(pendingDecisionText(hike, { ...rate, value: 2.0, changedOn: "2026-11-11", date: "2026-11-15" }), null);
+  // Oförändrad ränta, inget beslut, eller ett beslut före gällande nivå: ingen rad.
+  assert.equal(pendingDecisionText({ ...hike, value: 1.75, change: "oförändrad" }, rate), null);
+  assert.equal(pendingDecisionText(null, rate), null);
+  assert.equal(pendingDecisionText({ ...hike, decided_on: "2025-09-20", effective_from: "2026-12-01" }, rate), null);
+  assert.equal(formatShortDate("2026-01-07"), "7 jan");
 });

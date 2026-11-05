@@ -19,6 +19,7 @@ import {
   formatDate,
   listMorningDates,
   loadAfternoonBefore,
+  loadMorning,
   loadLatestSwing,
   loadResults,
   loadUpdateResults,
@@ -29,7 +30,7 @@ import {
   type WeekView,
 } from "../lib/data";
 import { shortDate } from "../lib/format";
-import { describePolicyRate, formatRate } from "../lib/policyRate";
+import { describePolicyRate, formatRate, pendingDecisionText } from "../lib/policyRate";
 
 interface Props {
   view: WeekView;
@@ -56,6 +57,10 @@ const directionLabel = { positiv: "Positiv", negativ: "Negativ", blandad: "Bland
 const pr = view.policyRate;
 // "oförändrad sedan …" om senaste ändringen skedde före veckan, annars "sänkt/höjd från …".
 const rateText = pr ? describePolicyRate(pr, view.start, view.end) : null;
+// Ett räntebeslut som ännu inte börjat gälla (ur senaste morgonrapporten), bara på den senaste veckans sida.
+const latestMorningDate = listMorningDates()[0] ?? null;
+const decision = pr && view.week === weeks[0] && latestMorningDate ? (loadMorning(latestMorningDate)?.policy_decision ?? null) : null;
+const decisionText = pr ? pendingDecisionText(decision, pr) : null;
 const latestMorning = listMorningDates()[0] ?? null;
 const morningTime = morning
   ? new Date(morning.generated_at).toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Stockholm" })
@@ -187,7 +192,14 @@ const morningTime = morning
           <aside class="key-figures" aria-label="Nyckeltal">
             <div class="kf">
               <p class="kf-label">Riksbankens styrränta</p>
-              <p class="kf-value">{formatRate(pr.value)} %</p>
+              <p class="kf-value">
+                {formatRate(pr.value)} %
+                {decisionText && decision && (
+                  <a class="kf-decision" href={decision.url} rel="noopener noreferrer" target="_blank">
+                    {decisionText}<span class="sr-only"> (Riksbankens pressmeddelande {decision.decided_on}, öppnas i ny flik)</span>
+                  </a>
+                )}
+              </p>
               <p class="kf-meta">
                 <span class="kf-change">{formatRate(pr.value)} %, {rateText}</span>
                 <span aria-hidden="true"> · </span>
@@ -623,6 +635,13 @@ const morningTime = morning
     letter-spacing: 0.04em;
     text-transform: uppercase;
     color: var(--muted);
+  }
+  .kf-decision {
+    margin-left: 10px;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: var(--banner-fg);
+    white-space: nowrap;
   }
   .kf-value {
     grid-area: value;

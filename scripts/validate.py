@@ -1251,6 +1251,9 @@ def validate_morning(data: dict, instruments: dict[str, Instrument]) -> Result:
             known(c["ticker"], c["name"], f"short.{key}")
             if abs(c["end_pct"] - c["start_pct"] - c["change_pp"]) > 0.011:
                 res.errors.append(f"short.{key}: {c['name']}: förändring ≠ slut − start")
+    pd = data.get("policy_decision")
+    if pd and (pd["effective_from"] < pd["decided_on"] or pd["decided_on"] > data["date"]):
+        res.errors.append(f"policy_decision: beslutet {pd['decided_on']} / tillämpas {pd['effective_from']} stämmer inte")
     for c in data["price"]["companies"]:
         known(c["ticker"], c["name"], "price")
         expected = price_signals(c, data["price"]["thresholds"])

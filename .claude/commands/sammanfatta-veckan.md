@@ -56,11 +56,16 @@ Veckan har typiskt flera hundra poster. Läs dem inte alla.
    och jämförs inte med `mfn_slug`.
 3. **Läs sedan bara de valda filerna** (`path`) i fulltext. Om en fil visar sig vara irrelevant byter du till en annan
    kandidat ur indexet.
+   - Poster med `source: "bolag"` är pressmeddelanden från ett bevakat bolags egen webbplats, inlagda för hand
+     (`scripts/add_raw_item.py`) när bolaget inte publicerar via MFN eller Cision, t.ex. ABB. Bolaget står i postens
+     `data.ticker`. Behandla dem som bevakade bolags egna pressmeddelanden; texten är ordagrann (fulltext).
 4. **Riksbankens styrränta är ett nyckeltal, inte en nyhet.** Ta posten med `source: "riksbanken"` och det senaste
    `data.policy_rate.date` som ligger inom veckan, och fyll `key_figures.policy_rate` i veckofilen:
    - `value`, `date`, `previous_value` och `changed_on` kopieras exakt från postens `data.policy_rate`.
    - `source_url` är postens `url`, alltså Riksbankens webbsida. `raw_file` är postens `path`.
    - Gör ingen nyhet av styrräntan. Valideringen underkänner en nyhet med `raw_file` under `riksbanken/`.
+   - Poster med `data.policy_decision` (Riksbankens räntebeslut, t.ex. "Styrräntan höjs till 2 procent") är varken
+     nyckeltalet eller en nyhet. Sidan visar ett beslut som ännu inte börjat gälla bredvid nyckeltalet.
    - Makrosammanfattningen hänvisar till nyckeltalet, till exempel "Styrräntan ligger kvar på 1,75 procent
      (se nyckeltal)". Värdena och datumen i nyckeltalet räknas som belägg för makrosammanfattningen, men bara där.
    - **Formulering beroende på ändringsdatumet (`changed_on`):**

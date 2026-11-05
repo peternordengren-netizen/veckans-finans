@@ -87,7 +87,8 @@ def _dedupe_url(url: str) -> str:
 
 def overnight_news(raw_dirs: list[Path], instruments: dict[str, Instrument], since: datetime, until: datetime,
                    reporting_today: set[str]) -> list[dict]:
-    """Pressmeddelanden för bolag i listan publicerade i [since, until], per bolag."""
+    """Pressmeddelanden för bolag i listan publicerade i [since, until], per bolag. Poster från bolagets egen
+    webbplats (source "bolag", scripts/add_raw_item.py) har tickern och ett ordagrant citat i data; citatet visas."""
     patterns = report_calendar.name_patterns(instruments)
     weeks = {_iso_week(since.date()), _iso_week(until.date())}
     seen: set[str] = set()
@@ -98,7 +99,7 @@ def overnight_news(raw_dirs: list[Path], instruments: dict[str, Instrument], sin
             if not index_path.exists():
                 continue
             for it in json.loads(index_path.read_text(encoding="utf-8")).get("items", []):
-                if it.get("source") not in ("mfn", "cision") or it.get("routine"):
+                if it.get("source") not in ("mfn", "cision", "bolag") or it.get("routine"):
                     continue
                 published = datetime.fromisoformat(it["published"])
                 if not since <= published <= until:
@@ -107,21 +108,45 @@ def overnight_news(raw_dirs: list[Path], instruments: dict[str, Instrument], sin
                 also = {_dedupe_url(a["url"]) for a in it.get("also_in", [])}
                 if key in seen or also & seen:
                     continue
-                ticker = report_calendar.match_company(it, instruments, patterns)
+                data = it.get("data") or {}
+                if it["source"] == "bolag":
+                    ticker = data.get("ticker") if data.get("ticker") in instruments else None
+                else:
+                    ticker = report_calendar.match_company(it, instruments, patterns)
                 if ticker is None:
                     continue
                 seen.add(key)
                 seen.update(also)
                 c = per.setdefault(ticker, {"ticker": ticker, "name": instruments[ticker].namn,
                                             "report_today": ticker in reporting_today, "items": []})
-                c["items"].append({"published": published.isoformat(), "title": it["title"], "url": it["url"],
-                                   "source": it.get("source_name") or it["source"]})
+                entry = {"published": published.isoformat(), "title": it["title"], "url": it["url"],
+                         "source": it.get("source_name") or it["source"]}
+                if it["source"] == "bolag" and data.get("quote"):
+                    entry["quote"] = data["quote"]
+                c["items"].append(entry)
     out = list(per.values())
     for c in out:
         c["items"].sort(key=lambda i: i["published"])
     # Bolag med rapport i dag först, sedan efter första nyhetens tid.
     out.sort(key=lambda c: (not c["report_today"], c["items"][0]["published"], c["name"]))
     return out
+
+
+def latest_policy_decision(raw_dirs: list[Path], today: date) -> dict | None:
+    """Riksbankens senaste räntebeslut i rådatan (scripts/fetch.py, data.policy_decision), fattat senast i dag.
+    Sidan visar det bredvid gällande ränta så länge det inte börjat gälla."""
+    best = None
+    for raw in raw_dirs:
+        for p in sorted(raw.glob("*-W*/index.json"))[-8:]:
+            try:
+                items = json.loads(p.read_text(encoding="utf-8")).get("items", [])
+            except (OSError, ValueError):
+                continue
+            for it in items:
+                d = (it.get("data") or {}).get("policy_decision")
+                if d and d["decided_on"] <= today.isoformat() and (best is None or d["decided_on"] > best["decided_on"]):
+                    best = d
+    return best
 
 
 # --- FI ----------------------------------------------------------------------
@@ -278,6 +303,7 @@ def build(today: date, now: datetime, instruments: dict[str, Instrument], raw_di
         "short": short_checked(short_since(raw_dirs, prev - timedelta(days=1), today - timedelta(days=1), instruments),
                                prev),
         "price": yesterday_prices(instruments, today, fetch),
+        "policy_decision": latest_policy_decision(raw_dirs, today),
     }
 
 

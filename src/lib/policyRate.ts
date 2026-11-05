@@ -35,3 +35,34 @@ export function describePolicyRate(pr: PolicyRateInput, weekStart: string, weekE
   }
   return pr.changedOn ? `oförändrad sedan ${formatLongDate(pr.changedOn)}` : "oförändrad under hämtad period";
 }
+
+export interface PolicyDecision {
+  value: number;
+  decided_on: string;
+  effective_from: string;
+  change: "höjs" | "sänks" | "oförändrad";
+  url: string;
+}
+
+const SHORT_MONTHS = ["jan", "feb", "mar", "apr", "maj", "jun", "jul", "aug", "sep", "okt", "nov", "dec"];
+
+/** "2026-11-11" -> "11 nov". */
+export function formatShortDate(iso: string): string {
+  const [, m, d] = iso.split("-").map(Number);
+  return `${d} ${SHORT_MONTHS[m - 1]}`;
+}
+
+/**
+ * "Beslutad: 2,00 % från 11 nov" när Riksbanken beslutat en ny nivå som ännu inte gäller den dag nyckeltalet avser
+ * (beslutet fattat efter att gällande nivå började gälla, och tillämpas efter observationsdagen). Annars null, även
+ * för ett beslut om oförändrad ränta.
+ */
+export function pendingDecisionText(
+  decision: PolicyDecision | null | undefined,
+  rate: PolicyRateInput & { date: string },
+): string | null {
+  if (!decision || decision.value === rate.value) return null;
+  if (decision.effective_from <= rate.date) return null;
+  if (rate.changedOn !== null && decision.decided_on < rate.changedOn) return null;
+  return `Beslutad: ${formatRate(decision.value)} % från ${formatShortDate(decision.effective_from)}`;
+}

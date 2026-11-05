@@ -4,43 +4,129 @@
   "title": "Morgonrapport för en handelsdag (scripts/morning.py)",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "date", "generated_at", "news_since", "reports_today", "news", "insider", "short", "price", "errors"],
+  "required": [
+    "schema_version",
+    "date",
+    "generated_at",
+    "news_since",
+    "reports_today",
+    "news",
+    "insider",
+    "short",
+    "price",
+    "errors"
+  ],
   "$defs": {
-    "num": { "type": ["number", "null"] },
+    "num": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
     "change": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["ticker", "name", "start_pct", "end_pct", "change_pp"],
+      "required": [
+        "ticker",
+        "name",
+        "start_pct",
+        "end_pct",
+        "change_pp"
+      ],
       "properties": {
-        "ticker": { "type": "string" },
-        "name": { "type": "string" },
-        "holder": { "type": "string" },
-        "start_pct": { "type": "number" },
-        "end_pct": { "type": "number" },
-        "change_pp": { "type": "number" }
+        "ticker": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "holder": {
+          "type": "string"
+        },
+        "start_pct": {
+          "type": "number"
+        },
+        "end_pct": {
+          "type": "number"
+        },
+        "change_pp": {
+          "type": "number"
+        }
       }
     }
   },
   "properties": {
-    "schema_version": { "const": 1 },
-    "date": { "type": "string", "format": "date" },
-    "generated_at": { "type": "string" },
-    "news_since": { "type": "string" },
-    "mock": { "const": true },
+    "schema_version": {
+      "const": 1
+    },
+    "date": {
+      "type": "string",
+      "format": "date"
+    },
+    "generated_at": {
+      "type": "string"
+    },
+    "news_since": {
+      "type": "string"
+    },
+    "mock": {
+      "const": true
+    },
     "reports_today": {
       "type": "array",
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["ticker", "name", "kind", "status", "yahoo_date", "mfn_date", "mfn_url"],
+        "required": [
+          "ticker",
+          "name",
+          "kind",
+          "status",
+          "yahoo_date",
+          "mfn_date",
+          "mfn_url"
+        ],
         "properties": {
-          "ticker": { "type": "string" },
-          "name": { "type": "string" },
-          "kind": { "enum": ["rapport", "stämma"] },
-          "status": { "enum": ["bekräftat", "avvikelse", "yahoo", "mfn"] },
-          "yahoo_date": { "type": ["string", "null"], "format": "date" },
-          "mfn_date": { "type": ["string", "null"], "format": "date" },
-          "mfn_url": { "type": ["string", "null"] }
+          "ticker": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "rapport",
+              "stämma"
+            ]
+          },
+          "status": {
+            "enum": [
+              "bekräftat",
+              "avvikelse",
+              "yahoo",
+              "mfn"
+            ]
+          },
+          "yahoo_date": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "mfn_date": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "mfn_url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
         }
       }
     },
@@ -49,23 +135,54 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["ticker", "name", "report_today", "items"],
+        "required": [
+          "ticker",
+          "name",
+          "report_today",
+          "items"
+        ],
         "properties": {
-          "ticker": { "type": "string" },
-          "name": { "type": "string" },
-          "report_today": { "type": "boolean" },
+          "ticker": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "report_today": {
+            "type": "boolean"
+          },
           "items": {
             "type": "array",
             "minItems": 1,
             "items": {
               "type": "object",
               "additionalProperties": false,
-              "required": ["published", "title", "url", "source"],
+              "required": [
+                "published",
+                "title",
+                "url",
+                "source"
+              ],
               "properties": {
-                "published": { "type": "string" },
-                "title": { "type": "string", "minLength": 1 },
-                "url": { "type": "string", "format": "uri" },
-                "source": { "type": "string" }
+                "published": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "url": {
+                  "type": "string",
+                  "format": "uri"
+                },
+                "source": {
+                  "type": "string"
+                },
+                "quote": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Ordagrant citat ur pressmeddelandet, för poster från bolagets egen webbplats (saknas annars)."
+                }
               }
             }
           }
@@ -75,42 +192,123 @@
     "insider": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["threshold_sek", "days", "days_missing", "companies"],
+      "required": [
+        "threshold_sek",
+        "days",
+        "days_missing",
+        "companies"
+      ],
       "properties": {
-        "threshold_sek": { "type": "number" },
-        "days": { "type": "array", "items": { "type": "string", "format": "date" } },
-        "days_missing": { "type": "array", "items": { "type": "string", "format": "date" } },
-        "companies": { "type": "array", "items": { "type": "object" } }
+        "threshold_sek": {
+          "type": "number"
+        },
+        "days": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "date"
+          }
+        },
+        "days_missing": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "date"
+          }
+        },
+        "companies": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
       }
     },
     "short": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["available", "note", "from_as_of", "to_as_of", "positions", "aggregate"],
+      "required": [
+        "available",
+        "note",
+        "from_as_of",
+        "to_as_of",
+        "positions",
+        "aggregate"
+      ],
       "properties": {
-        "available": { "type": "boolean" },
-        "error": { "type": "boolean", "description": "Registrets ögonblicksbild för förra handelsdagen saknas (hämtningsfel från FI): visas som varning, inte som 0 positioner. Saknas i äldre filer." },
-        "note": { "type": ["string", "null"] },
-        "from_as_of": { "type": ["string", "null"] },
-        "to_as_of": { "type": ["string", "null"] },
-        "positions": { "type": "array", "items": { "$ref": "#/$defs/change" } },
-        "aggregate": { "type": "array", "items": { "$ref": "#/$defs/change" } }
+        "available": {
+          "type": "boolean"
+        },
+        "error": {
+          "type": "boolean",
+          "description": "Registrets ögonblicksbild för förra handelsdagen saknas (hämtningsfel från FI): visas som varning, inte som 0 positioner. Saknas i äldre filer."
+        },
+        "note": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "from_as_of": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "to_as_of": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "positions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/change"
+          }
+        },
+        "aggregate": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/change"
+          }
+        }
       }
     },
     "price": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["day", "index_change_pct", "thresholds", "companies"],
+      "required": [
+        "day",
+        "index_change_pct",
+        "thresholds",
+        "companies"
+      ],
       "properties": {
-        "day": { "type": ["string", "null"], "format": "date" },
-        "index_change_pct": { "$ref": "#/$defs/num" },
+        "day": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date"
+        },
+        "index_change_pct": {
+          "$ref": "#/$defs/num"
+        },
         "thresholds": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["volume_ratio", "near_52w_pct"],
+          "required": [
+            "volume_ratio",
+            "near_52w_pct"
+          ],
           "properties": {
-            "volume_ratio": { "type": "number" },
-            "near_52w_pct": { "type": "number" }
+            "volume_ratio": {
+              "type": "number"
+            },
+            "near_52w_pct": {
+              "type": "number"
+            }
           }
         },
         "companies": {
@@ -118,31 +316,109 @@
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["ticker", "name", "change_pct", "relative_pp", "volume_ratio", "from_high_pct", "from_low_pct", "signals"],
+            "required": [
+              "ticker",
+              "name",
+              "change_pct",
+              "relative_pp",
+              "volume_ratio",
+              "from_high_pct",
+              "from_low_pct",
+              "signals"
+            ],
             "properties": {
-              "ticker": { "type": "string" },
-              "name": { "type": "string" },
-              "change_pct": { "$ref": "#/$defs/num" },
-              "relative_pp": { "$ref": "#/$defs/num" },
-              "volume_ratio": { "$ref": "#/$defs/num" },
-              "from_high_pct": { "$ref": "#/$defs/num" },
-              "from_low_pct": { "$ref": "#/$defs/num" },
+              "ticker": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "change_pct": {
+                "$ref": "#/$defs/num"
+              },
+              "relative_pp": {
+                "$ref": "#/$defs/num"
+              },
+              "volume_ratio": {
+                "$ref": "#/$defs/num"
+              },
+              "from_high_pct": {
+                "$ref": "#/$defs/num"
+              },
+              "from_low_pct": {
+                "$ref": "#/$defs/num"
+              },
               "signals": {
                 "type": "array",
                 "minItems": 1,
                 "uniqueItems": true,
-                "items": { "enum": ["omsättning", "52v-högsta", "52v-lägsta"] }
+                "items": {
+                  "enum": [
+                    "omsättning",
+                    "52v-högsta",
+                    "52v-lägsta"
+                  ]
+                }
               }
             }
           }
         }
       }
     },
-    "errors": { "type": "array", "items": { "type": "string" } },
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
     "retry": {
       "type": "array",
       "description": "Varför morgonrapporten är ofullständig och görs om vid nästa inloggning/upplåsning: förra handelsdagens kurser saknas eller nätverket saknades. Tom = klar (saknas i äldre filer).",
-      "items": { "enum": ["kurser", "nätverk"] }
+      "items": {
+        "enum": [
+          "kurser",
+          "nätverk"
+        ]
+      }
+    },
+    "policy_decision": {
+      "description": "Riksbankens senaste räntebeslut (scripts/fetch.py via rådatan); visas bredvid gällande ränta tills det börjar gälla. Saknas i äldre filer.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "value",
+        "decided_on",
+        "effective_from",
+        "change",
+        "url"
+      ],
+      "properties": {
+        "value": {
+          "type": "number"
+        },
+        "decided_on": {
+          "type": "string",
+          "format": "date"
+        },
+        "effective_from": {
+          "type": "string",
+          "format": "date"
+        },
+        "change": {
+          "enum": [
+            "höjs",
+            "sänks",
+            "oförändrad"
+          ]
+        },
+        "url": {
+          "type": "string",
+          "pattern": "^https://www\\.riksbank\\.se/"
+        }
+      }
     }
   }
 }
