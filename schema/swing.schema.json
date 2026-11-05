@@ -79,6 +79,10 @@
         },
         "dist_atr": {
           "$ref": "#/$defs/num"
+        },
+        "inside": {
+          "type": "boolean",
+          "description": "Stängningen ligger inne i zonen (bara zoner). För motstånd räknas R då till zonens övre kant. Saknas i äldre filer."
         }
       }
     }

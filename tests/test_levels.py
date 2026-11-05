@@ -81,3 +81,22 @@ def test_medelvarde_inne_i_en_zon_ar_ingen_egen_niva():
     r = Result()
     _check_sr(bad, "t", r)
     assert any("ligger över motståndet" in e for e in r.errors)
+
+def test_kursen_inne_i_zonen_och_motstand_i_r_till_ovre_kanten():
+    """Stängningen inne i motståndszonen: markeras "inside" (avstånd 0), och motståndet i R räknas till zonens
+    övre kant. Utanför zonen som förut, till den nedre."""
+    zone = {"kind": "zon", "low": 302.49, "high": 307.95, "mid": 305.35, "touches": 4, "bottoms": 0, "tops": 4}
+    d = levels._dist(zone, 305.0, 2.0, "resistance")
+    assert d["inside"] is True and d["dist_pct"] == 0.0
+    assert levels.resistance_edge(d) == 307.95
+    outside = levels._dist({**zone, "low": 306.0, "mid": 307.0}, 305.0, 2.0, "resistance")
+    assert outside["inside"] is False and levels.resistance_edge(outside) == 306.0
+    ma = levels._dist(levels.ma_levels(305.0, None, None)[0], 305.0, 2.0, "resistance")
+    assert ma["inside"] is False  # ett medelvärde är en enda nivå
+    sr = {"support": None, "resistance": d, "trigger": 306.5, "stop": 300.5,
+          "resistance_r": round((307.95 - 306.5) / 6.0, 2)}
+    r = Result()
+    _check_sr(sr, "t", r)
+    assert r.errors == []
+    _check_sr({**sr, "resistance_r": round((302.49 - 306.5) / 6.0, 2)}, "t", r)  # till nedre kanten: fel
+    assert any("motståndet i R" in e for e in r.errors)

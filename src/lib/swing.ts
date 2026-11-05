@@ -110,6 +110,15 @@ export function srDistText(dist_pct: number | null, dist_atr: number | null, sid
   return `${sign}${pctFmt.format(dist_pct)} %${atr}`;
 }
 
+/** Kursen inne i zonen: "inne i motståndszon 302,49–307,95" / "inne i stödzon …"; null annars. */
+export function srInsideText(
+  l: { kind: string; low: number; high: number; inside?: boolean } | null | undefined,
+  side: "support" | "resistance",
+): string | null {
+  if (!l || !l.inside) return null;
+  return `inne i ${side === "support" ? "stödzon" : "motståndszon"} ${priceText(l.low)}–${priceText(l.high)}`;
+}
+
 /** Avstånd i R: "2,4 R"; "–" utan värde. */
 export function rText(r: number | null | undefined): string {
   return r === null || r === undefined ? "–" : `${pctFmt.format(r)} R`;

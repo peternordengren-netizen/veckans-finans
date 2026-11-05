@@ -486,10 +486,21 @@ som övriga mått.
 5. **I strategikolumnerna för Pullback i trend:**
    - Stopp under stöd: stödets nedre kant minus 0,1 ATR.
    - 1 R: triggernivån (gårdagens high) minus det stoppet.
-   - Motstånd i R: avståndet från triggernivån till motståndets nedre kant, delat med R.
+   - Motstånd i R: avståndet från triggernivån till motståndets nedre kant, delat med R. Ligger stängningen inne i
+     motståndszonen räknas det i stället till zonens övre kant, där zonen tar slut.
+   - Ligger stängningen inne i en zon (`inside` i filen) står "inne i motståndszon X–Y" eller "inne i stödzon X–Y"
+     i stället för bara zonens kant.
 
-Valideringen kontrollerar att stödets mitt ligger under motståndets, att stoppet ligger under stödet och att
-motståndet i R stämmer. Kanterna kan överlappa när stängningen ligger i en zon.
+Valideringen kontrollerar:
+- att stödets övre kant inte ligger över motståndets nedre kant
+- att stoppet ligger under stödet
+- att motståndet i R stämmer, till rätt kant
+- att "inne i zonen" bara gäller zoner med avståndet 0
+
+Ett medelvärde inne i en zon räknas inte som egen nivå.
+
+Historiktestet nedan räknar som förut med motståndets nedre kant ("motstånd minst 2R bort"). Ligger kursen inne i
+motståndszonen klarar fallet alltså aldrig filtret.
 
 **Test i historiken:** Pullback-fall med en stödzon högst 1 ATR under stängningen och närmaste motstånd minst 2R över
 referensen, mot övriga fall. Strategins egen R och 2R-nivå används. Stödet räknas bara med zoner, eftersom rekylen

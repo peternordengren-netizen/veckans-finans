@@ -19,7 +19,8 @@ Allt gäller den senaste handelsdagen i serien (dag i, "gårdagen" i morgonens f
 4. Per bolag (summary): närmaste stöd (högsta övre kant under stängningen; en zon som stängningen ligger i har
    avståndet 0) och närmaste motstånd (lägsta nedre kant över), med avstånd i procent och i ATR. Triggernivå =
    dag i:s high. Stopp under stödet = stödets nedre kant − STOP_BUFFER_ATR × ATR. R = triggernivå − stopp.
-   Motstånd i R = (motståndets nedre kant − triggernivå) / R.
+   Motstånd i R = (motståndets nedre kant − triggernivå) / R. Ligger stängningen inne i motståndszonen
+   ("inside") räknas i stället till zonens övre kant: kursen är redan i zonen, och det är där den tar slut.
 """
 
 from __future__ import annotations
@@ -98,8 +99,10 @@ def nearest(zone_levels: list[dict], mas: list[dict], close: float) -> tuple[dic
 def _dist(level: dict, close: float, atr: float, side: str) -> dict:
     edge = level["high"] if side == "support" else level["low"]
     gap = max(0.0, close - edge) if side == "support" else max(0.0, edge - close)
+    # Stängningen inne i zonen (bara zoner; ett medelvärde är en enda nivå).
+    inside = level["kind"] == "zon" and level["low"] <= close <= level["high"]
     return {**level, "dist_pct": round(gap / close * 100, 2) if close else None,
-            "dist_atr": round(gap / atr, 2) if atr else None}
+            "dist_atr": round(gap / atr, 2) if atr else None, "inside": inside}
 
 
 def summary(h: list[float], lo: list[float], close: float, i: int, atr: float | None, ema20: float | None,
@@ -112,10 +115,16 @@ def summary(h: list[float], lo: list[float], close: float, i: int, atr: float | 
     trigger = h[i]
     stop = round(sup["low"] - th["stop_buffer_atr"] * atr, 4) if sup else None
     r = trigger - stop if stop is not None else None
+    resistance = _dist(res, close, atr, "resistance") if res else None
     return {
         "support": _dist(sup, close, atr, "support") if sup else None,
-        "resistance": _dist(res, close, atr, "resistance") if res else None,
+        "resistance": resistance,
         "trigger": round(trigger, 4),
         "stop": stop,
-        "resistance_r": round((res["low"] - trigger) / r, 2) if res and r and r > 0 else None,
+        "resistance_r": round((resistance_edge(resistance) - trigger) / r, 2) if res and r and r > 0 else None,
     }
+
+
+def resistance_edge(res: dict) -> float:
+    """Kanten som motståndet i R räknas till: övre kanten när stängningen ligger inne i zonen, annars nedre."""
+    return res["high"] if res.get("inside") else res["low"]

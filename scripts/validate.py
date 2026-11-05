@@ -970,8 +970,14 @@ def _check_sr(sr: dict, where: str, res: Result) -> None:
         res.errors.append(f"{where}: stödet {sup['high']} ({sup['kind']}) ligger över motståndet {rst['low']} ({rst['kind']})")
     if sup and (sr["stop"] is None or sr["stop"] >= sup["low"]):
         res.errors.append(f"{where}: stoppet {sr['stop']} ligger inte under stödet {sup['low']}")
+    for side, lv in (("stödet", sup), ("motståndet", rst)):
+        if lv and lv.get("inside") and (lv["kind"] != "zon" or lv["dist_pct"] not in (0, 0.0, None)):
+            res.errors.append(f"{where}: {side} är markerat \"inne i zonen\" men är ingen zon eller har avstånd")
     if rst and sr["stop"] is not None and sr["trigger"] > sr["stop"]:
-        expected = round((rst["low"] - sr["trigger"]) / (sr["trigger"] - sr["stop"]), 2)
+        from levels import resistance_edge
+
+        # Inne i motståndszonen räknas R till zonens övre kant, annars till den nedre.
+        expected = round((resistance_edge(rst) - sr["trigger"]) / (sr["trigger"] - sr["stop"]), 2)
         if sr["resistance_r"] is None or abs(sr["resistance_r"] - expected) > 0.011:
             res.errors.append(f"{where}: motståndet i R {sr['resistance_r']} ≠ {expected}")
 

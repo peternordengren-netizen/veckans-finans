@@ -9,7 +9,7 @@ import { shortDate } from "../lib/format";
 import { signedPct } from "../lib/signals";
 import {
   MIN_CASES, decidedShareText, labelClass, labelCounts, levelText, netText, priceText, reportText, riskText, shareText,
-  bollingerSourceText, chipText, pctBText, rText, signalText, srDistText, srKindText, srLevelText, upperRText, vsBaseText,
+  bollingerSourceText, chipText, pctBText, rText, signalText, srDistText, srInsideText, srKindText, srLevelText, upperRText, vsBaseText,
 } from "../lib/swing";
 
 interface Props {
@@ -130,13 +130,14 @@ const bbCheck = swing.bollingerCheck;
             <li>
               <strong>Närmaste stöd</strong> är det högsta stödet under kursen (avstånd till dess övre kant),
               <strong> närmaste motstånd</strong> det lägsta över (avstånd till dess nedre kant), i procent och i ATR(14).
-              Ligger stängningen i zonen är avståndet 0.
+              Ligger stängningen inne i zonen står "inne i stödzon" eller "inne i motståndszon" med zonens kanter.
             </li>
             <li>
               <strong>Stopp under stöd</strong> (kolumnen Stopp): närmaste stödets nedre kant minus
               {" "}{num(swing.thresholds.levels.stop_buffer_atr)} ATR. 1 R = triggernivån (gårdagens high) minus det stoppet.
               <strong> Motstånd i R</strong> (kolumnen Mål): avståndet från triggernivån till närmaste motstånds nedre kant,
-              delat med det R; negativt om motståndet ligger under triggernivån.
+              delat med det R; negativt om motståndet ligger under triggernivån. Ligger kursen inne i motståndszonen räknas
+              avståndet till zonens övre kant, där zonen tar slut.
             </li>
           </ul>
         </>
@@ -279,11 +280,21 @@ const bbCheck = swing.bollingerCheck;
                 <td class="num col-nopb" data-v={v(r.short_pct)}>{r.short_pct === null ? "–" : `${num(r.short_pct, 2)} %`}</td>
                 {(["support", "resistance"] as const).map((side) => {
                   const l = r.sr?.[side] ?? null;
+                  const inside = srInsideText(l, side);
                   return (
-                    <td class="num sr" data-v={v(l?.dist_pct ?? null)} title={l ? srLevelText(l, side) : undefined}>
-                      {l ? priceText(side === "support" ? l.high : l.low) : "–"}
-                      {l && <span class="sub">{srKindText(l)}</span>}
-                      {l && <span class="sub">{srDistText(l.dist_pct, l.dist_atr, side)}</span>}
+                    <td class:list={["num sr", inside && "inside"]} data-v={v(l?.dist_pct ?? null)} title={l ? srLevelText(l, side) : undefined}>
+                      {inside ? (
+                        <>
+                          {inside}
+                          <span class="sub">{l!.touches} vändn.</span>
+                        </>
+                      ) : (
+                        <>
+                          {l ? priceText(side === "support" ? l.high : l.low) : "–"}
+                          {l && <span class="sub">{srKindText(l)}</span>}
+                          {l && <span class="sub">{srDistText(l.dist_pct, l.dist_atr, side)}</span>}
+                        </>
+                      )}
                     </td>
                   );
                 })}
@@ -336,6 +347,7 @@ const bbCheck = swing.bollingerCheck;
                             )}
                             <span class="sub">
                               Motstånd {r.sr?.resistance ? rText(r.sr.resistance_r) : "inget inom 120 d"}
+                              {r.sr?.resistance?.inside && " (till zonens övre kant)"}
                             </span>
                           </>
                         ) : "–"}
@@ -741,6 +753,11 @@ const bbCheck = swing.bollingerCheck;
     min-width: 5.5rem;
     padding-left: 8px;
     padding-right: 8px;
+  }
+  /* "inne i motståndszon 302,49–307,95" bryts på två rader i stället för att göra kolumnen bred. */
+  td.sr.inside {
+    white-space: normal;
+    max-width: 8.5rem;
   }
   td.wrap {
     white-space: normal;

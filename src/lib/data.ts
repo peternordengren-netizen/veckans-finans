@@ -106,6 +106,8 @@ export interface SrLevel {
   tops: number | null;
   dist_pct: number | null;
   dist_atr: number | null;
+  /** Stängningen ligger inne i zonen; för motstånd räknas R då till övre kanten (saknas i äldre filer). */
+  inside?: boolean;
 }
 export interface SupportResistance {
   support: SrLevel | null;

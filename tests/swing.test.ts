@@ -4,7 +4,7 @@ import { test } from "node:test";
 
 import {
   decidedShareText, isPullbackLabel, labelClass, labelCounts, levelText, netText, priceText, reportText, riskText, shareText,
-  bollingerSourceText, chipText, pctBText, rText, signalText, srDistText, srLevelText, upperRText, vsBaseText,
+  bollingerSourceText, chipText, pctBText, rText, signalText, srDistText, srInsideText, srLevelText, upperRText, vsBaseText,
 } from "../src/lib/swing.ts";
 
 test("etiketternas klasser och antal", () => {
@@ -90,4 +90,11 @@ test("Bollingerkolumnen för pullback-kandidater", () => {
   assert.equal(upperRText(null), "–");
   assert.equal(bollingerSourceText(undefined), "stängning");
   assert.equal(bollingerSourceText("2026-11-05T13:20:04+01:00"), "kl. 13:20");
+});
+test("kursen inne i en zon", () => {
+  const z = { kind: "zon", low: 302.49, high: 307.95, inside: true };
+  assert.equal(srInsideText(z, "resistance"), "inne i motståndszon 302,49–307,95");
+  assert.equal(srInsideText(z, "support"), "inne i stödzon 302,49–307,95");
+  assert.equal(srInsideText({ ...z, inside: false }, "support"), null);
+  assert.equal(srInsideText(null, "support"), null);
 });
