@@ -15,6 +15,9 @@ Källor och hämtning (en hämtning per källa och körning):
   veckosidans "Kommande vecka" också hålls aktuell.
 - Kursdata: ett batchanrop till Yahoo (scripts/signals.py) för gårdagens handelsdag. Samma dagsdata
   används för fliken Swing (scripts/swing.py -> data/swing/<datum>.json), utan extra hämtning.
+  Datumet är dagsdatans eget (signals.data_day: den senaste dagen som minst 90 % av bolagen har en kursrad
+  för), inte det senaste datumet hos något bolag. Är det inte förra handelsdagen blir rapporten "retry"
+  ("kurser") med ett fel, och run_morning.ps1 hämtar kurserna igen var tionde minut till 09:10 (--bara-kurser).
 
 Innehåll:
 - reports_today: kalenderns rapporter och stämmor i dag
@@ -48,7 +51,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import report_calendar  # noqa: E402
 from registers import _aggregate_by_ticker, insyn_summary, snapshot_at  # noqa: E402
-from signals import THRESHOLDS, BarFetcher, price_stats, week_change, yahoo_bars  # noqa: E402
+from signals import THRESHOLDS, BarFetcher, data_day, price_stats, week_change, yahoo_bars  # noqa: E402
 from prices import INDEX_TICKER  # noqa: E402
 from validate import DATA_DIR, RAW_DIR, Instrument, load_instruments, validate_morning  # noqa: E402
 from workdays import non_business_days  # noqa: E402
@@ -250,13 +253,18 @@ def price_signals(c: dict, thresholds: dict) -> list[str]:
 
 
 def yesterday_prices(instruments: dict[str, Instrument], today: date, fetch: BarFetcher) -> dict:
-    """Gårdagens handelsdag (senaste dagen före i dag med kurser): bolag med kurssignal."""
+    """Bolag med kurssignal den senaste handelsdagen som dagsdatan faktiskt täcker (signals.data_day: minst 90 %
+    av bolagen har en kursrad den dagen). "day" är alltså datans datum, aldrig ett antaget; "expected_day" är
+    förra handelsdagen och "coverage" hur många bolag som har en rad för day respektive expected_day."""
     tickers = [i.yahoo_ticker for i in instruments.values()]
     bars = fetch([*tickers, INDEX_TICKER], today - timedelta(days=400), today - timedelta(days=1))
-    days = sorted({b.day for bs in bars.values() for b in bs if b.day < today})
-    if not days:
-        return {"day": None, "index_change_pct": None, "thresholds": _price_thresholds(), "companies": []}
-    day = days[-1]
+    expected = previous_business_day(today)
+    day, with_day, of = data_day(bars, tickers, today)
+    with_expected = sum(1 for t in tickers if any(b.day == expected for b in bars.get(t, [])))
+    coverage = {"with_day": with_day, "with_expected": with_expected, "of": of}
+    if day is None:
+        return {"day": None, "expected_day": expected.isoformat(), "coverage": coverage,
+                "index_change_pct": None, "thresholds": _price_thresholds(), "companies": []}
     index_change = week_change(bars.get(INDEX_TICKER, []), day, day)
     companies = []
     for inst in instruments.values():
@@ -275,8 +283,8 @@ def yesterday_prices(instruments: dict[str, Instrument], today: date, fetch: Bar
         if c["signals"]:
             companies.append(c)
     companies.sort(key=lambda c: (-(c["volume_ratio"] or 0), c["name"]))
-    return {"day": day.isoformat(), "index_change_pct": index_change, "thresholds": _price_thresholds(),
-            "companies": companies}
+    return {"day": day.isoformat(), "expected_day": expected.isoformat(), "coverage": coverage,
+            "index_change_pct": index_change, "thresholds": _price_thresholds(), "companies": companies}
 
 
 def _price_thresholds() -> dict:
@@ -358,12 +366,16 @@ def main(argv: list[str] | None = None, fetch_bars: BarFetcher = yahoo_bars,
     p = argparse.ArgumentParser()
     p.add_argument("--date", type=date.fromisoformat, help="rapportens datum (standard: i dag)")
     p.add_argument("--no-fetch", action="store_true", help="hämta inget lokalt, använd befintlig rådata")
+    p.add_argument("--bara-kurser", action="store_true",
+                   help="hämta bara dagsdatan igen och skriv om kursdelen och Swing (exit 2 = gårdagens kurser saknas)")
     args = p.parse_args(argv)
     now = now or datetime.now(STOCKHOLM)
     today = args.date or now.date()
     if not is_business_day(today):
         print(f"{today} är ingen handelsdag – ingen morgonrapport.")
         return 0
+    if args.bara_kurser:
+        return refresh_prices(today, now, fetch_bars)
 
     errors = [] if args.no_fetch else fetch_local(today)
     instruments = load_instruments()
@@ -395,9 +407,7 @@ def main(argv: list[str] | None = None, fetch_bars: BarFetcher = yahoo_bars,
     if data["short"]["error"]:
         data["errors"].append(f"blankning: {data['short']['note']}")
     data["retry"] = retry_reasons(data, errors, today)
-    if "kurser" in data["retry"]:
-        data["errors"].append(f"kurser saknas för {previous_business_day(today)} (senaste dag hos Yahoo: "
-                              f"{data['price']['day'] or 'ingen'})")
+    add_price_error(data, today)
     res = validate_morning(data, instruments)
     if res.errors:
         print("Morgonrapporten klarar inte valideringen – skrivs inte:", *res.errors, sep="\n  ", file=sys.stderr)
@@ -419,6 +429,57 @@ def main(argv: list[str] | None = None, fetch_bars: BarFetcher = yahoo_bars,
         print(f"Ofullständig ({', '.join(data['retry'])}) – nästa inloggning eller upplåsning försöker igen.")
         return 2
     return 0
+
+
+PRICE_ERROR_PREFIX = "kurser saknas för "
+
+
+def add_price_error(data: dict, today: date) -> None:
+    """Felet när dagsdatan inte är förra handelsdagens (ersätter ett tidigare sådant fel)."""
+    data["errors"] = [e for e in data["errors"] if not e.startswith(PRICE_ERROR_PREFIX)]
+    if "kurser" in data["retry"]:
+        p = data["price"]
+        cov = p.get("coverage") or {}
+        data["errors"].append(
+            f"{PRICE_ERROR_PREFIX}{previous_business_day(today)} ({cov.get('with_expected', 0)} av {cov.get('of', 0)} "
+            f"bolag hos Yahoo); dagsdatan gäller {p['day'] or 'ingen dag'}")
+
+
+def refresh_prices(today: date, now: datetime, fetch_bars: BarFetcher = yahoo_bars) -> int:
+    """--bara-kurser: hämtar bara dagsdatan igen (ett batchanrop) och skriver om kursdelen i dagens morgonrapport
+    och fliken Swing. För omförsöken var tionde minut när gårdagens kurser saknades (scripts/run_morning.ps1).
+    Exit 0 = gårdagens kurser finns nu, 2 = saknas fortfarande, 1 = ingen morgonrapport eller valideringsfel."""
+    out = MORNING_DIR / f"{today}.json"
+    if not out.exists():
+        print(f"Ingen morgonrapport för {today} – kör morning.py först.", file=sys.stderr)
+        return 1
+    data = json.loads(out.read_text(encoding="utf-8"))
+    instruments = load_instruments()
+    cache: dict = {}
+
+    def fetch_once(tickers: list[str], start: date, end: date) -> dict:
+        key = (tuple(tickers), start, end)
+        if key not in cache:
+            cache[key] = fetch_bars(tickers, start, end)
+        return cache[key]
+
+    data["price"] = yesterday_prices(instruments, today, fetch_once)
+    data["retry"] = [r for r in data.get("retry", []) if r != "kurser"]
+    if data["price"]["day"] != previous_business_day(today).isoformat():
+        data["retry"].append("kurser")
+    add_price_error(data, today)
+    res = validate_morning(data, instruments)
+    if res.errors:
+        print("Morgonrapporten klarar inte valideringen – skrivs inte:", *res.errors, sep="\n  ", file=sys.stderr)
+        return 1
+    tmp = out.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    tmp.replace(out)
+    cov = data["price"]["coverage"]
+    print(f"Kurser {today}: dagsdatan gäller {data['price']['day']} ({cov['with_expected']} av {cov['of']} bolag har "
+          f"{previous_business_day(today)}), kurssignaler {len(data['price']['companies'])} bolag -> {out}")
+    write_swing(today, now, instruments, fetch_once)
+    return 2 if "kurser" in data["retry"] else 0
 
 
 def retry_reasons(data: dict, fetch_errors: list[str], today: date) -> list[str]:

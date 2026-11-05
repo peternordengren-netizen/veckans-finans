@@ -40,7 +40,12 @@ export interface MorningReport {
   insider: { threshold_sek: number; days: string[]; days_missing: string[]; companies: InsiderCompany[] };
   short: { available: boolean; error?: boolean; note: string | null; from_as_of: string | null; to_as_of: string | null; positions: MorningChange[]; aggregate: MorningChange[] };
   price: {
+    /** Dagsdatans eget datum (scripts/signals.py data_day), aldrig ett antaget. */
     day: string | null;
+    /** Förra handelsdagen; skiljer den sig från day visas en varning (saknas i äldre filer). */
+    expected_day?: string;
+    /** Bolag med kursrad för day respektive expected_day, av bolagen med kurser (saknas i äldre filer). */
+    coverage?: { with_day: number; with_expected: number; of: number };
     index_change_pct: number | null;
     thresholds: { volume_ratio: number; near_52w_pct: number };
     companies: { ticker: string; name: string; change_pct: number | null; relative_pp: number | null; volume_ratio: number | null; from_high_pct: number | null; from_low_pct: number | null; signals: ("omsättning" | "52v-högsta" | "52v-lägsta")[] }[];
@@ -163,7 +168,11 @@ export interface SwingStat {
 }
 export interface SwingView {
   date: string;
+  /** Dagsdatans eget datum (scripts/signals.py data_day). */
   asOf: string | null;
+  /** Förra handelsdagen; skiljer den sig från asOf visas en varning (null i äldre filer). */
+  expectedDay: string | null;
+  coverage: { with_day: number; with_expected: number; of: number } | null;
   shortAsOf: string | null;
   thresholds: {
     volume_ratio: number; rsi2_low: number; rsi2_high: number; report_days: number;
@@ -214,6 +223,8 @@ export function loadLatestSwing(): SwingView | null {
     const raw = readJson<{
       date: string;
       as_of: string | null;
+      expected_day?: string;
+      coverage?: { with_day: number; with_expected: number; of: number };
       short_as_of: string | null;
       thresholds: SwingView["thresholds"];
       labels: Record<string, string>;
@@ -235,6 +246,8 @@ export function loadLatestSwing(): SwingView | null {
     return {
       date: raw.date,
       asOf: raw.as_of,
+      expectedDay: raw.expected_day ?? null,
+      coverage: raw.coverage ?? null,
       shortAsOf: raw.short_as_of,
       thresholds: raw.thresholds,
       labels: raw.labels,

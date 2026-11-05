@@ -20,12 +20,14 @@ INSTRUMENTS = {
 }
 
 
-def make_bars(closes, volumes=None, start=date(2026, 6, 1)):
-    days, d = [], start
+def make_bars(closes, volumes=None, start=date(2026, 6, 1), end=None):
+    """Vardagar från start, eller (end) bakåt så att serien slutar på end."""
+    days, d = [], end or start
     while len(days) < len(closes):
         if d.weekday() < 5:
             days.append(d)
-        d += timedelta(days=1)
+        d += timedelta(days=-1 if end else 1)
+    days.sort()
     vols = volumes or [1000.0] * len(closes)
     return [Bar(day, c, c, c * 1.01, c * 0.99, v) for day, c, v in zip(days, closes, vols)]
 
@@ -65,7 +67,8 @@ def test_rapportetiketter():
 
 def test_build_och_validering():
     closes = [100.0 + i * 0.5 for i in range(70)]
-    bars = {"ALFA.ST": make_bars(closes), "BETA.ST": make_bars([100.0] * 20)}  # BETA: för kort historik
+    bars = {"ALFA.ST": make_bars(closes)}
+    bars["BETA.ST"] = make_bars([100.0] * 20, end=bars["ALFA.ST"][-1].day)  # BETA: för kort historik
     last = bars["ALFA.ST"][-1].day
     today = last + timedelta(days=1)
     # Rapport på fredagskvällen efter stängning -> reaktion nästa handelsdag; här på sista dagen.
@@ -205,7 +208,8 @@ def make_ohlc_trend_with_pullback():
 
 
 def test_swing_bygger_och_validerar_pullback():
-    bars = {"ALFA.ST": make_ohlc_trend_with_pullback(), "BETA.ST": make_bars([100.0] * 60)}
+    bars = {"ALFA.ST": make_ohlc_trend_with_pullback()}
+    bars["BETA.ST"] = make_bars([100.0] * 60, end=bars["ALFA.ST"][-1].day)
     today = bars["ALFA.ST"][-1].day + timedelta(days=1)
     data = swing.build(today, datetime.now(TZ), INSTRUMENTS, bars, {}, (None, {}))
     a = next(c for c in data["companies"] if c["ticker"] == "ALFA")
@@ -298,7 +302,8 @@ def test_golden_och_death_cross():
 def test_korsning_valideras_och_finns_i_historiken():
     closes = [300.0 - i for i in range(220)] + [80.0 + 3 * i for i in range(80)]
     j = _cross_day(closes, True)
-    bars = {"ALFA.ST": make_bars(closes[:j + 2]), "BETA.ST": make_bars([100.0] * 60)}
+    bars = {"ALFA.ST": make_bars(closes[:j + 2])}
+    bars["BETA.ST"] = make_bars([100.0] * 60, end=bars["ALFA.ST"][-1].day)
     today = bars["ALFA.ST"][-1].day + timedelta(days=1)
     data = swing.build(today, datetime.now(TZ), INSTRUMENTS, bars, {}, (None, {}))
     a = next(c for c in data["companies"] if c["ticker"] == "ALFA")
@@ -312,3 +317,17 @@ def test_korsning_valideras_och_finns_i_historiken():
                  "BETA.ST": make_bars([600.0 - i for i in range(n)])}
     hist = swing_history.build(hist_bars, INSTRUMENTS, date(2028, 1, 1))
     assert {"golden-cross", "death-cross"} <= set(hist["labels"])
+
+
+def test_swing_galler_dagsdatans_datum_inte_enstaka_bolags():
+    """Har bara ett av två bolag gårdagens rad (Yahoo kl. 08:10) gäller måtten dagen före för båda,
+    med förra handelsdagen och täckningen i filen."""
+    alfa = make_bars([100.0 + i * 0.5 for i in range(70)])
+    last = alfa[-1].day
+    beta = make_bars([100.0 + i * 0.2 for i in range(69)], end=alfa[-2].day)  # saknar sista dagen
+    today = last + timedelta(days=1 if last.weekday() < 4 else 3)
+    data = swing.build(today, datetime.now(TZ), INSTRUMENTS, {"ALFA.ST": alfa, "BETA.ST": beta}, {}, (None, {}))
+    assert data["as_of"] == alfa[-2].day.isoformat() and data["expected_day"] == last.isoformat()
+    assert data["coverage"] == {"with_day": 2, "with_expected": 1, "of": 2}
+    assert {c["day"] for c in data["companies"]} == {alfa[-2].day.isoformat()}  # Alfaverken utan sista dagen
+    assert validate_swing(data, INSTRUMENTS).errors == []

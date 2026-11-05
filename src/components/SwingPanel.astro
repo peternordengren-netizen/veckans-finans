@@ -69,6 +69,16 @@ const bbCheck = swing.bollingerCheck;
     hur ofta varje etikett det senaste året följts av att aktien gått bättre än index, jämfört med alla dagar, och för
     strategin Pullback i trend hur ofta 2R nåddes före stoppet. Historiken säger inget om hur det går nästa gång.
   </p>
+  {
+    swing.expectedDay && swing.asOf !== swing.expectedDay && (
+      <p class="warn-box">
+        Måtten gäller stängningen {swing.asOf ? shortDate(swing.asOf) : "– ingen dag"}, inte förra handelsdagen
+        ({shortDate(swing.expectedDay)}): Yahoo hade
+        {swing.coverage ? ` ${swing.coverage.with_expected} av ${swing.coverage.of} bolags` : " inte"} kurser för den dagen
+        när fliken uppdaterades.
+      </p>
+    )
+  }
   <details class="legend">
     <summary>Så räknas måtten och etiketterna</summary>
     <ul>
@@ -697,6 +707,13 @@ const bbCheck = swing.bollingerCheck;
   }
   .swing[data-strategy="pullback"] .col-pb {
     display: table-cell;
+  }
+  .warn-box {
+    padding: 8px 12px;
+    border-radius: var(--radius);
+    background: var(--banner-bg);
+    color: var(--banner-fg);
+    border: 1px solid var(--banner-border);
   }
   .bb-note {
     display: none;

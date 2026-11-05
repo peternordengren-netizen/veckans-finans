@@ -139,6 +139,75 @@ def test_hela_rapporten_validerar(tmp_path):
     assert any("signalerna" in e for e in errors) and any("utanför" in e for e in errors)
 
 
+def _bars_until(last_day, closes):
+    """Vardagar fram till och med last_day."""
+    days, d = [], last_day
+    while len(days) < len(closes):
+        if d.weekday() < 5:
+            days.append(d)
+        d -= timedelta(days=1)
+    return [Bar(day, c, c, c, c, 1000.0) for day, c in zip(sorted(days), closes)]
+
+
+def test_dagsdatans_datum_ar_det_de_flesta_bolagen_har():
+    from signals import data_day
+
+    fri, thu = date(2026, 10, 16), date(2026, 10, 15)
+    bars = {f"B{i}": _bars_until(thu, [100.0] * 30) for i in range(10)}
+    bars["B0"] = _bars_until(fri, [100.0] * 30)  # ett bolag har fredagen, nio har torsdagen som senaste
+    assert data_day(bars, list(bars), MONDAY) == (thu, 10, 10)
+    for i in range(1, 9):
+        bars[f"B{i}"] = _bars_until(fri, [100.0] * 30)  # nio av tio har fredagen: 90 % räcker
+    assert data_day(bars, list(bars), MONDAY) == (fri, 9, 10)
+    assert data_day({}, ["X"], MONDAY) == (None, 0, 0)
+
+
+def test_gardagens_kurser_saknas_hos_de_flesta_bolagen(tmp_path):
+    """Yahoo 08:10: bara Alfaverken (och index) har fredagen. Kurserna gäller då torsdagen för alla bolag,
+    med förra handelsdagen och täckningen i filen, och valideringen kräver retry "kurser"."""
+    fri, thu = date(2026, 10, 16), date(2026, 10, 15)
+
+    def fetch(_tickers, _start, _end):
+        return {"^OMXSPI": _bars_until(fri, [100.0] * 30), "ALFA.ST": _bars_until(fri, [100.0] * 29 + [110.0]),
+                "BETA.ST": _bars_until(thu, [100.0] * 30)}
+
+    data = build(MONDAY, NOW, INSTRUMENTS, [tmp_path], None, fetch)
+    p = data["price"]
+    assert (p["day"], p["expected_day"]) == ("2026-10-15", "2026-10-16")
+    assert p["coverage"] == {"with_day": 2, "with_expected": 1, "of": 2}
+    data["errors"], data["retry"] = [], []
+    assert any("retry saknar" in e for e in validate_morning(data, INSTRUMENTS).errors)
+    data["retry"] = ["kurser"]
+    assert validate_morning(data, INSTRUMENTS).errors == []
+
+
+def test_bara_kurser_skriver_om_kursdelen(tmp_path, monkeypatch):
+    """--bara-kurser (omförsöken till 09:10): kursdelen och felet skrivs om, övriga delar lämnas."""
+    import morning
+
+    fri, thu = date(2026, 10, 16), date(2026, 10, 15)
+    stale = {"^OMXSPI": _bars_until(fri, [100.0] * 30), "ALFA.ST": _bars_until(fri, [100.0] * 30),
+             "BETA.ST": _bars_until(thu, [100.0] * 30)}
+    fresh = {**stale, "BETA.ST": _bars_until(fri, [100.0] * 30)}
+    monkeypatch.setattr(morning, "MORNING_DIR", tmp_path)
+    monkeypatch.setattr(morning, "load_instruments", lambda: INSTRUMENTS)
+    swings = []
+    monkeypatch.setattr(morning, "write_swing", lambda *a: swings.append(a[0]))
+    data = build(MONDAY, NOW, INSTRUMENTS, [tmp_path], None, lambda *a: stale)
+    data["errors"] = ["FI blankning: något annat"]
+    data["retry"] = morning.retry_reasons(data, [], MONDAY)
+    morning.add_price_error(data, MONDAY)
+    assert data["retry"] == ["kurser"] and any(e.startswith("kurser saknas för 2026-10-16") for e in data["errors"])
+    write_json(tmp_path / "2026-10-19.json", data)
+
+    assert morning.refresh_prices(MONDAY, NOW, lambda *a: stale) == 2  # fortfarande torsdagen
+    assert morning.refresh_prices(MONDAY, NOW, lambda *a: fresh) == 0
+    out = json.loads((tmp_path / "2026-10-19.json").read_text(encoding="utf-8"))
+    assert out["price"]["day"] == "2026-10-16" and out["retry"] == []
+    assert out["errors"] == ["FI blankning: något annat"]  # bara kursfelet togs bort
+    assert out["news_since"] == data["news_since"] and swings == [MONDAY, MONDAY]
+
+
 def test_saknade_kurser_eller_natverk_gors_om():
     """Morgonrapporten är ofullständig (görs om vid nästa inloggning/upplåsning) om förra handelsdagens
     kurser saknas eller ingen källa gick att hämta."""

@@ -115,6 +115,26 @@ def week_change(bars: list[Bar], start: date, end: date) -> float | None:
     return round((during[-1].adj_close / before[-1].adj_close - 1) * 100, 2)
 
 
+# Dagsdatans faktiska datum: den senaste dagen som minst så stor andel av bolagen (med kurser) har en kursrad
+# för. Yahoo har ofta inte gårdagens rader för svenska aktier kl. 08:10, men för ett fåtal (utländska) bolag och
+# index – det senaste datumet hos något bolag är därför inte dagsdatans datum (2026-11-05: 3 av 266).
+MIN_DAY_COVERAGE = 0.9
+
+
+def data_day(bars: dict[str, list[Bar]], tickers: list[str], before: date) -> tuple[date | None, int, int]:
+    """(dagsdatans datum, antal bolag med kursrad den dagen, antal bolag med kurser) för raderna före `before`.
+    Datumet är den senaste dagen som minst MIN_DAY_COVERAGE av bolagen med kurser har en rad för; None utan kurser."""
+    have = [{b.day for b in bars.get(t, []) if b.day < before} for t in tickers]
+    have = [s for s in have if s]
+    if not have:
+        return None, 0, 0
+    for d in sorted(set().union(*have), reverse=True):
+        n = sum(1 for s in have if d in s)
+        if n >= MIN_DAY_COVERAGE * len(have):
+            return d, n, len(have)
+    return None, 0, len(have)
+
+
 def price_stats(bars: list[Bar], start: date, end: date) -> dict:
     """Kursnyckeltal för veckan: förändring, omsättning mot snitt och 52-veckorsläge."""
     during = [b for b in bars if start <= b.day <= end]

@@ -41,6 +41,8 @@ const shortGroups = groupByCompany(report.short.positions.map((p) => ({ ...p, ho
 const pp = new Intl.NumberFormat("sv-SE", { minimumFractionDigits: 2, maximumFractionDigits: 2, signDisplay: "exceptZero" });
 const signedPp = (v: number) => `${pp.format(v)} procentenheter`;
 const meetings = report.reports_today.filter((e) => e.kind === "stämma");
+// Kursdatumet kommer ur datan; är det inte förra handelsdagen (Yahoo saknade gårdagens kurser) varnas det.
+const priceStale = !!report.price.expected_day && report.price.day !== report.price.expected_day;
 ---
 
 <div class:list={["morning", `level-${level}`]}>
@@ -51,7 +53,7 @@ const meetings = report.reports_today.filter((e) => e.kind === "stämma");
     <a href="#nyheter">Nyheter <span class="n">{newsCount}</span></a>
     <a href="#insyn">Insyn <span class="n">{report.insider.companies.length}</span></a>
     <a href="#blankning">Blankning <span class="n">{report.short.positions.length + report.short.aggregate.length}</span></a>
-    <a href="#kurser">Kurser i går <span class="n">{report.price.companies.length}</span></a>
+    <a href="#kurser">Kurser {report.price.day ? shortDate(report.price.day) : ""}{priceStale && " ⚠"} <span class="n">{report.price.companies.length}</span></a>
     {after && <a class="after" href={after.href}>{after.label}</a>}
   </nav>
 
@@ -221,7 +223,17 @@ const meetings = report.reports_today.filter((e) => e.kind === "stämma");
   </section>
 
   <section id="kurser" class="block">
-    <H>Kurser {report.price.day ? weekdayDate(report.price.day).toLowerCase() : "i går"}</H>
+    <H>Kurser {report.price.day ? weekdayDate(report.price.day).toLowerCase() : "– inga kurser"}</H>
+    {
+      priceStale && (
+        <p class="warn-box">
+          Kurserna gäller {report.price.day ? weekdayDate(report.price.day).toLowerCase() : "ingen dag"}, inte förra
+          handelsdagen ({weekdayDate(report.price.expected_day!).toLowerCase()}): Yahoo hade{" "}
+          {report.price.coverage ? `${report.price.coverage.with_expected} av ${report.price.coverage.of} bolags` : "inte"}{" "}
+          kurser för den dagen när rapporten togs fram.
+        </p>
+      )
+    }
     <p class="note">
       Bolag med minst {ratio(report.price.thresholds.volume_ratio)} snittomsättningen (20 dagar) eller högst{" "}
       {report.price.thresholds.near_52w_pct.toLocaleString("sv-SE")} % från 52-veckorshögsta/-lägsta.
@@ -490,6 +502,13 @@ const meetings = report.reports_today.filter((e) => e.kind === "stämma");
     overflow: hidden;
     clip: rect(0 0 0 0);
     white-space: nowrap;
+  }
+  .warn-box {
+    padding: 8px 12px;
+    border-radius: var(--radius);
+    background: var(--banner-bg);
+    color: var(--banner-fg);
+    border: 1px solid var(--banner-border);
   }
   .quote {
     margin: 4px 0 2px 0;

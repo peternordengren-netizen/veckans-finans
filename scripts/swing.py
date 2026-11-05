@@ -54,7 +54,16 @@ import levels  # noqa: E402
 import pullback  # noqa: E402
 from bollinger import bands, position, upper_band  # noqa: E402
 from prices import INDEX_TICKER  # noqa: E402
-from signals import Bar, BarFetcher, yahoo_bars  # noqa: E402
+from signals import Bar, BarFetcher, data_day, yahoo_bars  # noqa: E402
+from workdays import non_business_days  # noqa: E402
+
+
+def previous_business_day(d: date) -> date:
+    """Förra handelsdagen (som morning.previous_business_day; morning importeras inte här)."""
+    d -= timedelta(days=1)
+    while d.weekday() >= 5 or d in non_business_days(d.year):
+        d -= timedelta(days=1)
+    return d
 from validate import DATA_DIR, RAW_DIR, Instrument, load_instruments, validate_swing  # noqa: E402
 
 STOCKHOLM = ZoneInfo("Europe/Stockholm")
@@ -253,13 +262,17 @@ def short_levels(today: date, instruments: dict[str, Instrument],
 def build(today: date, now: datetime, instruments: dict[str, Instrument], bars: dict[str, list[Bar]],
           reports: dict[str, dict], shorts: tuple[str | None, dict[str, float]]) -> dict:
     short_day, short_pct = shorts
-    companies, as_of = [], None
+    # Dagsdatans datum (signals.data_day), inte det senaste datumet hos något bolag: har bara ett fåtal bolag
+    # gårdagens rad (Yahoo kl. 08:10) gäller måtten dagen före, för alla bolag, och sidan varnar.
+    as_of, with_day, of = data_day(bars, [i.yahoo_ticker for i in instruments.values()], today)
+    expected = previous_business_day(today)
+    with_expected = sum(1 for i in instruments.values() if any(x.day == expected for x in bars.get(i.yahoo_ticker, [])))
+    companies = []
     for t, inst in instruments.items():
-        b = [x for x in bars.get(inst.yahoo_ticker, []) if x.day < today]
+        b = [x for x in bars.get(inst.yahoo_ticker, []) if as_of is not None and x.day <= as_of]
         if len(b) < MIN_BARS:
             continue
         m = series(b)[-1]
-        as_of = max(as_of or m["day"], m["day"])
         rep = reports.get(t)
         days_since = None
         if rep:
@@ -305,6 +318,9 @@ def build(today: date, now: datetime, instruments: dict[str, Instrument], bars: 
         "schema_version": 1,
         "date": today.isoformat(),
         "as_of": as_of.isoformat() if as_of else None,
+        # Förra handelsdagen; skiljer den sig från as_of gäller måtten en äldre dag (varning på sidan).
+        "expected_day": expected.isoformat(),
+        "coverage": {"with_day": with_day, "with_expected": with_expected, "of": of},
         "generated_at": now.isoformat(timespec="seconds"),
         "thresholds": {**THRESHOLDS, "pullback": pullback.THRESHOLDS, "levels": levels.THRESHOLDS},
         "labels": dict(LABELS),  # en kopia: filen får inte dela modulens dict

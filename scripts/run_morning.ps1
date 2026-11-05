@@ -16,6 +16,10 @@
 # - Saknas förra handelsdagens kurser eller nätverket skrivs morgonrapporten ändå, men med "retry"
 #   (morning.py exit 2), felet loggas och nästa utlösare gör om den. Samma för förra dagens
 #   kursreaktion (afternoon.py --forra-om-saknas). Utan nätverk väntar konsensus och rapportutfall.
+# - Saknas förra handelsdagens kurser (Yahoo har dem ofta inte 08:10) hämtas bara kurserna igen
+#   (morning.py --bara-kurser: kursdelen och Swing) var tionde minut till 09:10, med bygge efter varje
+#   försök. Därefter står sidan kvar med dagsdatans eget datum och en varning. En senare utlösare med
+#   bara "kurser" kvar gör också bara --bara-kurser (inom gränsen för försök).
 # - Högst två försök per steg och dag (räknas i loggen), fyra för morgonrapporten och kursreaktionen
 #   (ingen Claude), så att ett fel inte ger nya hämtningar eller Claude-körningar vid varje upplåsning.
 # - Logg i logs/morning/<datum>.log, bygget i logs/morning/<datum>-build.log.
@@ -96,9 +100,12 @@ $ran = $false
 
 # 1. Morgonrapporten. Via cmd så att stderr (t.ex. yfinance-varningar) inte blir PowerShell-fel.
 #    Exit 2: skriven men ofullständig (kurser eller nätverket saknades) - görs om vid nästa utlösare.
+# Saknas bara kurserna räcker det att hämta dem igen (ingen ny hämtning från MFN, Cision och FI).
+$onlyPrices = (Test-Path $Report) -and ((@(Retry $Report) -join ",") -eq "kurser")
 if ($needReport) {
-    Log "Startar morning.py"
-    & cmd.exe /c ".venv\Scripts\python.exe scripts\morning.py 2>&1" | ForEach-Object { Log "  $_" }
+    Log "Startar morning.py$(if ($onlyPrices) { ' --bara-kurser' })"
+    $mArgs = if ($onlyPrices) { "--bara-kurser" } else { "" }
+    & cmd.exe /c ".venv\Scripts\python.exe scripts\morning.py $mArgs 2>&1" | ForEach-Object { Log "  $_" }
     $code = $LASTEXITCODE
     Log ("morning.py: exit $code" + $(if ($code -eq 2) { " - FEL: ofullständig ($((Retry $Report) -join ', ')), nytt försök vid nästa inloggning eller upplåsning" } else { "" }))
     $ran = $true
@@ -146,9 +153,26 @@ if ($needResults) {
 }
 
 # 4. Bygget.
-if ($ran) {
-    $BuildLog = Join-Path $LogDir "$Today-build.log"
+$BuildLog = Join-Path $LogDir "$Today-build.log"
+function Build {
     & cmd.exe /c "npm run build > `"$BuildLog`" 2>&1"
     Log "npm run build: exit $LASTEXITCODE (logg: $BuildLog)"
+}
+if ($ran) { Build }
+
+# 5. Gårdagens kurser saknas: hämta bara kurserna igen var tionde minut till 09:10 (räknas inte som
+#    försök med morgonrapporten), och bygg efter varje försök. Sidan visar under tiden dagsdatans datum
+#    med en varning.
+$PriceDeadline = (Get-Date).Date.AddHours(9).AddMinutes(10)
+while ((@(Retry $Report) -contains "kurser") -and (Get-Date).AddMinutes(10) -le $PriceDeadline) {
+    Log "Gårdagens kurser saknas - nytt kursförsök om 10 minuter (senast 09:10)."
+    Start-Sleep -Seconds 600
+    Log "Startar kursförsök (morning.py --bara-kurser)"
+    & cmd.exe /c ".venv\Scripts\python.exe scripts\morning.py --bara-kurser 2>&1" | ForEach-Object { Log "  $_" }
+    Log "kursförsök: exit $LASTEXITCODE"
+    Build
+}
+if (@(Retry $Report) -contains "kurser") {
+    Log "FEL: gårdagens kurser saknas fortfarande - sidan visar dagsdatans datum med en varning."
 }
 Log "Klart"

@@ -407,7 +407,24 @@ eller före 08:10, står det så under rubriken med datum. Varje dags rapport fi
 - **Insyn** publicerad sedan förra handelsdagen, med samma filter som veckoanalysen.
 - **Blankning:** ändrade positioner över 0,5 % och ändringar i sammanlagd blankning på minst 0,2 procentenheter, mellan
   registrets ögonblicksbilder.
-- **Kurser i går:** bolag med minst 2 gånger snittomsättningen eller högst 2 % från 52-veckorshögsta/-lägsta.
+- **Kurser** (dagsdatans datum): bolag med minst 2 gånger snittomsättningen eller högst 2 % från
+  52-veckorshögsta/-lägsta.
+
+**Kursdatumet kommer alltid ur datan** (`signals.data_day`). Datumet är den senaste dagen som minst 90 % av bolagen
+har en kursrad för, inte det senaste datumet hos något bolag. Det gäller både morgonrapportens kursdel och fliken
+Swing, som räknar alla bolag på den dagen.
+- Bakgrund: Yahoo har ofta inte gårdagens rader för svenska aktier kl. 08:10, bara för ett fåtal bolag och index.
+  Tidigare togs datumet från de bolagen. Kursdelen visade då gårdagens datum men bara 1–2 bolag med kurssignal, och
+  Swing visade dagen före under gårdagens datum.
+- Felet fanns alla vardagar utom måndagar från 20/10 till 5/11 2026 (på måndagar fanns fredagens kurser). Kursdelen i
+  de morgonrapporterna och swingfilerna 30/10, 3/11 och 5/11 byggdes om 2026-11-05 med rader före respektive dag.
+- Filerna har `expected_day` (förra handelsdagen) och `coverage`: antal bolag med kursrad för datans dag respektive
+  förra handelsdagen.
+- Saknas gårdagens kurser hämtar `run_morning.ps1` bara kurserna igen (`morning.py --bara-kurser`) var tionde minut
+  till 09:10, och bygger sidan efter varje försök. Sidan visar under tiden datans datum och en varning ("Kurserna
+  gäller tisdag 3 nov, inte förra handelsdagen …").
+- Kursreaktionen räknar varje bolags kurs på reaktionsdagen och flaggar bolag som saknas. Den har inte haft felet.
+  Veckans signalöversikt byggs på måndagar, när fredagens kurser finns.
 
 MFN, Cision, Riksbanken och FI hämtas lokalt till `data/morning/raw/`, med en hämtning per källa och körning. De
 hämtas aldrig till `data/raw/`, som är klonen av det privata repot. GitHub Actions schemalagda jobb kan komma timmar

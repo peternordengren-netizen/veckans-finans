@@ -8,7 +8,8 @@
 #   efterhand om datorn var avstängd, högst 2 timmar. Startas också fem minuter efter inloggning
 #   och upplåsning, så att en missad måndag tas igen (skriptet gör inget om veckan redan finns).
 # - VeckansFinansMorgonrapport: vardagar 08:10, kör scripts\run_morning.ps1 (utan Claude).
-#   Samma väckning och inloggnings-/upplåsningsutlösare som veckouppgiften, högst 30 minuter.
+#   Samma väckning och inloggnings-/upplåsningsutlösare som veckouppgiften, högst 90 minuter
+#   (saknas gårdagens kurser försöker run_morning.ps1 igen var tionde minut till 09:10).
 #   Utlöses den före 08:10 (inloggning eller upplåsning tidigt) gör run_morning.ps1 ingenting.
 # - VeckansFinansEftermiddag: vardagar 17:45, kör scripts\run_update.ps1 -Scheduled. Samma väckning,
 #   högst en timme. Också vid inloggning och upplåsning (gör då bara något om dagens kursreaktion
@@ -74,7 +75,7 @@ Register-ScheduledTask -TaskName "VeckansFinansVeckosammanfattning" -Force `
 $morning = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Monday, Tuesday, Wednesday, Thursday, Friday -At "08:10"
 $morning.StartBoundary = (Get-Date "08:10").ToString("yyyy-MM-dd'T'HH:mm:ss")
 $morningSettings = New-ScheduledTaskSettingsSet -WakeToRun -StartWhenAvailable `
-    -ExecutionTimeLimit (New-TimeSpan -Minutes 30) -MultipleInstances IgnoreNew `
+    -ExecutionTimeLimit (New-TimeSpan -Minutes 90) -MultipleInstances IgnoreNew `
     -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
 Register-ScheduledTask -TaskName "VeckansFinansMorgonrapport" -Force `
     -Description "Veckans finans: morgonrapport utan Claude (scripts\morning.py), bygger sedan om sidan. Loggar i logs\morning\." `

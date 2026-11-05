@@ -1289,6 +1289,17 @@ def validate_morning(data: dict, instruments: dict[str, Instrument]) -> Result:
     pd = data.get("policy_decision")
     if pd and (pd["effective_from"] < pd["decided_on"] or pd["decided_on"] > data["date"]):
         res.errors.append(f"policy_decision: beslutet {pd['decided_on']} / tillämpas {pd['effective_from']} stämmer inte")
+    pr = data["price"]
+    if pr.get("expected_day"):
+        # Kursdatumet kommer ur datan: aldrig senare än förra handelsdagen, och avviker det ska rapporten
+        # vara markerad för nytt försök (retry "kurser") med ett fel som visas som varning.
+        if pr["day"] is not None and pr["day"] > pr["expected_day"]:
+            res.errors.append(f"price: dagsdatans datum {pr['day']} ligger efter förra handelsdagen {pr['expected_day']}")
+        if pr["day"] != pr["expected_day"] and "kurser" not in (data.get("retry") or []):
+            res.errors.append(f"price: dagsdatan gäller {pr['day']}, inte {pr['expected_day']}, men retry saknar \"kurser\"")
+        cov = pr.get("coverage")
+        if cov and not cov["with_day"] <= cov["of"] >= cov["with_expected"]:
+            res.errors.append("price: täckningen stämmer inte (fler bolag med kursrad än bolag med kurser)")
     for c in data["price"]["companies"]:
         known(c["ticker"], c["name"], "price")
         expected = price_signals(c, data["price"]["thresholds"])

@@ -96,7 +96,23 @@
         "string",
         "null"
       ],
-      "description": "Handelsdagen måtten gäller (förra handelsdagens stängning)."
+      "description": "Handelsdagen måtten gäller: dagsdatans datum, den senaste dagen som minst 90 % av bolagen har en kursrad för (signals.data_day)."
+    },
+    "expected_day": {
+      "type": "string",
+      "format": "date",
+      "description": "Förra handelsdagen. Skiljer den sig från as_of gäller måtten en äldre dag (varning på sidan). Saknas i äldre filer."
+    },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["with_day", "with_expected", "of"],
+      "description": "Antal bolag med kursrad för as_of respektive expected_day, av bolagen med kurser. Saknas i äldre filer.",
+      "properties": {
+        "with_day": {"type": "integer", "minimum": 0},
+        "with_expected": {"type": "integer", "minimum": 0},
+        "of": {"type": "integer", "minimum": 0}
+      }
     },
     "generated_at": {
       "type": "string"
