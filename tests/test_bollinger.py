@@ -71,6 +71,51 @@ def test_kontrollen_delar_upp_bolagen():
     assert bollinger.validate(data)
 
 
+def test_lage_mellan_banden_och_avstand_i_r():
+    lower, upper = bollinger.bands(BASE)  # snitt 101, standardavvikelse 1
+    assert (round(lower, 6), round(upper, 6)) == (99.0, 103.0)
+    p = bollinger.position(102.0, lower, upper, ref=101.0, stop=100.0)  # R = 1
+    assert p["pct_b"] == 0.75 and p["upper_r"] == 1.0 and p["at_upper"] is False
+    p = bollinger.position(104.0, lower, upper, ref=101.0, stop=100.0)
+    assert p["pct_b"] == 1.25 and p["upper_r"] == -1.0 and p["at_upper"] is True
+    assert bollinger.position_errors(p, "x") == []
+    assert bollinger.position_errors({**p, "at_upper": False}, "x")
+    assert bollinger.position_errors({**p, "pct_b": 0.5}, "x")
+
+
+def pb_company(ticker, name, labels, ref, stop):
+    return {"ticker": ticker, "name": name, "labels": labels,
+            "pullback": {"state": {}, "levels": {"ref": ref, "stop": stop} if labels else None}}
+
+
+def test_kontrollen_raknar_pullback_kandidaterna():
+    swing_file = {
+        "date": TODAY.isoformat(),
+        "strategies": {"pullback": {"name": "Pullback i trend", "labels": ["rekyl-i-trend", "rekyl-vandsignal"]}},
+        "companies": [
+            pb_company("ALFA", "Alfaverken", ["rekyl-vandsignal"], 101.0, 100.0),
+            pb_company("BETA", "Betabolaget", ["rekyl-i-trend"], 101.0, 99.0),
+            pb_company("GAMMA", "Gammagruppen", [], 0, 0),  # ingen kandidat
+            pb_company("DELTA", "Deltahem", ["rekyl-i-trend"], 101.0, 100.0),  # ingen kurs i dag
+        ],
+    }
+
+    def fetch(tickers, start, end):
+        return {"ALFA.ST": series(BASE[1:] + [106.0]), "BETA.ST": series(BASE[1:] + [101.0]),
+                "GAMMA.ST": series(BASE[1:] + [101.0]), "DELTA.ST": series(BASE, end=TODAY - timedelta(days=1))}
+
+    data = bollinger.check(TODAY, NOW, INSTRUMENTS, fetch, swing_file)
+    pb = data["pullback"]
+    assert pb["swing_date"] == TODAY.isoformat() and pb["candidates"] == 3
+    assert [(r["ticker"], r["at_upper"]) for r in pb["rows"]] == [("ALFA", True), ("BETA", False)]
+    assert pb["rows"][0]["upper_r"] < 0 < pb["rows"][1]["upper_r"]
+    assert bollinger.validate(data) == []
+    pb["rows"][1]["at_upper"] = True
+    assert bollinger.validate(data)
+    # Utan swingfil: inget pullback-avsnitt.
+    assert bollinger.check(TODAY, NOW, INSTRUMENTS, fetch)["pullback"] is None
+
+
 def test_ingen_handelsdag(capsys):
     saturday = datetime(2026, 11, 7, 9, 20, tzinfo=TZ)
     assert bollinger.main(["--handelsdag"], now=saturday) == 3

@@ -989,7 +989,15 @@ def _check_pullback(c: dict, th: dict | None, where: str, expected: list[str], r
         res.errors.append(f"{where}: pullback-nivåerna ska finnas om och endast om etiketten finns")
         return
     if lv is None:
+        if pb.get("bollinger") is not None:
+            res.errors.append(f"{where}: Bollingerläget finns utan pullback-nivåer")
         return
+    if pb.get("bollinger") is not None:
+        from bollinger import position_errors
+
+        res.errors += position_errors(pb["bollinger"], f"{where} Bollinger")
+        if abs(pb["bollinger"]["price"] - pb["state"]["close"]) > 1e-3:
+            res.errors.append(f"{where}: Bollingerlägets kurs är inte gårdagens stängning")
     risk = lv["ref"] - lv["stop"]
     if risk <= 0:
         res.errors.append(f"{where}: stoppet {lv['stop']} ligger inte under referensnivån {lv['ref']}")

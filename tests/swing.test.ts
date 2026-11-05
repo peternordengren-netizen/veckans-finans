@@ -4,7 +4,7 @@ import { test } from "node:test";
 
 import {
   decidedShareText, isPullbackLabel, labelClass, labelCounts, levelText, netText, priceText, reportText, riskText, shareText,
-  chipText, rText, signalText, srDistText, srLevelText, vsBaseText,
+  bollingerSourceText, chipText, pctBText, rText, signalText, srDistText, srLevelText, upperRText, vsBaseText,
 } from "../src/lib/swing.ts";
 
 test("etiketternas klasser och antal", () => {
@@ -77,4 +77,17 @@ test("golden och death cross: dagar sedan korsningen", () => {
   assert.equal(chipText("trend-upp", "Trend upp", 3), "Trend upp");
   assert.equal(labelClass("golden-cross"), "trend");
   assert.equal(labelClass("death-cross"), "trend");
+});
+
+test("Bollingerkolumnen för pullback-kandidater", () => {
+  assert.equal(pctBText(0.75), "%B 0,75");
+  assert.equal(pctBText(1.2), "%B 1,20");
+  assert.equal(pctBText(null), "–");
+  assert.equal(upperRText(1.24), "1,2 R kvar");
+  assert.equal(upperRText(-0.4), "0,4 R över");
+  assert.equal(upperRText(0), "vid bandet");
+  assert.equal(upperRText(-0.02), "vid bandet");
+  assert.equal(upperRText(null), "–");
+  assert.equal(bollingerSourceText(undefined), "stängning");
+  assert.equal(bollingerSourceText("2026-11-05T13:20:04+01:00"), "kl. 13:20");
 });

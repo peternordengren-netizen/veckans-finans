@@ -30,7 +30,9 @@ triggernivå, stopp under stödet och avstånd till motståndet i R.
 - "efter-rapport-over" / "efter-rapport-under" / "efter-rapport": rapport inom report_days handelsdagar
   (reaktionsdagen räknas som dag 0), med utfallet mot förväntan för vinst per aktie där det finns
 - "rekyl-i-trend" / "rekyl-vandsignal": strategin "Pullback i trend" (scripts/pullback.py), med
-  stopp-, trigger-, topp-, 2R- och 3R-nivåer per bolag ("pullback") och strategin i "strategies"
+  stopp-, trigger-, topp-, 2R- och 3R-nivåer per bolag ("pullback") och strategin i "strategies". För
+  kandidaterna också gårdagens stängning mot Bollingerbanden ("pullback.bollinger": %B, övre bandet, avståndet
+  dit i R och om stängningen är vid eller över), som bollinger.py uppdaterar under dagen
 
 Användning:
     python scripts/swing.py                 # i dag (förra handelsdagens stängning)
@@ -50,7 +52,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import levels  # noqa: E402
 import pullback  # noqa: E402
-from bollinger import upper_band  # noqa: E402
+from bollinger import bands, position, upper_band  # noqa: E402
 from prices import INDEX_TICKER  # noqa: E402
 from signals import Bar, BarFetcher, yahoo_bars  # noqa: E402
 from validate import DATA_DIR, RAW_DIR, Instrument, load_instruments, validate_swing  # noqa: E402
@@ -276,7 +278,11 @@ def build(today: date, now: datetime, instruments: dict[str, Instrument], bars: 
         pb_labels = pullback.labels(pb_state)
         labels += pb_labels
         atr = m["atr_pct"] / 100 * c[i] if m["atr_pct"] is not None else None
-        pb = {"state": pb_state, "levels": pullback.levels(h, lo, atr, i, pb_state) if pb_labels else None}
+        pb_levels = pullback.levels(h, lo, atr, i, pb_state) if pb_labels else None
+        pb = {"state": pb_state, "levels": pb_levels}
+        if pb_levels is not None:
+            # Gårdagens stängning mot Bollingerbanden (bollinger.position); uppdateras under dagen av bollinger.py.
+            pb["bollinger"] = position(c[i], *bands(c[:i + 1]), pb_levels["ref"], pb_levels["stop"])
         # Stöd och motstånd (scripts/levels.py), för alla bolag.
         e20 = pullback.ema(c, 20)[i]
         ma50 = sum(c[i - 49:i + 1]) / 50

@@ -115,6 +115,27 @@ export function rText(r: number | null | undefined): string {
   return r === null || r === undefined ? "–" : `${pctFmt.format(r)} R`;
 }
 
+/** Läget mellan Bollingerbanden (%B, 0 = undre bandet, 1 = övre): "%B 0,75"; "–" utan värde. */
+export function pctBText(b: number | null | undefined): string {
+  return b === null || b === undefined
+    ? "–"
+    : `%B ${new Intl.NumberFormat("sv-SE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(b)}`;
+}
+
+/** Avståndet från kursen till övre bandet i R: "1,2 R kvar", "0,4 R över", "vid bandet"; "–" utan värde. */
+export function upperRText(r: number | null | undefined): string {
+  if (r === null || r === undefined) return "–";
+  if (Math.abs(r) < 0.05) return "vid bandet"; // avrundas till 0,0 R
+  return r > 0 ? `${pctFmt.format(r)} R kvar` : `${pctFmt.format(-r)} R över`;
+}
+
+/** Var Bollingerläget kommer ifrån: "kl. 13:20" (kontrollen under dagen) eller "stängning" (gårdagens). */
+export function bollingerSourceText(checkedAt: string | null | undefined): string {
+  if (!checkedAt) return "stängning";
+  const t = new Date(checkedAt).toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Stockholm" });
+  return `kl. ${t}`;
+}
+
 /** Nivåns slag kort: "zon, 3 vändn." eller "20 EMA". */
 export function srKindText(l: { kind: string; touches: number | null }): string {
   return l.kind === "zon" ? `zon, ${l.touches} vändn.` : l.kind;

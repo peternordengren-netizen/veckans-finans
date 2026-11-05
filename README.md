@@ -492,8 +492,18 @@ Uppgiften **VeckansFinansBollinger** kör vardagar 09:20 och 13:20, utan Claude.
   det står i notisen och på sidan.
 - Övre bandet: snittet av de 20 senaste stängningskurserna plus 2 standardavvikelser (populationens), med den
   aktuella kursen som den tjugonde.
-- Windows-notisen listar bolagen vid eller över bandet och, separat, de som ligger högst 1 % under. Ett klick
-  öppnar sidan.
+- Windows-notisen listar bolagen vid eller över bandet och, separat, de som ligger högst 1 % under. Ett eget
+  avsnitt listar pullback-kandidaterna vid eller över övre bandet med avståndet i R ("3,4 R över", "vid bandet").
+  Ett klick öppnar sidan.
+- **Pullback-kandidaterna** är bolagen med en etikett ur strategin Pullback i trend i dagens swingfil. För dem räknas
+  båda banden med dagens kurs. Resultatet blir kolumnen "Bollinger" i fliken Swing när strategin är vald, med
+  kontrollens tid. Kolumnen visar:
+  - %B, kursens läge mellan banden: (kurs − undre) / (övre − undre), där 0 är undre bandet och 1 övre
+  - övre bandets nivå
+  - avståndet till övre bandet i R: (övre − kurs) / R, med R = referens − stopp ur swingfilen
+  - ⚠ när kursen är vid eller över övre bandet
+
+  Före dagens första kontroll visar kolumnen gårdagens stängning, ur swingfilen (`pullback.bollinger`).
 - Senaste kontrollen visas överst på startsidan, med tid (`data/bollinger/<datum>-<hhmm>.json`, git-ignorerad).
 - Inget körs på börsens stängda dagar eller utanför 09:00–17:30. En missad kontroll tas inte igen senare.
 - Logg i `logs/bollinger/`.

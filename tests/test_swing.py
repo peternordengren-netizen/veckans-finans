@@ -217,6 +217,15 @@ def test_swing_bygger_och_validerar_pullback():
     assert b["pullback"] == {"state": None, "levels": None}  # under 200 dagar
     assert data["strategies"]["pullback"]["labels"] == ["rekyl-i-trend", "rekyl-vandsignal"]
     assert validate_swing(data, INSTRUMENTS).errors == []
+    # Bollingerläget för kandidaten: gårdagens stängning mot banden, avståndet till övre bandet i R.
+    bb = a["pullback"]["bollinger"]
+    assert bb["price"] == round(a["pullback"]["state"]["close"], 4) and bb["lower"] < bb["upper"]
+    assert bb["at_upper"] == (bb["price"] >= bb["upper"])
+    assert bb["upper_r"] == round((bb["upper"] - bb["price"]) / (lv["ref"] - lv["stop"]), 2)
+    assert "bollinger" not in b["pullback"]  # inga nivåer, inget läge
+    bb["at_upper"] = not bb["at_upper"]
+    assert any("vid eller över" in e for e in validate_swing(data, INSTRUMENTS).errors)
+    bb["at_upper"] = not bb["at_upper"]
     lv["r2"] += 1
     assert any("r2" in e for e in validate_swing(data, INSTRUMENTS).errors)
     lv["r2"] -= 1

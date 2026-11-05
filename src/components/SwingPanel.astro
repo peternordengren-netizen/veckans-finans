@@ -9,7 +9,7 @@ import { shortDate } from "../lib/format";
 import { signedPct } from "../lib/signals";
 import {
   MIN_CASES, decidedShareText, labelClass, labelCounts, levelText, netText, priceText, reportText, riskText, shareText,
-  chipText, rText, signalText, srDistText, srKindText, srLevelText, vsBaseText,
+  bollingerSourceText, chipText, pctBText, rText, signalText, srDistText, srKindText, srLevelText, upperRText, vsBaseText,
 } from "../lib/swing";
 
 interface Props {
@@ -57,7 +57,9 @@ const columns = [
   { key: "pb-r3", label: "3R", type: "num", pb: true },
   { key: "pb-srstop", label: "Stopp under stöd", type: "num", pb: true, title: "Närmaste stödets nedre kant minus 0,1 ATR, och R från triggernivån (gårdagens high)" },
   { key: "pb-resr", label: "Motstånd i R", type: "num", pb: true, title: "Avståndet från triggernivån till närmaste motstånd, i R med stoppet under stödet" },
+  { key: "pb-bb", label: "Bollinger", type: "num", pb: true, title: "Kursens läge mellan Bollingerbanden (%B), övre bandets nivå och avståndet dit i R. ⚠ = vid eller över övre bandet. Sorteras på avståndet i R" },
 ] as const;
+const bbCheck = swing.bollingerCheck;
 ---
 
 <div class="swing" data-swing>
@@ -177,6 +179,15 @@ const columns = [
               <strong> Föregående topp:</strong> högsta high de senaste {pt.top_days} handelsdagarna.
             </li>
             <li>
+              <strong>Bollinger:</strong> banden är snittet av de 20 senaste stängningskurserna plus och minus 2
+              standardavvikelser. <em>%B</em> är kursens läge mellan banden: (kurs − undre bandet) / (övre − undre), så 0 är
+              undre bandet och 1 övre; utanför banden blir det under 0 eller över 1. Avståndet till övre bandet i R är
+              (övre bandet − kursen) / R, med R från kolumnen Till stopp; "över" när kursen ligger ovanför bandet.
+              ⚠ markerar en kandidat vid eller över övre bandet. Morgonens värden gäller gårdagens stängning.
+              Bollingerkontrollerna 09:20 och 13:20 räknar om banden med dagens kurs (fördröjd ca 15 minuter, faktiska
+              kurser) och visar kontrollens tid i cellen.
+            </li>
+            <li>
               <strong>Historiken</strong> under tabellen följer varje sådan dag det senaste året, ett fall i taget per bolag.
               Fallet startar på nästa dags öppning; vid vändsignal i stället när triggernivån nås inom {pt.trigger_days}
               {" "}handelsdagar, annars räknas det som ej utlöst. Det avgörs när 2R eller stoppet nås. Nås båda samma dag räknas
@@ -216,6 +227,9 @@ const columns = [
       </select>
     </label>
     <span class="shown" data-shown aria-live="polite">Visar alla {swing.rows.length} bolag</span>
+    <span class="bb-note">
+      Bollinger: {bbCheck ? `senaste kontrollen ${bollingerSourceText(bbCheck.checked_at)}. ${bbCheck.delay_note}` : "gårdagens stängning (ingen kontroll i dag än)."}
+    </span>
   </div>
 
   <div class="table-outer" data-table-outer>
@@ -296,6 +310,26 @@ const columns = [
                       <td class="num col-pb wrap" data-v={v(lv ? (r.sr?.resistance_r ?? null) : null)}>
                         {lv ? (r.sr?.resistance ? rText(r.sr.resistance_r) : "inget inom 120 d") : "–"}
                       </td>
+                      {(() => {
+                        const bb = lv ? (r.pullback?.bollinger ?? null) : null;
+                        return (
+                          <td
+                            class:list={["num col-pb", bb?.at_upper && "bb-warn"]}
+                            data-v={v(bb?.upper_r ?? null)}
+                            title={bb?.at_upper ? "Vid eller över övre Bollingerbandet" : undefined}
+                          >
+                            {bb ? (
+                              <>
+                                {bb.at_upper && <span class="warn-icon" aria-label="Vid eller över övre bandet">⚠ </span>}
+                                {pctBText(bb.pct_b)}
+                                <span class="sub">övre {priceText(bb.upper)}</span>
+                                <span class="sub">{upperRText(bb.upper_r)}</span>
+                                <span class="sub muted">{bollingerSourceText(bb.checked_at)}</span>
+                              </>
+                            ) : "–"}
+                          </td>
+                        );
+                      })()}
                     </>
                   );
                 })()}
@@ -663,6 +697,19 @@ const columns = [
   }
   .swing[data-strategy="pullback"] .col-pb {
     display: table-cell;
+  }
+  .bb-note {
+    display: none;
+    font-size: 0.85rem;
+    color: var(--muted);
+  }
+  .swing[data-strategy="pullback"] .bb-note {
+    display: inline;
+  }
+  /* Kandidat vid eller över övre Bollingerbandet. */
+  .bb-warn .warn-icon {
+    color: var(--neg);
+    font-weight: 700;
   }
   /* Med strategin vald döljs måtten strategin inte använder, så att tabellen ryms. */
   .swing[data-strategy="pullback"] .col-nopb {

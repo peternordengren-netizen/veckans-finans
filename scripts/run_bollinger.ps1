@@ -6,7 +6,9 @@
 # - -Scheduled: bara mellan 09:00 och 17:30, så att en körning som tas igen efter att datorn varit
 #   avstängd inte visar en kontroll utanför handelstid.
 # - Notisen listar bolagen vid eller över det övre bandet och, separat, de inom 1 % under det, och säger att
-#   kurserna är fördröjda ca 15 minuter. Ett klick öppnar sidan.
+#   kurserna är fördröjda ca 15 minuter. Ett eget avsnitt listar pullback-kandidaterna (strategin Pullback i
+#   trend i fliken Swing) vid eller över övre bandet, med avståndet dit i R. Ett klick öppnar sidan.
+# - Bygget uppdaterar kolumnen "Bollinger" i fliken Swing med kontrollens kurser och tid.
 # - Logg i logs/bollinger/<datum>.log.
 #
 # Manuellt: powershell -NoProfile -File scripts\run_bollinger.ps1
@@ -65,8 +67,20 @@ $time = ([datetime]$data.checked_at).ToString("HH:mm")
 $title = "Bollinger kl. $time - övre bandet (20 d, 2 std)"
 $over = "Vid eller över: " + (NameList $data.over)
 $near = "Inom 1 % under: " + (NameList $data.near)
+# Eget avsnitt: pullback-kandidaterna (strategin Pullback i trend) vid eller över övre bandet, med avståndet i R.
+$pbText = if ($null -eq $data.pullback) { "Pullback-kandidater: ingen swingfil för i dag." } else {
+    $hit = @($data.pullback.rows | Where-Object { $_.at_upper })
+    $sv = [Globalization.CultureInfo]::GetCultureInfo("sv-SE")
+    $names = @($hit | ForEach-Object {
+        $over = -[double]$_.upper_r  # vid eller över bandet: upper_r <= 0
+        $where = if ($null -eq $_.upper_r) { "" } elseif ([math]::Round($over, 1) -eq 0) { " (vid bandet)" } else { " ({0} R över)" -f $over.ToString("0.0", $sv) }
+        "$($_.name)$where"
+    })
+    $list = if ($names.Count -eq 0) { "inga" } else { $names -join ", " }
+    "Pullback-kandidater vid övre bandet: $list (av $($data.pullback.candidates))."
+}
 $foot = $data.delay_note
-Log "Notis: $over | $near"
+Log "Notis: $over | $near | $pbText"
 
 try {
     [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
@@ -76,8 +90,8 @@ try {
   <visual>
     <binding template="ToastGeneric">
       <text>$(Esc $title)</text>
-      <text>$(Esc $over)</text>
-      <text>$(Esc "$near. $foot")</text>
+      <text>$(Esc "$over. $near.")</text>
+      <text>$(Esc "$pbText $foot")</text>
     </binding>
   </visual>
 </toast>

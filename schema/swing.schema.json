@@ -419,6 +419,20 @@
                     "type": "number"
                   }
                 }
+              },
+              "bollinger": {
+                "description": "Gårdagens stängning mot Bollingerbanden (20 d, 2 std) för en kandidat (scripts/bollinger.py position): %B, avståndet till övre bandet i R och om stängningen är vid eller över. Bara när levels finns; saknas i äldre filer.",
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["price", "lower", "upper", "pct_b", "upper_r", "at_upper"],
+                "properties": {
+                  "price": {"type": "number"},
+                  "lower": {"type": "number"},
+                  "upper": {"type": "number"},
+                  "pct_b": {"$ref": "#/$defs/num"},
+                  "upper_r": {"$ref": "#/$defs/num"},
+                  "at_upper": {"type": "boolean"}
+                }
               }
             }
           },
