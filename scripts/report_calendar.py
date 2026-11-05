@@ -169,13 +169,7 @@ def name_patterns(instruments: dict[str, Instrument]) -> list[tuple[re.Pattern, 
     return [(re.compile(rf"(?<!\w){re.escape(n)}(?::?s)?(?!\w)", re.IGNORECASE), t) for n, t in pairs]
 
 
-_SLUG_SUFFIXES = {"", "ab", "publ", "ab-publ", "group", "holding", "asa", "oyj", "plc"}
-
-
-def slugify(name: str) -> str:
-    """'Dometic Group' -> 'dometic-group', 'Bergman & Beving' -> 'bergman-beving' (som MFN:s och Cisions slugar)."""
-    s = name.casefold().translate(str.maketrans("åäöéü", "aaoeu"))
-    return "-".join(re.findall(r"[a-z0-9]+", s))
+from fetch import slug_matches, slugify  # noqa: E402  (samma slug-regel som hämtningens scope-filter)
 
 
 def match_company(item: dict, instruments: dict[str, Instrument], patterns: list[tuple[re.Pattern, str]]) -> str | None:
@@ -193,8 +187,7 @@ def match_company(item: dict, instruments: dict[str, Instrument], patterns: list
                 return inst.ticker
         for inst in instruments.values():
             for n in (inst.namn, *inst.alias):
-                base = slugify(n)
-                if base and (slug == base or (slug.startswith(base + "-") and slug[len(base) + 1:] in _SLUG_SUFFIXES)):
+                if slug_matches(slug, slugify(n)):
                     return inst.ticker
         return None
     for rx, ticker in patterns:

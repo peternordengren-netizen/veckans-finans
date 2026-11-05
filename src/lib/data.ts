@@ -36,7 +36,7 @@ export interface MorningReport {
   policy_decision?: PolicyDecision | null;
   news_since: string;
   reports_today: (CalendarEvent & { kind: "rapport" | "stämma" })[];
-  news: { ticker: string; name: string; report_today: boolean; items: { published: string; title: string; url: string; source: string; quote?: string }[] }[];
+  news: { ticker: string; name: string; report_today: boolean; items: { published: string; title: string; url: string; source: string; quote?: string; summary?: string; manual?: boolean }[] }[];
   insider: { threshold_sek: number; days: string[]; days_missing: string[]; companies: InsiderCompany[] };
   short: { available: boolean; error?: boolean; note: string | null; from_as_of: string | null; to_as_of: string | null; positions: MorningChange[]; aggregate: MorningChange[] };
   price: {

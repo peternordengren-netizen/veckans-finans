@@ -58,7 +58,11 @@ Veckan har typiskt flera hundra poster. Läs dem inte alla.
    kandidat ur indexet.
    - Poster med `source: "bolag"` är pressmeddelanden från ett bevakat bolags egen webbplats, inlagda för hand
      (`scripts/add_raw_item.py`) när bolaget inte publicerar via MFN eller Cision, t.ex. ABB. Bolaget står i postens
-     `data.ticker`. Behandla dem som bevakade bolags egna pressmeddelanden; texten är ordagrann (fulltext).
+     `data.ticker`. Behandla dem som bevakade bolags egna pressmeddelanden.
+     - `text_kind: "fulltext"`: texten är ordagrann (källans villkor tillåter återgivning).
+     - `text_kind: "sammanfattning"`: källans villkor tillåter inte återgivning, så filen har bara rubrik, länk och
+       en kort sammanfattning med egna ord ("manuellt tillagd"). Skriv inget utöver det sammanfattningen säger;
+       citaten blir ur sammanfattningen.
 4. **Riksbankens styrränta är ett nyckeltal, inte en nyhet.** Ta posten med `source: "riksbanken"` och det senaste
    `data.policy_rate.date` som ligger inom veckan, och fyll `key_figures.policy_rate` i veckofilen:
    - `value`, `date`, `previous_value` och `changed_on` kopieras exakt från postens `data.policy_rate`.

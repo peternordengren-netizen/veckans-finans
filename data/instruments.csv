@@ -17,7 +17,7 @@ Ambea,,AMBEA,AMBEA.ST,Nasdaq Stockholm,halsovard,SE0009663826,ambea,,ambea,ambea
 Apotea,,APOTEA,APOTEA.ST,Nasdaq Stockholm,konsument,SE0023313762,,,apotea,apotea
 AQ Group,,AQ,AQ.ST,Nasdaq Stockholm,industri,SE0022062196,,,aq-group,aq-group
 Arctic Paper,,ARP,ARP.ST,Nasdaq Stockholm,energi-ravaror,PLARTPR00012,,,arctic-paper,arctic-paper
-Arion Banki,,ARION SDB,ARION-SDB.ST,Nasdaq Stockholm,banker-finans,SE0010413567,,,,
+Arion Banki,,ARION SDB,ARION-SDB.ST,Nasdaq Stockholm,banker-finans,SE0010413567,arion-bank,,,
 Arjo,,ARJO B,ARJO-B.ST,Nasdaq Stockholm,halsovard,SE0010468116,,,arjo,arjo
 Asker Healthcare Group,Asker Healthcare,ASKER,ASKER.ST,Nasdaq Stockholm,halsovard,SE0024171458,,,asker-healthcare,asker-healthcare
 Asmodee Group,Asmodee,ASMDEE B,ASMDEE-B.ST,Nasdaq Stockholm,konsument,SE0023615638,,,asmodee,asmodee
@@ -53,7 +53,7 @@ BTS Group,BTS,BTS B,BTS-B.ST,Nasdaq Stockholm,industri,SE0000805426,,,bts-group,
 Bufab,,BUFAB,BUFAB.ST,Nasdaq Stockholm,industri,SE0025010671,,,bufab,bufab
 Bure Equity,,BURE,BURE.ST,Nasdaq Stockholm,banker-finans,SE0000195810,,investmentbolag,bure-equity,bure-equity
 Byggmax Group,Byggmax,BMAX,BMAX.ST,Nasdaq Stockholm,konsument,SE0003303627,,,byggmax-group,byggmax-group
-Byggmästare A J Ahlström,,AJA B,AJA-B.ST,Nasdaq Stockholm,industri,SE0026876476,,,,
+Byggmästare A J Ahlström,,AJA B,AJA-B.ST,Nasdaq Stockholm,industri,SE0026876476,byggmastare-anders-j-ahlstrom-holding,,,
 Camurus,,CAMX,CAMX.ST,Nasdaq Stockholm,halsovard,SE0007692850,,,camurus,camurus
 Castellum,,CAST,CAST.ST,Nasdaq Stockholm,fastigheter,SE0000379190,,,castellum,castellum
 Catella,,CAT B,CAT-B.ST,Nasdaq Stockholm,banker-finans,SE0000188500|SE0000188518,,,catella,catella
@@ -91,20 +91,20 @@ Essity,,ESSITY B,ESSITY-B.ST,Nasdaq Stockholm,konsument,SE0009922156|SE000992216
 Evolution,,EVO,EVO.ST,Nasdaq Stockholm,konsument,SE0012673267,evolution,,evolution,evolution
 Ework Group,Ework,EWRK,EWRK.ST,Nasdaq Stockholm,industri,SE0002402701,,,ework-group,ework-group
 Fabege,,FABG,FABG.ST,Nasdaq Stockholm,fastigheter,SE0011166974,,,fabege,fabege
-Fagerhult Group,Fagerhult,FAG,FAG.ST,Nasdaq Stockholm,industri,SE0010048884,,,fagerhult-group,fagerhult-group
+Fagerhult Group,Fagerhult,FAG,FAG.ST,Nasdaq Stockholm,industri,SE0010048884,fagerhultgroup,,fagerhult-group,fagerhult-group
 Fasadgruppen Group,Fasadgruppen,FG,FG.ST,Nasdaq Stockholm,industri,SE0015195771,,,fasadgruppen,fasadgruppen
 Fast. Balder,,BALD B,BALD-B.ST,Nasdaq Stockholm,fastigheter,SE0017832488,balder,,,
-Fastighetsbolaget Emilshus,,EMIL B,EMIL-B.ST,Nasdaq Stockholm,fastigheter,SE0016785786,,,,
+Fastighetsbolaget Emilshus,,EMIL B,EMIL-B.ST,Nasdaq Stockholm,fastigheter,SE0016785786,emilshus,,,
 Fastpartner,,FPAR A,FPAR-A.ST,Nasdaq Stockholm,fastigheter,SE0013512506|SE0013512514,,,fastpartner,fastpartner
-Fenix Outdoor International,,FOI B,FOI-B.ST,Nasdaq Stockholm,konsument,CH0242214887,,,,
-Flat Capital,,FLAT B,FLAT-B.ST,Nasdaq Stockholm,banker-finans,SE0016609846,,investmentbolag,flat-capital,flat-capital
+Fenix Outdoor International,,FOI B,FOI-B.ST,Nasdaq Stockholm,konsument,CH0242214887,fenix-outdoor,,,
+Flat Capital,,FLAT B,FLAT-B.ST,Nasdaq Stockholm,banker-finans,SE0016609846,flatcapital,investmentbolag,flat-capital,flat-capital
 Flerie,,FLERIE,FLERIE.ST,Nasdaq Stockholm,banker-finans,SE0022447348,,investmentbolag,flerie,flerie
 FM Mattsson,,FMM B,FMM-B.ST,Nasdaq Stockholm,industri,SE0018040883,,,fm-mattsson,
 Genova Property Group,Genova Property,GPG,GPG.ST,Nasdaq Stockholm,fastigheter,SE0007184189,,,genova-property-group,genova-property-group
 Gentoo Media,,G2M,G2M.ST,Nasdaq Stockholm,konsument,US36467X2062,,,gentoo-media,gentoo-media
 Getinge,,GETI B,GETI-B.ST,Nasdaq Stockholm,halsovard,SE0000202624,,,getinge,getinge
 Green Landscaping Group,Green Landscaping,GREEN,GREEN.ST,Nasdaq Stockholm,industri,SE0010985028,,,green-landscaping-group,green-landscaping-group
-Gruvaktiebolaget Viscaria,,VISC,VISC.ST,Nasdaq Stockholm,energi-ravaror,SE0021148160,,,,
+Gruvaktiebolaget Viscaria,,VISC,VISC.ST,Nasdaq Stockholm,energi-ravaror,SE0021148160,viscaria,,,
 Gränges,,GRNG,GRNG.ST,Nasdaq Stockholm,energi-ravaror,SE0006288015,,,granges,granges
 Hacksaw,,HACK,HACK.ST,Nasdaq Stockholm,teknik,SE0025138357,,,hacksaw,hacksaw
 Hansa Biopharma,,HNSA,HNSA.ST,Nasdaq Stockholm,halsovard,SE0002148817,,,hansa-biopharma,hansa-biopharma
@@ -132,7 +132,7 @@ Investor,,INVE B,INVE-B.ST,Nasdaq Stockholm,banker-finans,SE0015811955|SE0015811
 INVISIO,,IVSO,IVSO.ST,Nasdaq Stockholm,industri,SE0001200015,,,invisio,invisio
 Inwido,,INWI,INWI.ST,Nasdaq Stockholm,industri,SE0006220018,,,inwido,inwido
 ITAB Group,ITAB,ITAB,ITAB.ST,Nasdaq Stockholm,industri,SE0015962097,,,,
-JM,,JM,JM.ST,Nasdaq Stockholm,konsument,SE0000806994,,,jm,jm
+JM,,JM,JM.ST,Nasdaq Stockholm,konsument,SE0000806994,jm,,jm,jm
 John Mattson Fastighetsföret.,,JOMA,JOMA.ST,Nasdaq Stockholm,fastigheter,SE0012481364,john-mattson,,,
 K-Fast Holding,K-Fast,KFAST B,KFAST-B.ST,Nasdaq Stockholm,fastigheter,SE0016101679,,,k-fast-holding,k-fast-holding
 KABE Group,KABE,KABE B,KABE-B.ST,Nasdaq Stockholm,konsument,SE0000107724,,,kabe-group,kabe-group
@@ -146,7 +146,7 @@ Lifco,,LIFCO B,LIFCO-B.ST,Nasdaq Stockholm,industri,SE0015949201,,,lifco,lifco
 Lime Technologies,,LIME,LIME.ST,Nasdaq Stockholm,teknik,SE0011870195,,,lime-technologies,lime-technologies
 Linc,,LINC,LINC.ST,Nasdaq Stockholm,banker-finans,SE0015949433,,investmentbolag,linc,linc
 Lindab International,,LIAB,LIAB.ST,Nasdaq Stockholm,industri,SE0001852419,,,lindab-international,lindab-international
-Linjemontage i Grästorp,,LMGAB,LMGAB.ST,Nasdaq Stockholm,industri,SE0030361606,,,,
+Linjemontage i Grästorp,,LMGAB,LMGAB.ST,Nasdaq Stockholm,industri,SE0030361606,linjemontage,,,
 Logistea,,LOGI B,LOGI-B.ST,Nasdaq Stockholm,fastigheter,SE0017131337,,,logistea,logistea
 Loomis,,LOOMIS,LOOMIS.ST,Nasdaq Stockholm,industri,SE0014504817,,,loomis,loomis
 Lundbergföretagen,,LUND B,LUND-B.ST,Nasdaq Stockholm,banker-finans,SE0000108847,,investmentbolag,lundbergforetagen,lundbergforetagen
@@ -158,7 +158,7 @@ MEKO,,MEKO,MEKO.ST,Nasdaq Stockholm,konsument,SE0002110064,,,meko,meko
 Meren Energy,,MER,MER.ST,Nasdaq Stockholm,energi-ravaror,CA5889141019,,,meren-energy,meren-energy
 Mildef Group,Mildef,MILDEF,MILDEF.ST,Nasdaq Stockholm,industri,SE0016074249,,,mildef-group,mildef-group
 Mips,,MIPS,MIPS.ST,Nasdaq Stockholm,konsument,SE0009216278,,,mips,mips
-Modern Times Group,Modern Times,MTG B,MTG-B.ST,Nasdaq Stockholm,konsument,SE0018012486|SE0018012494,,,,
+Modern Times Group,Modern Times,MTG B,MTG-B.ST,Nasdaq Stockholm,konsument,SE0018012486|SE0018012494,mtg,,,
 Momentum Group,,MMGR B,MMGR-B.ST,Nasdaq Stockholm,industri,SE0017562523,momentum,,momentum-group,momentum-group
 Morrow Bank,Morrow,MORROW,MORROW.ST,Nasdaq Stockholm,banker-finans,SE0026852725,,,morrow-bank,morrow-bank
 Munters Group,Munters,MTRS,MTRS.ST,Nasdaq Stockholm,industri,SE0009806607,,,munters-group,munters-group
@@ -167,7 +167,7 @@ NCAB Group,NCAB,NCAB,NCAB.ST,Nasdaq Stockholm,teknik,SE0017160773,,,ncab-group,n
 NCC,,NCC B,NCC-B.ST,Nasdaq Stockholm,industri,SE0000118952|SE0000117970,ncc,,ncc,ncc
 Nederman Holding,Nederman,NMAN,NMAN.ST,Nasdaq Stockholm,industri,SE0011204510,,,nederman-holding,nederman-holding
 Nelly Group,Nelly,NELLY,NELLY.ST,Nasdaq Stockholm,konsument,SE0015245535,,,nelly-group,nelly-group
-Neobo Fastigheter,,NEOBO,NEOBO.ST,Nasdaq Stockholm,fastigheter,SE0005034550,,,neobo-fastigheter,neobo-fastigheter
+Neobo Fastigheter,,NEOBO,NEOBO.ST,Nasdaq Stockholm,fastigheter,SE0005034550,neobofastigheter,,neobo-fastigheter,neobo-fastigheter
 Net Insight,,NETI B,NETI-B.ST,Nasdaq Stockholm,telekom,SE0000366098,,,net-insight,net-insight
 New Wave,,NEWA B,NEWA-B.ST,Nasdaq Stockholm,konsument,SE0020356970,,,new-wave,
 NIBE Industrier,,NIBE B,NIBE-B.ST,Nasdaq Stockholm,industri,SE0015988019,,,nibe-industrier,nibe-industrier
@@ -221,7 +221,7 @@ SkiStar,,SKIS B,SKIS-B.ST,Nasdaq Stockholm,konsument,SE0012141687,,,skistar,skis
 SmartCraft Group,SmartCraft,SMCRT,SMCRT.ST,Nasdaq Stockholm,teknik,SE0027597691,,,smartcraft-group,smartcraft-group
 SSAB,,SSAB B,SSAB-B.ST,Nasdaq Stockholm,energi-ravaror,SE0000171100|SE0000120669,,,ssab,ssab
 Stendörren Fastigheter,,STEF B,STEF-B.ST,Nasdaq Stockholm,fastigheter,SE0006543344,,,stendorren-fastigheter,stendorren-fastigheter
-Stenhus Fastigheter i Norden,,SFAST,SFAST.ST,Nasdaq Stockholm,fastigheter,SE0014956819,,,stenhus-fastigheter-i-norden,stenhus-fastigheter-i-norden
+Stenhus Fastigheter i Norden,,SFAST,SFAST.ST,Nasdaq Stockholm,fastigheter,SE0014956819,stenhus-fastigheter,,stenhus-fastigheter-i-norden,stenhus-fastigheter-i-norden
 Stillfront Group,Stillfront,SF,SF.ST,Nasdaq Stockholm,konsument,SE0015346135,,,stillfront-group,stillfront-group
 Stockholm Nordtech Group,Stockholm Nordtech,NTECH,NTECH.ST,Nasdaq Stockholm,teknik,SE0028825042,,,,
 Stora Enso,,STE R,STE-R.ST,Nasdaq Stockholm,industri,FI0009007603|FI0009007611,,,,
@@ -247,7 +247,7 @@ Trelleborg,,TREL B,TREL-B.ST,Nasdaq Stockholm,industri,SE0000114837,,,trelleborg
 Trianon,,TRIAN B,TRIAN-B.ST,Nasdaq Stockholm,fastigheter,SE0018013658,,,trianon,
 Troax Group,Troax,TROAX,TROAX.ST,Nasdaq Stockholm,energi-ravaror,SE0012729366,,,troax-group,troax-group
 Truecaller,,TRUE B,TRUE-B.ST,Nasdaq Stockholm,teknik,SE0016787071,truecaller,,truecaller,truecaller
-Tången Industrikapital,,TANGEN B,TANGEN-B.ST,Nasdaq Stockholm,banker-finans,SE0029278985,,,tangen-industrikapital,tangen-industrikapital
+Tången Industrikapital,,TANGEN B,TANGEN-B.ST,Nasdaq Stockholm,banker-finans,SE0029278985,tangen,,tangen-industrikapital,tangen-industrikapital
 VBG GROUP,VBG,VBG B,VBG-B.ST,Nasdaq Stockholm,konsument,SE0000115107,,,vbg-group,vbg-group
 VEF,,VEFAB,VEFAB.ST,Nasdaq Stockholm,banker-finans,SE0016128151,,investmentbolag,vef,vef
 Verisure,,VSURE,VSURE.ST,Nasdaq Stockholm,industri,GB00BVMN1558,,,verisure,verisure

@@ -29,15 +29,23 @@ Workflow-mallen ligger i [`deploy/raw-repo/`](deploy/raw-repo/). Lokalt klonas d
 | Riksbanken | `https://api.riksbank.se/swea/v1/Observations/SECBREPOEFF/<från>/<till>`, fem år bakåt i ett anrop (ingen nyckel krävs) | nyckeltal |
 | Riksbankens räntebeslut | `https://www.riksbank.se/sv/rss/pressmeddelanden/` (Riksbankens egen RSS, kontrollerad 2026-11-05); för ett nytt beslut också pressmeddelandet, en gång, för dagen beslutet tillämpas | beslut |
 
-Ett bolag som inte publicerar via MFN eller Cision, till exempel ABB, kan få ett pressmeddelande från sin egen
-webbplats inlagt för hand med `scripts/add_raw_item.py`:
-- Posten får källan "bolag", texten ordagrant och ett citat, som kontrolleras mot texten.
-- Den skrivs till både morgonens och veckans rådata och pushas till det privata repot.
-- Morgonrapporten visar citatet under rubriken, och veckosammanfattningen behandlar posten som bolagets eget
-  pressmeddelande.
+Ett pressmeddelande som bara finns på bolagets egen webbplats, till exempel ABB:s 5/11 (ABB lägger bara ut en del
+via Cision), kan läggas in för hand med `scripts/add_raw_item.py`:
+- Posten får källan "bolag" och märks "manuellt tillagd".
+- **Standard är rubrik, tid, länk och en kort sammanfattning med egna ord** (`--summary`, högst 60 ord). Ingen text ur
+  pressmeddelandet sparas. Det är det enda tillåtna när källans villkor inte tillåter återgivning. ABB:s "Terms of
+  Use" tillåter återgivning bara för journalister och medier och förbjuder scraping (läst 2026-11-05).
+- Ordagrann text och ett citat (`--text-file`, `--quote`) kräver `--atergivning-tillaten`, alltså att källans villkor
+  uttryckligen tillåter återgivning. Citatet kontrolleras mot texten.
+- Posten skrivs till både morgonens och veckans rådata och pushas till det privata repot.
+- Morgonrapporten visar sammanfattningen (eller citatet) under rubriken, märkt "manuellt tillagd".
+  Veckosammanfattningen behandlar posten som bolagets eget pressmeddelande, men skriver inget utöver sammanfattningen.
 
 - Varje körning gör ett anrop per källa, med en timeout på 30 s och User-Agent `veckans-finans-fetch/0.1 (+repo-URL)`.
-- MFN filtreras till `scope SE`, svenska eller engelska. Insynshandel (`sub:ci:insider`) sparas inte.
+- MFN filtreras till svenska eller engelska. `scope SE` sparas alltid, andra scope (CA, DK, FI, IS …) bara när
+  avsändaren är ett bolag i `instruments.csv`. Det avgörs av `mfn_slug`, eller av namnet eller ett alias som slug,
+  med samma regel som rapportkalendern. Utan filtret föll till exempel Lundin Gold och Lundin Mining (scope CA) och
+  Arctic Paper (PL) bort, kontrollerat 2026-11-05. Insynshandel (`sub:ci:insider`) sparas inte.
   Rutinmeddelanden sparas men får `routine: true`. De känns igen på MFN-taggar eller rubrik.
 - Varje post hamnar i veckan för sin egen publiceringstid i svensk tid.
 - Om samma pressmeddelande finns hos både MFN och Cision behålls MFN-versionen, och Cision-länken sparas i `also_in`.
@@ -116,6 +124,11 @@ webbplats inlagt för hand med `scripts/add_raw_item.py`:
     läggs bara till om det är unikt i listan och har minst tre tecken. Krockar skrivs ut för manuell bedömning.
     Kör skriptet igen efter att nya rader lagts till. Valideringen underkänner ett namn eller alias som finns på två rader.
   - **`mfn_slug`** är ifylld för 20 bolag, de vars slug förekom i den hämtade rådatan och exakt motsvarar bolagsnamnet.
+    2026-11-05 lades 13 till, där MFN:s slug avviker från namnet:
+    - 11 kontrollerade mot avsändarna i rådatan: `byggmastare-anders-j-ahlstrom-holding`, `fagerhultgroup`,
+      `emilshus`, `flatcapital`, `viscaria`, `jm`, `linjemontage`, `mtg`, `neobofastigheter`, `stenhus-fastigheter`
+      och `tangen`.
+    - 2 ur bolagens MFN-adresser: `arion-bank` och `fenix-outdoor`.
   - Novo Nordisk och Salesforce ligger kvar från den ursprungliga listan.
 - [`data/sectors.json`](data/sectors.json): fast sektorlista som styr flikarna.
 - `data/mock/`: exempeldata (`"mock": true`) med **påhittade bolag och källor** och en egen

@@ -113,9 +113,14 @@ const meetings = report.reports_today.filter((e) => e.kind === "stämma");
                   <span class="sr-only"> ({it.source}, öppnas i ny flik)</span>
                   <span aria-hidden="true"> ↗</span>
                 </a>
+                {it.summary && (
+                  <p class="quote">
+                    {it.summary} <span class="muted">– egen sammanfattning, manuellt tillagd från bolagets webbplats</span>
+                  </p>
+                )}
                 {it.quote && (
                   <blockquote class="quote">
-                    ”{it.quote}” <span class="muted">– {it.source}, bolagets webbplats</span>
+                    ”{it.quote}” <span class="muted">– {it.source}, bolagets webbplats{it.manual && ", manuellt tillagd"}</span>
                   </blockquote>
                 )}
               </li>

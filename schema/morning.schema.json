@@ -181,7 +181,16 @@
                 "quote": {
                   "type": "string",
                   "minLength": 1,
-                  "description": "Ordagrant citat ur pressmeddelandet, för poster från bolagets egen webbplats (saknas annars)."
+                  "description": "Ordagrant citat ur pressmeddelandet, för poster från bolagets egen webbplats vars villkor tillåter återgivning (saknas annars)."
+                },
+                "summary": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Egen sammanfattning av ett pressmeddelande från bolagets egen webbplats, när villkoren inte tillåter återgivning (saknas annars)."
+                },
+                "manual": {
+                  "const": true,
+                  "description": "Posten är manuellt tillagd från bolagets egen webbplats (scripts/add_raw_item.py)."
                 }
               }
             }

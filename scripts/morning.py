@@ -88,7 +88,8 @@ def _dedupe_url(url: str) -> str:
 def overnight_news(raw_dirs: list[Path], instruments: dict[str, Instrument], since: datetime, until: datetime,
                    reporting_today: set[str]) -> list[dict]:
     """Pressmeddelanden för bolag i listan publicerade i [since, until], per bolag. Poster från bolagets egen
-    webbplats (source "bolag", scripts/add_raw_item.py) har tickern och ett ordagrant citat i data; citatet visas."""
+    webbplats (source "bolag", scripts/add_raw_item.py) har tickern i data och antingen en egen sammanfattning
+    (visas märkt "manuellt tillagd") eller, när källans villkor tillåter återgivning, ett ordagrant citat."""
     patterns = report_calendar.name_patterns(instruments)
     weeks = {_iso_week(since.date()), _iso_week(until.date())}
     seen: set[str] = set()
@@ -121,8 +122,12 @@ def overnight_news(raw_dirs: list[Path], instruments: dict[str, Instrument], sin
                                             "report_today": ticker in reporting_today, "items": []})
                 entry = {"published": published.isoformat(), "title": it["title"], "url": it["url"],
                          "source": it.get("source_name") or it["source"]}
-                if it["source"] == "bolag" and data.get("quote"):
-                    entry["quote"] = data["quote"]
+                if it["source"] == "bolag":
+                    entry["manual"] = True
+                    if data.get("summary"):
+                        entry["summary"] = data["summary"]
+                    elif data.get("quote"):
+                        entry["quote"] = data["quote"]
                 c["items"].append(entry)
     out = list(per.values())
     for c in out:

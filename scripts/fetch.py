@@ -29,6 +29,7 @@ skrivs som ::warning::), 1 = alla källor fallerade.
 from __future__ import annotations
 
 import argparse
+import csv
 import html
 import json
 import os
@@ -83,7 +84,12 @@ SV_MONTHS = {m: i for i, m in enumerate(["januari", "februari", "mars", "april",
 DECISION_MAX_AGE_DAYS = 60  # äldre beslut har redan börjat gälla och syns i API:ets serie
 
 MFN_NS = "{https://mfn.se/schemas/rss-ns-x/}"
+# Scope SE sparas alltid. Andra scope (CA, DK, FI, IS …) bara för bolag i instruments.csv: t.ex. Lundin
+# Gold och Lundin Mining publicerar med scope CA och föll tidigare bort (kontrollerat 2026-11-05).
 MFN_SCOPES = {"SE"}
+INSTRUMENTS_CSV = ROOT / "data" / "instruments.csv"
+# Bolagssuffix i MFN:s och Cisions slugar ("dometic-group", "sampo-oyj"); samma regel som rapportkalendern.
+SLUG_SUFFIXES = {"", "ab", "publ", "ab-publ", "group", "holding", "asa", "oyj", "plc"}
 MFN_LANGUAGES = {"sv", "en"}
 MFN_SKIP_TAGS = {"sub:ci:insider"}  # insynshandel och flaggningar sparas inte
 
@@ -205,17 +211,71 @@ def _slug_from_path(url: str, marker: str) -> str | None:
         return None
 
 
-def parse_mfn(data: bytes) -> list[Item]:
+def slugify(name: str) -> str:
+    """'Dometic Group' -> 'dometic-group', 'Bergman & Beving' -> 'bergman-beving' (som MFN:s och Cisions slugar)."""
+    s = name.casefold().translate(str.maketrans("åäöéü", "aaoeu"))
+    return "-".join(re.findall(r"[a-z0-9]+", s))
+
+
+def slug_matches(slug: str, base: str) -> bool:
+    """Sant om sluggen är namnets slug, eventuellt följd av ett bolagssuffix ("-ab", "-group" …)."""
+    return bool(base) and (slug == base or (slug.startswith(base + "-") and slug[len(base) + 1:] in SLUG_SUFFIXES))
+
+
+@dataclass(frozen=True)
+class Watched:
+    """Bevakade bolag i instruments.csv: mfn_slug exakt, och namn/alias som slug (med bolagssuffix)."""
+
+    slugs: frozenset[str] = frozenset()
+    bases: frozenset[str] = frozenset()
+
+    def __contains__(self, slug: object) -> bool:
+        return isinstance(slug, str) and (slug in self.slugs or any(slug_matches(slug, b) for b in self.bases))
+
+
+def load_watched(path: Path = INSTRUMENTS_CSV) -> Watched:
+    """Bevakade bolag ur instruments.csv (bara standardbiblioteket, så att det fungerar i GitHub Actions).
+    Saknas filen bevakas inga bolag, och bara scope SE sparas från MFN."""
+    if not path.exists():
+        return Watched()
+    slugs, bases = set(), set()
+    with path.open(encoding="utf-8", newline="") as f:
+        for row in csv.DictReader(f):
+            if (row.get("mfn_slug") or "").strip():
+                slugs.add(row["mfn_slug"].strip())
+            for n in [row.get("namn") or "", *(row.get("alias") or "").split("|")]:
+                if len(n.strip()) >= 3:
+                    bases.add(slugify(n.strip()))
+    return Watched(frozenset(slugs), frozenset(bases - {""}))
+
+
+_watched: Watched | None = None
+
+
+def default_watched() -> Watched:
+    global _watched
+    if _watched is None:
+        _watched = load_watched()
+    return _watched
+
+
+def parse_mfn(data: bytes, watched: Watched | None = None) -> list[Item]:
+    """MFN:s poster med scope SE, och med andra scope bara för bevakade bolag (watched, standard:
+    instruments.csv)."""
+    watched = default_watched() if watched is None else watched
     items = []
     for el in ET.fromstring(data).findall("./channel/item"):
         scope = el.findtext(MFN_NS + "scope")
         lang = el.findtext(MFN_NS + "language")
         tags = [t.text for t in el.findall(MFN_NS + "tag") if t.text]
-        if scope not in MFN_SCOPES or lang not in MFN_LANGUAGES or MFN_SKIP_TAGS & set(tags):
+        url = el.findtext("link") or ""
+        company = _slug_from_path(url, "a")
+        if scope not in MFN_SCOPES and company not in watched:
+            continue
+        if lang not in MFN_LANGUAGES or MFN_SKIP_TAGS & set(tags):
             continue
         text_el = next((c for c in el.findall(MFN_NS + "content") if c.get("type") == "text"), None)
         text = (text_el.text if text_el is not None else None) or el.findtext("description") or ""
-        url = el.findtext("link") or ""
         title = (el.findtext("title") or "").strip()
         routine = is_routine(title, tags)
         items.append(Item(
@@ -225,7 +285,7 @@ def parse_mfn(data: bytes) -> list[Item]:
             url=url,
             published=_parse_rfc822(el.findtext("pubDate") or ""),
             title=title,
-            company=_slug_from_path(url, "a"),
+            company=company,
             language=lang,
             tags=tags + (["rutin"] if routine else []),
             text=text.strip(),

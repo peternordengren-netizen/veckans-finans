@@ -90,6 +90,12 @@ def read_index(raw, week):
     return json.loads((raw / week / "index.json").read_text(encoding="utf-8"))
 
 
+@pytest.fixture(autouse=True)
+def inga_bevakade_bolag(monkeypatch):
+    """Testerna ska inte bero på den riktiga instruments.csv: inga bevakade bolag om inte testet anger några."""
+    monkeypatch.setattr(fetch, "_watched", fetch.Watched())
+
+
 # --- Vecka i svensk tid ----------------------------------------------------
 
 
@@ -148,6 +154,61 @@ def test_mfn_filter_och_rutintaggar():
     assert not by_id["ok"].routine and "rutin" not in by_id["ok"].tags
     assert by_id["ok"].text_kind == "fulltext" and by_id["ok"].text == "Fulltext."
     assert by_id["ok"].company == "fjallhem-fastigheter"
+
+
+def bevakade(tmp_path, *rows):
+    p = tmp_path / "instruments.csv"
+    p.write_text("namn,alias,ticker,yahoo_ticker,börs,sektor,isin,mfn_slug\n" + "\n".join(rows) + "\n", encoding="utf-8")
+    return fetch.load_watched(p)
+
+
+def test_mfn_annat_scope_an_se_bara_for_bevakade_bolag(tmp_path):
+    watched = bevakade(
+        tmp_path,
+        "Alfaverken Guld,Alfaguld,ALFG,ALFG.ST,Nasdaq Stockholm,,,",  # namnet som slug
+        "Betabolaget Oyj,Betabolaget,BETA,BETA.ST,Nasdaq Stockholm,,,",  # aliaset som slug
+        "Gammabanken,,GAMMA,GAMMA.ST,Nasdaq Stockholm,,,gamma-bank",  # mfn_slug exakt
+        "Deltaverken,,DELTA,DELTA.ST,Nasdaq Stockholm,,,",
+    )
+    pub = "Wed, 04 Nov 2026 22:30:00 +0000"
+    items = fetch.parse_mfn(mfn_feed(
+        mfn_item("ca", "Alfaverken Guld: Q3", pub, scope="CA", lang="en", slug="alfaverken-guld"),
+        mfn_item("ca-inc", "Alfaverken Guld Inc.: utdelning", pub, scope="CA", lang="en", slug="alfaverken-guld-group"),
+        mfn_item("fi", "Betabolaget: delårsrapport", pub, scope="FI", lang="en", slug="betabolaget"),
+        mfn_item("is", "Gammabanken: Q3", pub, scope="IS", lang="en", slug="gamma-bank"),
+        mfn_item("is-isl", "Gammabanken: árshlutauppgjör", pub, scope="IS", lang="is", slug="gamma-bank"),
+        mfn_item("no", "Okänt norskt bolag", pub, scope="NO", lang="en", slug="epsilon-asa"),
+        mfn_item("no-likt", "Deltaverken Shipping", pub, scope="NO", lang="en", slug="deltaverken-shipping"),
+        mfn_item("se", "Okänt svenskt bolag", pub, slug="zeta"),
+    ), watched)
+    # Bevakade bolag med annat scope kommer med (språkfiltret gäller fortfarande); obevakade inte, och inte
+    # heller en slug som bara börjar som ett bevakat namn ("deltaverken-shipping"). Scope SE som förut.
+    assert {i.id for i in items} == {"ca", "ca-inc", "fi", "is", "se"}
+    assert {i.id: i.company for i in items}["is"] == "gamma-bank"
+
+
+def test_mfn_utan_instruments_csv_bara_scope_se(tmp_path):
+    watched = fetch.load_watched(tmp_path / "saknas.csv")
+    pub = "Wed, 04 Nov 2026 22:30:00 +0000"
+    items = fetch.parse_mfn(mfn_feed(
+        mfn_item("ca", "Alfaverken Guld: Q3", pub, scope="CA", lang="en", slug="alfaverken-guld"),
+        mfn_item("se", "Fjällhem tecknar avtal", pub),
+    ), watched)
+    assert [i.id for i in items] == ["se"]
+
+
+def test_bevakade_bolag_ur_den_riktiga_listan_har_samma_slugregel_som_rapportkalendern():
+    from report_calendar import match_company, name_patterns
+    from validate import load_instruments
+
+    inst = load_instruments()
+    watched = fetch.load_watched()
+    patterns = name_patterns(inst)
+    for i in inst.values():
+        for slug in [i.mfn_slug, *(fetch.slugify(n) for n in (i.namn, *i.alias) if len(n) >= 3)]:
+            if slug:
+                assert slug in watched
+                assert match_company({"source": "mfn", "company": slug, "title": ""}, inst, patterns) is not None
 
 
 @pytest.mark.parametrize(
