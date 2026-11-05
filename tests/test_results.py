@@ -7,6 +7,8 @@ from datetime import date, datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+import pytest
+
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
@@ -99,6 +101,20 @@ def test_rapportrubriker():
     assert not is_report_title("Alfaverken bedömer att omsättning och resultat för tredje kvartalet 2026 "
                                "väsentligt överstiger marknadens förväntningar", d)
     assert not is_report_title("Inbjudan till presentation av resultat för tredje kvartalet", d)
+
+
+@pytest.mark.parametrize("title, ok", [
+    # Engelska rubriker (2026-11-05 missades en "consolidated quarterly report").
+    ("Alfaverken Group consolidated quarterly report for Q3 2026", True),
+    ("Alfaverken: Interim report January–September 2026", True),
+    ("Alfaverken Half-year report 2026", True),
+    ("Alfaverken AB Nine-month report 2026", True),
+    ("Alfaverken AB Niomånadersrapport 2026", True),
+    ("Invitation to presentation of Alfaverken's quarterly report", False),
+    ("Alfaverken will publish its quarterly report on 12 November", False),
+])
+def test_engelska_rapportrubriker(title, ok):
+    assert is_report_title(title, date(2026, 11, 5)) is ok
 
 
 def test_lista_hoppar_over_datumbesked(tmp_path):

@@ -236,6 +236,8 @@ class Result:
 
 INSTRUMENT_TYPES = {"investmentbolag"}
 MFN_SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+# Cisions slugar kan ha dubbla och avslutande bindestreck ("meren-energy-inc-", "l-e-lundbergforetagen-ab--publ-").
+CISION_SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 ISIN_RE = re.compile(r"^[A-Z]{2}[A-Z0-9]{9}[0-9]$")
 
 
@@ -253,6 +255,9 @@ class Instrument:
     # Analytikerlänkar i kursreaktionen, valfria och kontrollerade innan de läggs in (ingen hämtning sker):
     placera_tagg: str | None = None  # Placeras taggsida placera.se/taggar/<slug> (finns i Placeras tagg-sitemap)
     afv_aktie: str | None = None  # Affärsvärldens bolagssida affarsvarlden.se/aktie/<slug> (sidan har bolagets ISIN)
+    # Bolagets eget nyhetsrum hos Cision, news.cision.com/<slug> (valfri): för bolag som inte syns i Cisions svenska
+    # lista. fetch.py hämtar då news.cision.com/<slug>/ListItems?format=rss (sidans egen RSS-ikon).
+    cision_slug: str | None = None
 
     def analyst_links(self) -> dict:
         """Länkarna för kolumnen "Analytiker" i kursreaktionen."""
@@ -277,6 +282,7 @@ def load_instruments(
         sector_ids = load_sector_ids()
     instruments: dict[str, Instrument] = {}
     slugs: dict[str, str] = {}
+    cision_slugs: dict[str, str] = {}
     name_owner: dict[str, str] = {}  # namn/alias (gemener) -> ticker
     isin_owner: dict[str, str] = {}  # ISIN -> ticker
     with path.open(encoding="utf-8-sig", newline="") as f:
@@ -287,6 +293,13 @@ def load_instruments(
             isins = tuple(i.strip() for i in (row.get("isin") or "").split("|") if i.strip())
             typ = (row.get("typ") or "").strip() or None
             links = {k: (row.get(k) or "").strip() or None for k in ("placera_tagg", "afv_aktie")}
+            cision_slug = (row.get("cision_slug") or "").strip() or None
+            if cision_slug is not None:
+                if not CISION_SLUG_RE.match(cision_slug):
+                    raise ValueError(f"{path.name} rad {line}: ogiltig cision_slug {cision_slug!r} (gemener, siffror och bindestreck)")
+                if cision_slug in cision_slugs:
+                    raise ValueError(f"{path.name} rad {line}: cision_slug {cision_slug!r} används redan av {cision_slugs[cision_slug]!r}")
+                cision_slugs[cision_slug] = row["ticker"].strip()
             for k, v in links.items():
                 if v is not None and not MFN_SLUG_RE.match(v):
                     raise ValueError(f"{path.name} rad {line}: ogiltig {k} {v!r} (gemener, siffror och bindestreck)")
@@ -309,6 +322,7 @@ def load_instruments(
                 isin=isins,
                 typ=typ,
                 **links,
+                cision_slug=cision_slug,
             )
             if inst.ticker in instruments:
                 raise ValueError(f"{path.name} rad {line}: dubblett av ticker {inst.ticker!r}")

@@ -26,6 +26,16 @@ Workflow-mallen ligger i [`deploy/raw-repo/`](deploy/raw-repo/). Lokalt klonas d
 |---|---|---|
 | MFN | `https://mfn.se/all/s/nordic.rss?limit=200` (odokumenterad, men flödet anger själv adressen); morgonflödet använder `limit=500` (`--mfn-limit`), fortfarande ett anrop | fulltext |
 | Cision | `https://news.cision.com/se/ListItems?format=rss` | utdrag, ca 600 tecken |
+| Cision, bolagets eget flöde | `https://news.cision.com/<cision_slug>/ListItems?format=rss`, ett anrop per bolag med `cision_slug` i `instruments.csv` (i dag Gentoo Media) | utdrag, poster högst 14 dagar gamla |
+
+Bolag som bara publicerar i Cisions internationella nyhetsrum syns inte i den svenska listan. Gentoo Media publicerar
+till exempel under `news.cision.com/gentoo-media-inc`, utan `/se/`. Fyll då i `cision_slug`, bolagets del av adressen
+till nyhetsrummet på Cision. Flödets adress är den som RSS-ikonen på bolagets Cision-sida öppnar (kontrollerat för
+Gentoo 2026-11-05).
+
+Cision har inga särskilda användarvillkor för news.cision.com, bara innehålls-, integritets- och cookiepolicy.
+Om-sidan (`news.cision.com/_editorial/about`) erbjuder prenumeration på ett visst bolags nyheter "by email and RSS",
+och robots.txt spärrar ingenting (läst 2026-11-05).
 | Riksbanken | `https://api.riksbank.se/swea/v1/Observations/SECBREPOEFF/<från>/<till>`, fem år bakåt i ett anrop (ingen nyckel krävs) | nyckeltal |
 | Riksbankens räntebeslut | `https://www.riksbank.se/sv/rss/pressmeddelanden/` (Riksbankens egen RSS, kontrollerad 2026-11-05); för ett nytt beslut också pressmeddelandet, en gång, för dagen beslutet tillämpas | beslut |
 
@@ -94,7 +104,9 @@ via Cision), kan läggas in för hand med `scripts/add_raw_item.py`:
     pressmeddelandet, så länge beslutet inte gällde den dag nyckeltalet avser. Ett beslut om oförändrad ränta visas
     inte.
 - [`schema/prices.schema.json`](schema/prices.schema.json): kursförändring per `yahoo_ticker`. Sidan fungerar utan filen.
-- [`data/instruments.csv`](data/instruments.csv): `namn,alias,ticker,yahoo_ticker,börs,sektor,isin,mfn_slug`.
+- [`data/instruments.csv`](data/instruments.csv): `namn,alias,ticker,yahoo_ticker,börs,sektor,isin,mfn_slug`, plus de
+  valfria kolumnerna `typ`, `placera_tagg`, `afv_aktie` och `cision_slug`. `cision_slug` är bolagets eget nyhetsrum
+  hos Cision (`news.cision.com/<slug>`) och hämtas som ett eget flöde.
   `isin` innehåller alla bolagets aktieslag, åtskilda med `|`. Värdena kommer från samma Nasdaq-hämtning (2026-10-05)
   och används för att koppla FI:s blankningsregister och insynsregister till listan. Flera alias
   separeras med `|`. Underhålls manuellt. `sektor` är ett id ur `sectors.json` och kan vara tom. Den styr var en
@@ -259,6 +271,8 @@ fliken **Rapporterade bolag**.
 1. `report_list.py <vecka>` listar veckans rapporter för bolag i listan, en per bolag. Den läser både Actions- och
    morgonrådatan. Ett meddelande räknas som rapport om något av följande gäller:
    - Rubriken säger det: "delårsrapport", "Q3-rapport", "resultat för tredje kvartalet" och liknande.
+     Engelska rubriker räknas också: "interim report", "quarterly report", "half-year report" och "nine-month
+     report". Arctic Papers "consolidated quarterly report for Q3 2026" missades före 2026-11-05.
    - Kalenderregeln uppfylls, för rubriker som bara är en rubrikmening ("Saabs resultat Kv3 2026: …"). Bolaget står i
      kalendern samma dag, enligt dagens morgonrapport eller veckans kalender. Meddelandet kommer från bolaget självt
      (MFN- eller Cision-avsändaren, aldrig en analytiker). Texten nämner minst två rapportnyckeltal och

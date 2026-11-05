@@ -91,9 +91,11 @@ def read_index(raw, week):
 
 
 @pytest.fixture(autouse=True)
-def inga_bevakade_bolag(monkeypatch):
-    """Testerna ska inte bero på den riktiga instruments.csv: inga bevakade bolag om inte testet anger några."""
+def inga_bevakade_bolag(monkeypatch, tmp_path_factory):
+    """Testerna ska inte bero på den riktiga instruments.csv: inga bevakade bolag och inga bolagsflöden hos Cision
+    om inte testet anger några."""
     monkeypatch.setattr(fetch, "_watched", fetch.Watched())
+    monkeypatch.setattr(fetch, "INSTRUMENTS_CSV", tmp_path_factory.mktemp("inga") / "saknas.csv")
 
 
 # --- Vecka i svensk tid ----------------------------------------------------
@@ -195,6 +197,61 @@ def test_mfn_utan_instruments_csv_bara_scope_se(tmp_path):
         mfn_item("se", "Fjällhem tecknar avtal", pub),
     ), watched)
     assert [i.id for i in items] == ["se"]
+
+
+def cision_company_item(guid, title, pub, slug="alfaverken-inc"):
+    """Bolagets eget Cision-flöde: länkarna saknar /se/."""
+    return f"""<item><title>{title}</title>
+      <link>https://news.cision.com/{slug}/r/{guid}</link>
+      <guid isPermaLink="false">{guid}</guid>
+      <description><![CDATA[Utdrag.]]></description>
+      <pubDate>{pub}</pubDate></item>"""
+
+
+def test_bolagens_egna_cision_floden_ur_instruments_csv(tmp_path, monkeypatch):
+    csv_path = tmp_path / "instruments.csv"
+    csv_path.write_text(
+        "namn,alias,ticker,yahoo_ticker,börs,sektor,isin,mfn_slug,cision_slug\n"
+        "Alfaverken,,ALFA,ALFA.ST,Nasdaq Stockholm,,,,alfaverken-inc\n"
+        "Betabolaget,,BETA,BETA.ST,Nasdaq Stockholm,,,,\n", encoding="utf-8")
+    monkeypatch.setattr(fetch, "INSTRUMENTS_CSV", csv_path)
+    company_url = "https://news.cision.com/alfaverken-inc/ListItems?format=rss"
+    assert [(n, u) for n, u, _ in fetch.cision_company_sources(csv_path)] == [("cision-alfaverken-inc", company_url)]
+    feed = cision_feed(
+        cision_company_item("c1", "Alfaverken completes share issue", "Fri, 02 Oct 2026 09:15:00 +0000"),
+        cision_company_item("c2", "Alfaverken publishes annual report", "Mon, 13 Jul 2026 07:00:00 +0000"),  # för gammal
+        # Samma pressmeddelande som i den svenska listan (samma guid): sparas en gång.
+        cision_company_item("delad", "Alfaverken: notice of meeting", "Fri, 02 Oct 2026 08:00:00 +0000"),
+    )
+    se_feed = cision_feed(cision_item("delad", "Alfaverken: notice of meeting", "Fri, 02 Oct 2026 08:00:00 +0000",
+                                      slug="alfaverken-inc"))
+    calls = []
+
+    def get(url):
+        calls.append(url)
+        return fake_get({fetch.MFN_URL: mfn_feed(), fetch.CISION_URL: se_feed, fetch.RIKSBANK_URL: RIKSBANK,
+                         fetch.RIKSBANK_RSS_URL: RIKSBANK_RSS, company_url: feed})(url)
+
+    assert fetch.main(["--raw-dir", str(tmp_path / "raw")], get=get, now=NOW) == 0
+    assert calls.count(company_url) == 1  # ett anrop per bolagsflöde och körning
+    idx = read_index(tmp_path / "raw", "2026-W40")
+    cision = {e["id"]: e for e in idx["items"] if e["source"] == "cision"}
+    assert set(cision) == {"c1", "delad"}
+    assert cision["c1"]["company"] == "alfaverken-inc"
+    assert not (tmp_path / "raw" / "2026-W29").exists()
+    run = idx["runs"][-1]["sources"]
+    assert run["cision-alfaverken-inc"] == {"status": "ok", "items": 2, "new": 1}
+    assert run["cision"]["new"] == 1
+
+
+def test_cision_slug_matchar_avsandaren():
+    from report_calendar import match_company, name_patterns
+    from validate import Instrument
+
+    inst = {"ALFA": Instrument("Alfaverken", (), "ALFA", "ALFA.ST", "Stockholm", cision_slug="alfaverken-inc")}
+    item = {"source": "cision", "company": "alfaverken-inc", "title": "Bulletin from the general meeting"}
+    assert match_company(item, inst, name_patterns(inst)) == "ALFA"
+    assert match_company({**item, "source": "mfn"}, inst, name_patterns(inst)) is None
 
 
 def test_bevakade_bolag_ur_den_riktiga_listan_har_samma_slugregel_som_rapportkalendern():

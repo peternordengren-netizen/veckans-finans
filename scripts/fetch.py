@@ -62,6 +62,12 @@ TIMEOUT_S = 30
 MFN_LIMIT = 200
 MFN_URL = f"https://mfn.se/all/s/nordic.rss?limit={MFN_LIMIT}"
 CISION_URL = "https://news.cision.com/se/ListItems?format=rss"
+# Bolag som bara publicerar i Cisions internationella nyhetsrum (t.ex. Gentoo Media) syns inte i den svenska listan.
+# Deras egna flöden hämtas, ett anrop per bolag, för bolag med cision_slug i instruments.csv. Adressen är den som
+# RSS-ikonen på bolagets Cision-sida öppnar (kontrollerat för Gentoo 2026-11-05). Cision erbjuder själv prenumeration
+# på ett visst bolags nyheter "by email and RSS" (news.cision.com/_editorial/about); robots.txt spärrar inget.
+CISION_COMPANY_URL = "https://news.cision.com/{slug}/ListItems?format=rss"
+CISION_COMPANY_MAX_AGE_DAYS = 14
 # Styrräntan: dagliga observationer för ett datumintervall (…/<från>/<till>),
 # kontrollerat 2026-10-05. Fem år bakåt räcker för att hitta senaste ändringen
 # (den förra låg ett år bakåt) och är ett enda litet anrop.
@@ -164,6 +170,7 @@ class Item:
     text_kind: str  # "fulltext" | "utdrag" | "data"
     routine: bool = False
     data: dict | None = None  # strukturerade värden (nyckeltal), sparas i index.json
+    feed: str | None = None  # källans namn i körningsloggen (t.ex. "cision-gentoo-media-inc"), sparas inte
 
 
 @dataclass
@@ -443,6 +450,31 @@ SOURCES: list[Source] = [
 ]
 
 
+def cision_company_parser(slug: str) -> Callable:
+    """Parser för ett bolags eget Cision-flöde: som Cisions svenska lista, men bolagets slug ur instruments.csv
+    (länkarna saknar /se/) och bara poster från de senaste CISION_COMPANY_MAX_AGE_DAYS dagarna (flödet går
+    månader bakåt; äldre veckor ska inte fyllas på i efterhand)."""
+
+    def parse(data: bytes, _get: Callable, _known: set[str], today: date) -> list[Item]:
+        items = parse_cision(data)
+        for it in items:
+            it.company = slug
+        return [it for it in items if (today - it.published.astimezone(STOCKHOLM).date()).days <= CISION_COMPANY_MAX_AGE_DAYS]
+
+    parse.needs_context = True
+    return parse
+
+
+def cision_company_sources(path: Path = INSTRUMENTS_CSV) -> list[Source]:
+    """En källa per bolag med cision_slug i instruments.csv: news.cision.com/<slug>/ListItems?format=rss.
+    Bara standardbiblioteket (körs i GitHub Actions). Saknas filen eller kolumnen blir listan tom."""
+    if not path.exists():
+        return []
+    with path.open(encoding="utf-8-sig", newline="") as f:
+        slugs = sorted({(row.get("cision_slug") or "").strip() for row in csv.DictReader(f)} - {""})
+    return [(f"cision-{s}", CISION_COMPANY_URL.format(slug=s), cision_company_parser(s)) for s in slugs]
+
+
 def fetch_all(sources: list[Source] = SOURCES, get: Callable[[str], bytes] = http_get,
               today: date | None = None, known_ids: set[str] | None = None) -> RunResult:
     """Ett anrop per källa (räntebeslutet: RSS, och pressmeddelandet en gång per nytt beslut). Fel loggas och
@@ -458,6 +490,8 @@ def fetch_all(sources: list[Source] = SOURCES, get: Callable[[str], bytes] = htt
             res.log[name] = {"status": "fel", "error": f"{type(err).__name__}: {err}"[:300]}
             print(f"[{name}] FEL: {err}", file=sys.stderr)
             continue
+        for it in items:
+            it.feed = name
         res.items += items
         res.log[name] = {"status": "ok", "items": len(items)}
         print(f"[{name}] {len(items)} poster")
@@ -623,7 +657,8 @@ def store(result: RunResult, raw_dir: Path, now: datetime) -> dict[str, int]:
         if carried:
             entry["also_in"] = carried
         entries.append(entry)
-        new_counts[item.source] = new_counts.get(item.source, 0) + 1
+        key = item.feed if item.feed in new_counts else item.source
+        new_counts[key] = new_counts.get(key, 0) + 1
 
     run_week = iso_week(now)
     index_for(run_week)
@@ -669,6 +704,7 @@ def main(argv: list[str] | None = None, get: Callable[[str], bytes] = http_get, 
     now = now or datetime.now(STOCKHOLM)
     sources = [(name, MFN_URL.replace(f"limit={MFN_LIMIT}", f"limit={args.mfn_limit}") if name == "mfn" else url, parse)
                for name, url, parse in SOURCES]
+    sources += cision_company_sources(INSTRUMENTS_CSV)  # läses vid körning (testerna pekar om INSTRUMENTS_CSV)
     result = fetch_all(sources, get=get, today=now.astimezone(STOCKHOLM).date(), known_ids=known_ids(args.raw_dir))
     new = store(result, args.raw_dir, now)
     print("nya poster:", new)

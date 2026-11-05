@@ -94,6 +94,9 @@ COMMON_KPIS = [
 ]
 REPORT_RE = re.compile(
     r"delårsrapport|interim report|kvartalsrapport|bokslutskommuniké|year[- ]end report|"
+    # Engelska rubriker: "Arctic Paper Group consolidated quarterly report for Q3 2026" (2026-11-05),
+    # "Half-year report", H&M:s "Nine-month report"/"Niomånadersrapport".
+    r"quarterly report|half[- ]year(ly)? report|(three|six|nine)[- ]month report|(tre|sex|nio)månadersrapport|"
     r"rapport för (det )?(första|andra|tredje|fjärde) kvartalet|"
     # "Resultat tredje kvartalet 2026", "Tele2 rapporterar resultat för …", "Bolaget: Resultat för …",
     # "SEB:s resultat för …" – men inte "bedömer att omsättning och resultat för tredje kvartalet

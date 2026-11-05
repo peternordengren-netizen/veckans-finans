@@ -185,6 +185,8 @@ def match_company(item: dict, instruments: dict[str, Instrument], patterns: list
         for inst in instruments.values():
             if inst.mfn_slug and inst.mfn_slug == slug and item.get("source") == "mfn":
                 return inst.ticker
+            if inst.cision_slug and inst.cision_slug == slug and item.get("source") == "cision":
+                return inst.ticker
         for inst in instruments.values():
             for n in (inst.namn, *inst.alias):
                 if slug_matches(slug, slugify(n)):
