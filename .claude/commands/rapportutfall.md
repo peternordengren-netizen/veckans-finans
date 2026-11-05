@@ -26,7 +26,7 @@ Kommandot körs utan att någon tittar på, med behörighetsläget `dontAsk`. Ba
 ## Arbetsgång
 
 1. Kör `.venv/Scripts/python scripts/report_list.py <läge> --omgang <omgång>`. Varje rad är en rapport:
-   `nr | omgång | ticker | bolag | sektor | nyckeltal | publicerad | text | raw_file | sökväg | rubrik`. Det är exakt
+   `nr | omgång | ticker | bolag | sektor | nyckeltal | publicerad | text | raw_file | sökväg | rubrik | språk`. Det är exakt
    de rapporter du ska ta med – alla, och inga andra.
 2. Läs nyckeltalens namn och typer i `data/sectors.json` (`kpis`). Utöver sektorns nyckeltal finns för alla bolag
    `nettoomsattning` (belopp), `resultat-per-aktie` (per aktie) och `justerat-resultat-per-aktie` (per aktie):
@@ -86,7 +86,9 @@ Kommandot körs utan att någon tittar på, med behörighetsläget `dontAsk`. Ba
    innehålla årets värde och föregående års värde (oftast inom parentes: "1 234 MSEK (1 100)") och/eller den angivna
    förändringen i procent. Minst ett av `previous_value` och `change_pct` ska anges, och båda ska stå i citatet.
 2. **Värden:** `value` och `previous_value` är talen som de står i citatet, med punkt som decimaltecken
-   (`3,51` → `3.51`, `1 234` → `1234`). Negativa värden (förlust) med minustecken. `change_pct` bara om rapporten
+   (`3,51` → `3.51`, `1 234` → `1234`). Negativa värden (förlust) med minustecken.
+   - **Engelska rapporter** (`en` i kolumnen `språk`): komma är tusentalsavgränsare och punkt decimaltecken
+     (`1,234.5` → `1234.5`, `0.85` → `0.85`). Valideringen läser citatet på samma sätt. `change_pct` bara om rapporten
    själv anger förändringen i procent; för procenttal (marginaler, belåningsgrad) är `change_pct` alltid `null`.
 3. **Enhet** (`unit`), som i citatet: belopp `SEK`, `TSEK`, `MSEK` eller `MDSEK` (mkr = MSEK, mdkr/Mdr kr = MDSEK),
    motsvarande för `EUR`, `USD`, `DKK`, `NOK`; per aktie `SEK`/`EUR`/…, eller i hundradelar som i citatet

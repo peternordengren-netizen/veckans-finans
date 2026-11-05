@@ -74,6 +74,15 @@ _NUMBER_RE = re.compile(
     r"(?:(?P<sep>[.,:])(?P<frac>\d+))?"
     r"(?P<pct> ?(?:%|procent(?!enhet)))?"
 )
+# Engelska texter (språket "en" i rådatans index): komma är tusentalsavgränsare och punkt decimaltecken
+# ("US$1,234.5 million" -> 1234,5; Lundin Gold och Lundin Mining 2026-11-05). Ett komma som inte följs av
+# exakt tre siffror är ett skiljetecken.
+_NUMBER_RE_EN = re.compile(
+    r"(?<![\w.,])(?P<sign>[-–−](?=\d))?"
+    r"(?<![\w.,])(?P<int>\d{1,3}(?:,\d{3})+(?!\d)|\d+)"
+    r"(?:(?P<sep>[.:])(?P<frac>\d+))?"
+    r"(?P<pct> ?(?:%|percent\b|procent(?!enhet)))?"
+)
 # Två skrivsätt i bolagens rapporter som tolkas särskilt, men bara i ett belopp eller värde per aktie:
 # en valutaenhet står efter talet, eller talet står inom parentes direkt efter ett tal med samma
 # skrivsätt ("2.500 MSEK (2.342)", "0:21 SEK (1:26)"). Annars tolkas de som förut.
@@ -167,15 +176,18 @@ def _special_style(text: str, m: re.Match, prev_style: str | None, prev_end: int
     return None
 
 
-def extract_numbers(text: str) -> list[Number]:
+def extract_numbers(text: str, language: str | None = None) -> list[Number]:
     """Plockar ut alla tal ur texten efter normalisering av mellanslag, decimaltecken och minus.
-    Används både av veckosammanfattningens och rapportutfallens validering (validate_results)."""
+    Används både av veckosammanfattningens och rapportutfallens validering (validate_results).
+    language "en": engelskt skrivsätt (komma som tusentalsavgränsare, punkt som decimaltecken, se
+    _NUMBER_RE_EN); annars svenskt, med de särskilda skrivsätten i _special_style."""
+    english = language == "en"
     text = text.translate(_SPACE_CHARS)
     out = []
     prev_end = 0
     prev_style: str | None = None
-    for m in _NUMBER_RE.finditer(text):
-        style = _special_style(text, m, prev_style, prev_end)
+    for m in (_NUMBER_RE_EN if english else _NUMBER_RE).finditer(text):
+        style = None if english else _special_style(text, m, prev_style, prev_end)
         before = text[prev_end:m.start()]
         words = _WORD_RE.findall(before)
         level = bool(words) and words[-1].casefold() == "till" and before.rstrip().casefold().endswith("till")
@@ -186,7 +198,7 @@ def extract_numbers(text: str) -> list[Number]:
             # Klockslag och liknande ("08:00"): två tal, som innan kolon kunde vara ett skiljetecken i talet.
             values = [Decimal(m["int"].replace(" ", "")), Decimal(m["frac"])]
         else:
-            values = [Decimal(m["int"].replace(" ", "") + ("." + m["frac"] if m["frac"] else ""))]
+            values = [Decimal(m["int"].replace(" ", "").replace(",", "") + ("." + m["frac"] if m["frac"] else ""))]
         for i, value in enumerate(values):
             out.append(Number(
                 value=sign * value if i == 0 else value,
@@ -200,13 +212,14 @@ def extract_numbers(text: str) -> list[Number]:
     return out
 
 
-def unsupported_numbers(text: str, quotes: list[str]) -> list[str]:
-    """Returnerar talen i text som inte beläggs exakt av något tal i quotes."""
-    supporting = [n for q in quotes for n in extract_numbers(q)]
+def unsupported_numbers(text: str, quotes: list[str], quote_language: str | None = None) -> list[str]:
+    """Returnerar talen i text som inte beläggs exakt av något tal i quotes.
+    quote_language: citatens språk (rapportens); texten är alltid svensk."""
+    supporting = [n for q in quotes for n in extract_numbers(q, quote_language)]
     return [n.raw for n in extract_numbers(text) if not any(n.supported_by(s) for s in supporting)]
 
 
-def direction_conflicts(text: str, quotes: list[str]) -> list[str]:
+def direction_conflicts(text: str, quotes: list[str], quote_language: str | None = None) -> list[str]:
     """Returnerar talen i text vars riktningsord motsäger citatet.
 
     Ett ökningsord före talet kräver att något belägg i citaten går uppåt, och ett
@@ -214,7 +227,7 @@ def direction_conflicts(text: str, quotes: list[str]) -> list[str]:
     riktningsord, nivåer ("sänktes till 1,75") och tal som saknar belägg helt
     (fångas av unsupported_numbers) kontrolleras inte här. "med" kontrolleras.
     """
-    supporting = [n for q in quotes for n in extract_numbers(q)]
+    supporting = [n for q in quotes for n in extract_numbers(q, quote_language)]
     out = []
     for n in extract_numbers(text):
         if n.direction is None or n.level:

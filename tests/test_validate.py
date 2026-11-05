@@ -119,6 +119,36 @@ def test_intervall_ger_tva_positiva_tal():
     assert [n.value for n in validate.extract_numbers("2026–2027")] == [Decimal(2026), Decimal(2027)]
 
 
+def test_engelska_tal_komma_som_tusentalsavgransare_och_punkt_som_decimaltecken():
+    vals = lambda t, lang="en": [n.value for n in validate.extract_numbers(t, lang)]  # noqa: E731
+    assert vals("Revenue of $1,234.5 million (2025: $987.6 million)") == [
+        Decimal("1234.5"), Decimal(2025), Decimal("987.6")]
+    assert vals("Sales of 412,345 oz, up 12%, and EPS of $0.85 (0.33)") == [
+        Decimal(412345), Decimal(12), Decimal("0.85"), Decimal("0.33")]
+    assert vals("1,234,567 tonnes") == [Decimal(1234567)]
+    assert vals("cash of $1,234, compared with") == [Decimal(1234)]
+    assert [n.percent for n in validate.extract_numbers("up 12 percent", "en")] == [True]
+    # Ett komma utan exakt tre siffror efter är ett skiljetecken.
+    assert vals("in 2026, 15 sites") == [Decimal(2026), Decimal(15)]
+    # Svenskt skrivsätt (standard och "sv") som förut.
+    assert vals("1,25 MSEK", None) == [Decimal("1.25")]
+    assert vals("1,250 MSEK", "sv") == [Decimal("1.250")]
+
+
+def test_engelsk_rapport_valideras_med_engelskt_skrivsatt():
+    from validate_results import check_kpi
+
+    text = "Third quarter 2026: Revenue was $1,234.5 million compared to $1,100.2 million in the third quarter of 2025."
+    k = {"id": "nettoomsattning", "value": 1234.5, "unit": "MUSD", "previous_value": 1100.2, "change_pct": None,
+         "period_kind": "kvartal", "quote": "Revenue was $1,234.5 million compared to $1,100.2 million"}
+    res = validate.Result()
+    check_kpi(k, "belopp", text, "ALFA nettoomsattning", res, "en")
+    assert res.errors == []
+    res = validate.Result()
+    check_kpi(k, "belopp", text, "ALFA nettoomsattning", res)  # svenskt skrivsätt: 1,234 blir 1.234
+    assert any("värdet 1234.5 finns inte i citatet" in e for e in res.errors)
+
+
 def test_punkt_som_tusentalsavgransare_i_belopp():
     vals = lambda t: [n.value for n in validate.extract_numbers(t)]  # noqa: E731
     assert vals("Omsättningen ökade till 2.500 MSEK (2.342).") == [Decimal(2500), Decimal(2342)]

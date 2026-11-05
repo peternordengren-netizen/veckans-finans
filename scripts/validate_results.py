@@ -122,8 +122,9 @@ ADJUSTED_RE = re.compile(
 )
 
 
-def check_kpi(k: dict, kind: str, raw_text: str, where: str, res: Result) -> None:
-    """Kontrollerar ett nyckeltal mot rapporttexten (raw_text: normaliserade mellanslag)."""
+def check_kpi(k: dict, kind: str, raw_text: str, where: str, res: Result, language: str | None = None) -> None:
+    """Kontrollerar ett nyckeltal mot rapporttexten (raw_text: normaliserade mellanslag). language: rapportens
+    språk ur rådatans index; "en" läser citatets tal med engelskt skrivsätt ("1,234.5" = 1 234,5)."""
     quote = _normalize_ws(k["quote"])
     if len(quote.split()) > MAX_QUOTE_WORDS:
         res.errors.append(f"{where}: citatet har fler än {MAX_QUOTE_WORDS} ord")
@@ -132,7 +133,7 @@ def check_kpi(k: dict, kind: str, raw_text: str, where: str, res: Result) -> Non
     pos = raw_text.find(quote)
     if pos < 0:
         res.errors.append(f"{where}: citatet finns inte i rapporttexten: {k['quote']!r}")
-    numbers = extract_numbers(quote)
+    numbers = extract_numbers(quote, language)
     if not _in_quote(k["value"], numbers):
         res.errors.append(f"{where}: värdet {k['value']} finns inte i citatet")
     if k["previous_value"] is None and k["change_pct"] is None:
@@ -216,7 +217,8 @@ def sentence_problems(text: str) -> list[str]:
 TONES = ("positiv", "blandad", "neutral", "negativ")
 
 
-def check_highlight(h: dict, raw_text: str, where: str, res: Result, require_tone: bool = True) -> None:
+def check_highlight(h: dict, raw_text: str, where: str, res: Result, require_tone: bool = True,
+                    language: str | None = None) -> None:
     """"I rapporten": en hel mening (sentence_problems, högst MAX_HIGHLIGHT_WORDS ord) om det rapporten själv lyfter fram, med
     ordagranna citat som för nyheterna: varje tal i raden ska beläggas exakt av ett citat, riktningsord får
     inte motsäga citaten, och inga ord om aktien, kursen eller råd."""
@@ -232,10 +234,10 @@ def check_highlight(h: dict, raw_text: str, where: str, res: Result, require_ton
             res.errors.append(f"{where}: citatet har {len(q.split())} ord (max {MAX_QUOTE_WORDS}): {q[:60]!r}…")
         if _normalize_ws(q) not in raw_text:
             res.errors.append(f"{where}: citatet finns inte i rapporttexten: {q[:60]!r}")
-    missing = unsupported_numbers(text, quotes)
+    missing = unsupported_numbers(text, quotes, language)
     if missing:
         res.errors.append(f"{where}: siffror utan exakt stöd i citaten: {missing}")
-    conflicts = direction_conflicts(text, quotes)
+    conflicts = direction_conflicts(text, quotes, language)
     if conflicts:
         res.errors.append(f"{where}: riktningen motsäger citaten: {conflicts}")
     forbidden = sorted({m.group(0) for m in _SENTIMENT_FORBIDDEN_RE.finditer(text)})
@@ -261,9 +263,10 @@ def _check_report(r: dict, listed: dict, kinds: dict[str, str], where: str, res:
         res.errors.append(f"{where}: rapporttexten {path} finns inte")
         return
     raw_text = _normalize_ws(path.read_text(encoding="utf-8"))
+    language = listed.get("language")
     if r.get("highlight"):
         check_highlight(r["highlight"], raw_text, f"{where} I rapporten", res,
-                        require_tone=bool(scope) and highlight_required(scope))
+                        require_tone=bool(scope) and highlight_required(scope), language=language)
     elif scope and highlight_required(scope) and r["kpis"]:  # ett utdrag utan siffror behöver ingen rad
         res.errors.append(f"{where}: \"I rapporten\" (highlight) saknas")
     seen: set[str] = set()
@@ -275,7 +278,7 @@ def _check_report(r: dict, listed: dict, kinds: dict[str, str], where: str, res:
         if k["id"] in seen:
             res.errors.append(f"{kw}: dubblett")
         seen.add(k["id"])
-        check_kpi(k, kinds[k["id"]], raw_text, kw, res)
+        check_kpi(k, kinds[k["id"]], raw_text, kw, res, language)
     if not r["kpis"] and not r.get("note"):
         res.errors.append(f"{where}: inga nyckeltal och ingen förklaring (note)")
 

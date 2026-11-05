@@ -419,6 +419,7 @@ def _list(bases: list[Path], window: tuple[datetime, datetime] | None, skip: set
             "url": it["url"],
             "source_name": it.get("source_name") or it["source"],
             "text_kind": it.get("text_kind"),
+            "language": it.get("language"),  # "en": engelskt skrivsätt för tal i valideringen
             "title": it["title"],
             "basis": basis,
         })
@@ -464,11 +465,12 @@ def main(argv: list[str] | None = None, now: datetime | None = None) -> int:
     label = "Vecka" if WEEK_RE.match(args.scope) else "Uppdatering" if UPDATE_RE.match(args.scope) else "Dag"
     print(f"{label} {args.scope}: {len(reports)} rapporter i {batches(reports)} omgångar"
           + (f", omgång {args.omgang}: {len(chosen)}" if args.omgang else ""))
-    print("nr | omgång | ticker | bolag | sektor | nyckeltal | publicerad | text | raw_file | sökväg | rubrik")
+    print("nr | omgång | ticker | bolag | sektor | nyckeltal | publicerad | text | raw_file | sökväg | rubrik | språk")
     for n, r in enumerate(reports, start=1):
         if r in chosen:
             print(f"{n} | {r['batch']} | {r['ticker']} | {r['name']} | {r['sector']} | {', '.join(r['kpis'])} | "
-                  f"{r['published'][:16]} | {r['text_kind']} | {r['raw_file']} | {r['path']} | {r['title']}")
+                  f"{r['published'][:16]} | {r['text_kind']} | {r['raw_file']} | {r['path']} | {r['title']} | "
+                  f"{r.get('language') or '-'}")
     return 0
 
 
