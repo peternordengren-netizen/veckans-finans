@@ -37,27 +37,20 @@ const pbLabels = swing.strategies.pullback?.labels ?? [];
 const columns = [
   { key: "name", label: "Bolag", type: "text" },
   { key: "labels", label: "Etiketter", type: "text" },
-  { key: "ma20", label: "Mot 20 d MA", type: "num" },
-  { key: "ma50", label: "Mot 50 d MA", type: "num" },
+  { key: "ma20", label: "Mot 20 d MA", type: "num", nopb: true },
+  { key: "ma50", label: "Mot 50 d MA", type: "num", nopb: true },
   { key: "rsi2", label: "RSI(2)", type: "num", nopb: true },
   { key: "rsi14", label: "RSI(14)", type: "num", nopb: true },
-  { key: "atr", label: "ATR(14)", type: "num", title: "Genomsnittlig daglig rörelse, i procent av kursen" },
+  { key: "atr", label: "ATR(14)", type: "num", nopb: true, title: "Genomsnittlig daglig rörelse, i procent av kursen" },
   { key: "volume", label: "Omsättning", type: "num", nopb: true, title: "Senaste dagen mot snittet för de 20 dagarna före" },
-  { key: "report", label: "Sedan rapport", type: "num" },
+  { key: "report", label: "Sedan rapport", type: "num", nopb: true },
   { key: "short", label: "Blankning", type: "num", nopb: true, title: "Sammanlagd blankning enligt Finansinspektionen" },
   { key: "support", label: "Närmaste stöd", type: "num", title: "Närmaste stöd under gårdagens stängning och avståndet dit" },
   { key: "resistance", label: "Närmaste motstånd", type: "num", title: "Närmaste motstånd över gårdagens stängning och avståndet dit" },
   // Strategin Pullback i trend: visas bara när strategin är vald i rullistan.
-  { key: "pb-signal", label: "Vändsignal", type: "text", pb: true, title: "Gårdagens candle och nivån rekylen nådde" },
-  { key: "pb-ref", label: "Referens", type: "num", pb: true, title: "Triggernivån (gårdagens high) vid vändsignal, annars gårdagens stängning" },
-  { key: "pb-stop", label: "Stopp", type: "num", pb: true },
-  { key: "pb-risk", label: "Till stopp", type: "num", pb: true, title: "Avstånd från referensnivån till stoppet (1 R), i procent och i ATR(14)" },
-  { key: "pb-top", label: "Föregående topp", type: "num", pb: true, title: "Högsta high de senaste 60 handelsdagarna" },
-  { key: "pb-r2", label: "2R", type: "num", pb: true },
-  { key: "pb-r3", label: "3R", type: "num", pb: true },
-  { key: "pb-srstop", label: "Stopp under stöd", type: "num", pb: true, title: "Närmaste stödets nedre kant minus 0,1 ATR, och R från triggernivån (gårdagens high)" },
-  { key: "pb-resr", label: "Motstånd i R", type: "num", pb: true, title: "Avståndet från triggernivån till närmaste motstånd, i R med stoppet under stödet" },
-  { key: "pb-bb", label: "Bollinger", type: "num", pb: true, title: "Kursens läge mellan Bollingerbanden (%B), övre bandets nivå och avståndet dit i R. ⚠ = vid eller över övre bandet. Sorteras på avståndet i R" },
+  { key: "pb-entry", label: "Ingång", type: "num", pb: true, title: "Vändsignal och nivån rekylen nådde; triggernivån (gårdagens high) vid vändsignal, annars gårdagens stängning som referens. Sorteras på nivån" },
+  { key: "pb-stop", label: "Stopp", type: "num", pb: true, title: "Stoppnivån, avståndet dit (1 R) i procent och ATR(14), och stoppet under närmaste stöd. Sorteras på avståndet i procent" },
+  { key: "pb-target", label: "Mål", type: "num", pb: true, title: "Föregående topp, 2R och 3R, övre Bollingerbandet (⚠ = kursen vid eller över) och närmaste motstånd i R. Sorteras på avståndet till övre bandet i R" },
 ] as const;
 const bbCheck = swing.bollingerCheck;
 ---
@@ -131,7 +124,8 @@ const bbCheck = swing.bollingerCheck;
               <strong>Stöd och motstånd:</strong> en zon under gårdagens stängning är stöd, en zon över är motstånd. Ligger
               stängningen i zonen avgör zonens mitt (medelvärdet av punkterna). En bruten topp blir alltså stöd och en
               bruten botten motstånd. 20 dagars EMA och 50 och 200 dagars MA räknas också, som stöd under kursen och
-              motstånd över.
+              motstånd över, utom när medelvärdet ligger inne i en zon: då täcker zonen redan det prisområdet. Därmed
+              ligger stödet aldrig över motståndet.
             </li>
             <li>
               <strong>Närmaste stöd</strong> är det högsta stödet under kursen (avstånd till dess övre kant),
@@ -139,10 +133,10 @@ const bbCheck = swing.bollingerCheck;
               Ligger stängningen i zonen är avståndet 0.
             </li>
             <li>
-              <strong>Stopp under stöd</strong> (strategikolumnerna): närmaste stödets nedre kant minus
+              <strong>Stopp under stöd</strong> (kolumnen Stopp): närmaste stödets nedre kant minus
               {" "}{num(swing.thresholds.levels.stop_buffer_atr)} ATR. 1 R = triggernivån (gårdagens high) minus det stoppet.
-              <strong> Motstånd i R:</strong> avståndet från triggernivån till närmaste motstånds nedre kant, delat med R;
-              negativt om motståndet ligger under triggernivån.
+              <strong> Motstånd i R</strong> (kolumnen Mål): avståndet från triggernivån till närmaste motstånds nedre kant,
+              delat med det R; negativt om motståndet ligger under triggernivån.
             </li>
           </ul>
         </>
@@ -181,18 +175,19 @@ const bbCheck = swing.bollingerCheck;
               </ul>
             </li>
             <li>
-              <strong>Referens:</strong> triggernivån vid vändsignal, annars gårdagens stängning.
+              <strong>Ingång:</strong> vändsignalen, nivån rekylen nådde och triggernivån vid vändsignal, annars gårdagens
+              stängning som referens.
               <strong> Stopp:</strong> lägsta low under rekylen, alltså sedan den högsta toppen de senaste
-              {" "}{pt.stop_days} handelsdagarna, eller MA-nivån om den ligger lägre.
-              <strong> Till stopp</strong> = 1 R, avståndet från referensen till stoppet i procent och i ATR(14).
-              <strong> 2R och 3R:</strong> referensen plus två respektive tre gånger R.
-              <strong> Föregående topp:</strong> högsta high de senaste {pt.top_days} handelsdagarna.
+              {" "}{pt.stop_days} handelsdagarna, eller MA-nivån om den ligger lägre. Under nivån står avståndet från
+              referensen till stoppet (1 R) i procent och i ATR(14).
+              <strong> Mål:</strong> föregående topp (högsta high de senaste {pt.top_days} handelsdagarna), 2R och 3R
+              (referensen plus två respektive tre gånger R), övre Bollingerbandet och närmaste motstånd i R.
             </li>
             <li>
               <strong>Bollinger:</strong> banden är snittet av de 20 senaste stängningskurserna plus och minus 2
               standardavvikelser. <em>%B</em> är kursens läge mellan banden: (kurs − undre bandet) / (övre − undre), så 0 är
               undre bandet och 1 övre; utanför banden blir det under 0 eller över 1. Avståndet till övre bandet i R är
-              (övre bandet − kursen) / R, med R från kolumnen Till stopp; "över" när kursen ligger ovanför bandet.
+              (övre bandet − kursen) / R, med R från kolumnen Stopp; "över" när kursen ligger ovanför bandet.
               ⚠ markerar en kandidat vid eller över övre bandet. Morgonens värden gäller gårdagens stängning.
               Bollingerkontrollerna 09:20 och 13:20 räknar om banden med dagens kurs (fördröjd ca 15 minuter, faktiska
               kurser) och visar kontrollens tid i cellen.
@@ -270,17 +265,17 @@ const bbCheck = swing.bollingerCheck;
                     ))}
                   </span>
                 </td>
-                <td class:list={["num", r.ma20_pct > 0 ? "pos" : r.ma20_pct < 0 ? "neg" : ""]} data-v={r.ma20_pct}>
+                <td class:list={["num col-nopb", r.ma20_pct > 0 ? "pos" : r.ma20_pct < 0 ? "neg" : ""]} data-v={r.ma20_pct}>
                   {signedPct(r.ma20_pct)}
                 </td>
-                <td class:list={["num", r.ma50_pct > 0 ? "pos" : r.ma50_pct < 0 ? "neg" : ""]} data-v={r.ma50_pct}>
+                <td class:list={["num col-nopb", r.ma50_pct > 0 ? "pos" : r.ma50_pct < 0 ? "neg" : ""]} data-v={r.ma50_pct}>
                   {signedPct(r.ma50_pct)}
                 </td>
                 <td class="num col-nopb" data-v={v(r.rsi2)}>{num(r.rsi2, 0)}</td>
                 <td class="num col-nopb" data-v={v(r.rsi14)}>{num(r.rsi14, 0)}</td>
-                <td class="num" data-v={v(r.atr_pct)}>{r.atr_pct === null ? "–" : `${num(r.atr_pct)} %`}</td>
+                <td class="num col-nopb" data-v={v(r.atr_pct)}>{r.atr_pct === null ? "–" : `${num(r.atr_pct)} %`}</td>
                 <td class="num col-nopb" data-v={v(r.volume_ratio)}>{r.volume_ratio === null ? "–" : `${num(r.volume_ratio)}×`}</td>
-                <td class="num report" data-v={v(r.days_since_report)}>{reportText(r.days_since_report, r.report_verdict)}</td>
+                <td class="num report col-nopb" data-v={v(r.days_since_report)}>{reportText(r.days_since_report, r.report_verdict)}</td>
                 <td class="num col-nopb" data-v={v(r.short_pct)}>{r.short_pct === null ? "–" : `${num(r.short_pct, 2)} %`}</td>
                 {(["support", "resistance"] as const).map((side) => {
                   const l = r.sr?.[side] ?? null;
@@ -294,52 +289,57 @@ const bbCheck = swing.bollingerCheck;
                 })}
                 {(() => {
                   const lv = r.labels.some((l) => pbLabels.includes(l)) ? (r.pullback?.levels ?? null) : null;
+                  const bb = lv ? (r.pullback?.bollinger ?? null) : null;
+                  const srStop = lv && r.sr?.stop != null ? r.sr.stop : null;
                   return (
                     <>
-                      <td class="col-pb wrap" data-v={lv ? `${lv.signal ?? ""} ${lv.level}` : ""}>
-                        {lv ? (lv.signal ? `${signalText(lv.signal)}, vid ${levelText(lv.level)}` : `Vid ${levelText(lv.level)}`) : "–"}
+                      <td class="num col-pb pb" data-v={v(lv?.ref ?? null)}>
+                        {lv ? (
+                          <>
+                            <span class="line">{lv.signal ? signalText(lv.signal) : "Ingen vändsignal"}</span>
+                            <span class="sub">vid {levelText(lv.level)}</span>
+                            <span class="line">{lv.trigger !== null ? "Trigger" : "Referens"} {priceText(lv.ref)}</span>
+                            {lv.trigger === null && <span class="sub">gårdagens stängning</span>}
+                          </>
+                        ) : "–"}
                       </td>
-                      <td class="num col-pb" data-v={v(lv?.ref ?? null)}>
-                        {priceText(lv?.ref)}
-                        {lv && lv.trigger !== null && <span class="sub">trigger</span>}
+                      <td class="num col-pb pb" data-v={v(lv?.risk_pct ?? null)}>
+                        {lv ? (
+                          <>
+                            <span class="line">{priceText(lv.stop)}</span>
+                            <span class="sub">{riskText(lv.risk_pct, lv.risk_atr)}</span>
+                            {srStop !== null && (
+                              <span class="sub">under stöd {priceText(srStop)} (1 R {priceText(r.sr!.trigger - srStop)})</span>
+                            )}
+                          </>
+                        ) : "–"}
                       </td>
-                      <td class="num col-pb" data-v={v(lv?.stop ?? null)}>{priceText(lv?.stop)}</td>
-                      <td class="num col-pb" data-v={v(lv?.risk_pct ?? null)}>
-                        {lv ? riskText(lv.risk_pct, null) : "–"}
-                        {lv && lv.risk_atr !== null && <span class="sub">{riskText(lv.risk_atr, null).replace(" %", " ATR")}</span>}
-                      </td>
-                      <td class="num col-pb" data-v={v(lv?.top ?? null)}>{priceText(lv?.top)}</td>
-                      <td class="num col-pb" data-v={v(lv?.r2 ?? null)}>{priceText(lv?.r2)}</td>
-                      <td class="num col-pb" data-v={v(lv?.r3 ?? null)}>{priceText(lv?.r3)}</td>
-                      <td class="num col-pb" data-v={v(lv && r.sr?.stop != null ? r.sr.stop : null)}>
-                        {lv && r.sr?.stop != null ? priceText(r.sr.stop) : "–"}
-                        {lv && r.sr?.stop != null && (
-                          <span class="sub">1 R = {priceText(r.sr.trigger - r.sr.stop)}</span>
-                        )}
-                      </td>
-                      <td class="num col-pb wrap" data-v={v(lv ? (r.sr?.resistance_r ?? null) : null)}>
-                        {lv ? (r.sr?.resistance ? rText(r.sr.resistance_r) : "inget inom 120 d") : "–"}
-                      </td>
-                      {(() => {
-                        const bb = lv ? (r.pullback?.bollinger ?? null) : null;
-                        return (
-                          <td
-                            class:list={["num col-pb", bb?.at_upper && "bb-warn"]}
-                            data-v={v(bb?.upper_r ?? null)}
-                            title={bb?.at_upper ? "Vid eller över övre Bollingerbandet" : undefined}
-                          >
-                            {bb ? (
-                              <>
+                      <td
+                        class:list={["num col-pb pb", bb?.at_upper && "bb-warn"]}
+                        data-v={v(bb?.upper_r ?? null)}
+                        title={bb?.at_upper ? "Kursen är vid eller över övre Bollingerbandet" : undefined}
+                      >
+                        {lv ? (
+                          <>
+                            <span class="line">Topp {priceText(lv.top)}</span>
+                            <span class="sub">2R {priceText(lv.r2)} · 3R {priceText(lv.r3)}</span>
+                            {bb && (
+                              <span class="line">
                                 {bb.at_upper && <span class="warn-icon" aria-label="Vid eller över övre bandet">⚠ </span>}
-                                {pctBText(bb.pct_b)}
-                                <span class="sub">övre {priceText(bb.upper)}</span>
-                                <span class="sub">{upperRText(bb.upper_r)}</span>
-                                <span class="sub muted">{bollingerSourceText(bb.checked_at)}</span>
-                              </>
-                            ) : "–"}
-                          </td>
-                        );
-                      })()}
+                                Övre band {priceText(bb.upper)}
+                              </span>
+                            )}
+                            {bb && (
+                              <span class="sub">
+                                {upperRText(bb.upper_r)} · {pctBText(bb.pct_b)} · {bollingerSourceText(bb.checked_at)}
+                              </span>
+                            )}
+                            <span class="sub">
+                              Motstånd {r.sr?.resistance ? rText(r.sr.resistance_r) : "inget inom 120 d"}
+                            </span>
+                          </>
+                        ) : "–"}
+                      </td>
                     </>
                   );
                 })()}
@@ -746,6 +746,15 @@ const bbCheck = swing.bollingerCheck;
     white-space: normal;
     min-width: 7rem;
     max-width: 9rem;
+  }
+  /* Strategicellerna Ingång, Stopp och Mål: en rad per uppgift, värdet först. */
+  td.pb {
+    white-space: normal;
+    min-width: 8rem;
+    max-width: 13rem;
+  }
+  td.pb .line {
+    display: block;
   }
   .legend-head {
     margin: 10px 0 2px;

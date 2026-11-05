@@ -493,14 +493,21 @@ motståndet i R stämmer. Kanterna kan överlappa när stängningen ligger i en 
 
 **Test i historiken:** Pullback-fall med en stödzon högst 1 ATR under stängningen och närmaste motstånd minst 2R över
 referensen, mot övriga fall. Strategins egen R och 2R-nivå används. Stödet räknas bara med zoner, eftersom rekylen
-till 20 EMA eller 50 MA annars alltid ger ett stöd nära. Resultatet 24 okt 2025 – 27 okt 2026, utan courtage:
+till 20 EMA eller 50 MA annars alltid ger ett stöd nära. Resultatet 27 okt 2025 – 28 okt 2026, utan courtage, omräknat
+2026-11-05 efter rättningen av medelvärden inne i en zon (se fliken Swing, "Stöd och motstånd"):
 
 | | Avgjorda fall | 2R före stoppet | Snitt per fall |
 |---|---|---|---|
-| Stöd nära och motstånd minst 2R bort | 230 | 30,9 % (± 6,0) | +0,04 R |
-| Övriga | 1 457 | 33,4 % (± 2,4) | −0,00 R |
+| Stöd nära och motstånd minst 2R bort | 237 | 31,2 % (± 5,9) | +0,13 R |
+| Övriga | 1 463 | 33,9 % (± 2,4) | +0,01 R |
 
-Kombinationen klarade sig alltså inte bättre. Skillnaden ligger väl inom osäkerheten.
+Kombinationen nådde alltså inte 2R oftare, och skillnaden ligger väl inom osäkerheten. Snittet per fall är högre,
+men på 237 fall.
+
+Före rättningen (24 okt 2025 – 27 okt 2026) var siffrorna 30,9 % (230 fall, +0,04 R) mot 33,4 % (1 457 fall, −0,00 R).
+Då kunde ett medelvärde inne i en zon räknas som egen nivå, så att stödet hamnade över motståndet (Beijer Alma
+2026-11-05: stöd 303,21 och motstånd 302,49). Valideringen underkänner nu ett stöd vars övre kant ligger över
+motståndets nedre kant.
 
 #### Bollinger under dagen (`scripts/bollinger.py`, `scripts/run_bollinger.ps1`)
 

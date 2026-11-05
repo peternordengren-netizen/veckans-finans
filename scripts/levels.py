@@ -83,6 +83,18 @@ def ma_levels(ema20: float | None, ma50: float | None, ma200: float | None) -> l
     return out
 
 
+def nearest(zone_levels: list[dict], mas: list[dict], close: float) -> tuple[dict | None, dict | None]:
+    """(närmaste stöd, närmaste motstånd) av zonerna och medelvärdena. Ett medelvärde inne i en zon är ingen
+    egen nivå: zonen täcker redan det prisområdet. Annars kunde 20 EMA under stängningen bli stöd inne i en
+    motståndszon som stängningen ligger i (Beijer Alma 2026-11-05: stöd 303,21 över motståndets nedre kant
+    302,49). Därmed ligger stödets övre kant aldrig över motståndets nedre."""
+    lv = zone_levels + [m for m in mas if not any(z["low"] <= m["mid"] <= z["high"] for z in zone_levels)]
+    support, resistance = classify(lv, close)
+    sup = max(support, key=lambda z: (z["high"], z["low"])) if support else None
+    res = min(resistance, key=lambda z: (z["low"], z["high"])) if resistance else None
+    return sup, res
+
+
 def _dist(level: dict, close: float, atr: float, side: str) -> dict:
     edge = level["high"] if side == "support" else level["low"]
     gap = max(0.0, close - edge) if side == "support" else max(0.0, edge - close)
@@ -95,12 +107,8 @@ def summary(h: list[float], lo: list[float], close: float, i: int, atr: float | 
     """Närmaste stöd och motstånd, triggernivå, stopp under stödet och motstånd i R (punkt 4). None utan ATR."""
     if not atr:
         return None
-    lv = zones(pivots(h, lo, i, th["lookback"], th["pivot"]), atr, th["merge_atr"])
-    if not zones_only:
-        lv += ma_levels(ema20, ma50, ma200)
-    support, resistance = classify(lv, close)
-    sup = max(support, key=lambda z: (z["high"], z["low"])) if support else None
-    res = min(resistance, key=lambda z: (z["low"], z["high"])) if resistance else None
+    zs = zones(pivots(h, lo, i, th["lookback"], th["pivot"]), atr, th["merge_atr"])
+    sup, res = nearest(zs, [] if zones_only else ma_levels(ema20, ma50, ma200), close)
     trigger = h[i]
     stop = round(sup["low"] - th["stop_buffer_atr"] * atr, 4) if sup else None
     r = trigger - stop if stop is not None else None

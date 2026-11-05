@@ -60,3 +60,24 @@ def test_bruten_topp_blir_stod_och_sammanfattning():
     _check_sr(s2, "t", r)
     assert any("motståndet i R" in e for e in r.errors)
     assert levels.summary(h, lo, closes[i], i, atr=None, ema20=None, ma50=None, ma200=None) is None
+
+
+def test_medelvarde_inne_i_en_zon_ar_ingen_egen_niva():
+    """Stängningen 305 ligger i en zon vars mitt är över kursen (motstånd). 20 EMA 303,21 under kursen men inne i
+    zonen är ingen egen stödnivå, annars hamnar stödet över motståndets nedre kant (Beijer Alma 2026-11-05)."""
+    zone = {"kind": "zon", "low": 302.49, "high": 307.95, "mid": 305.35, "touches": 4, "bottoms": 0, "tops": 4}
+    below = {"kind": "zon", "low": 290.0, "high": 292.0, "mid": 291.0, "touches": 2, "bottoms": 2, "tops": 0}
+    mas = levels.ma_levels(303.21, 301.42, 280.0)
+    sup, res = levels.nearest([below, zone], mas, close=305.0)
+    assert res["kind"] == "zon" and res["low"] == 302.49
+    assert sup["kind"] == "50 MA" and sup["high"] == 301.42  # 20 EMA inne i zonen räknas inte
+    assert sup["high"] <= res["low"]
+    # Samma sak omvänt: stängningen i en stödzon, 20 EMA över kursen men inne i zonen är inget motstånd.
+    sup2, res2 = levels.nearest([{**zone, "mid": 304.0}], levels.ma_levels(306.0, None, 320.0), close=305.0)
+    assert sup2["kind"] == "zon" and res2["kind"] == "200 MA" and sup2["high"] <= res2["low"]
+    # Valideringen fångar ett stöd över motståndets nedre kant.
+    bad = {"support": {"kind": "20 EMA", "low": 303.21, "high": 303.21, "mid": 303.21}, "resistance": {**zone},
+           "trigger": 306.5, "stop": 302.0, "resistance_r": round((302.49 - 306.5) / (306.5 - 302.0), 2)}
+    r = Result()
+    _check_sr(bad, "t", r)
+    assert any("ligger över motståndet" in e for e in r.errors)

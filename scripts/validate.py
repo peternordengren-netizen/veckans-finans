@@ -962,12 +962,12 @@ def validate_swing(data: dict, instruments: dict[str, Instrument]) -> Result:
 
 
 def _check_sr(sr: dict, where: str, res: Result) -> None:
-    """Stöd och motstånd (scripts/levels.py): stödets mitt under motståndets (kanterna kan överlappa när stängningen
-    ligger i en zon, t.ex. stödzon 74,50–75,15 och 20 EMA 75,00 strax över stängningen), stoppet under stödet, och
-    motståndet i R = (motståndets nedre kant − triggernivå) / (triggernivå − stopp)."""
+    """Stöd och motstånd (scripts/levels.py): stödets övre kant (som visas) högst motståndets nedre kant (ett
+    medelvärde inne i en zon räknas inte som egen nivå), stoppet under stödet, och motståndet i R =
+    (motståndets nedre kant − triggernivå) / (triggernivå − stopp)."""
     sup, rst = sr["support"], sr["resistance"]
-    if sup and rst and sup["mid"] > rst["mid"] + 1e-9:
-        res.errors.append(f"{where}: stödet (mitt {sup['mid']}) ligger över motståndet (mitt {rst['mid']})")
+    if sup and rst and sup["high"] > rst["low"] + 1e-9:
+        res.errors.append(f"{where}: stödet {sup['high']} ({sup['kind']}) ligger över motståndet {rst['low']} ({rst['kind']})")
     if sup and (sr["stop"] is None or sr["stop"] >= sup["low"]):
         res.errors.append(f"{where}: stoppet {sr['stop']} ligger inte under stödet {sup['low']}")
     if rst and sr["stop"] is not None and sr["trigger"] > sr["stop"]:
