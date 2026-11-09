@@ -53,7 +53,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from prices import INDEX_NAME, INDEX_TICKER  # noqa: E402
 from retry import with_retries  # noqa: E402
 from signals import Bar, BarFetcher, yahoo_bars  # noqa: E402
-from validate import DATA_DIR, Instrument, iso_week_period, load_instruments, validate_valuation  # noqa: E402
+from validate import DATA_DIR, Instrument, iso_week_period, listed, load_instruments, validate_valuation  # noqa: E402
 
 STOCKHOLM = ZoneInfo("Europe/Stockholm")
 CORPORATE_ACTIONS = DATA_DIR / "corporate_actions.json"
@@ -245,6 +245,7 @@ def build(week: str, instruments: dict[str, Instrument], fetch_bars: BarFetcher,
           known: dict[str, list[dict]] | None = None, listings: dict[str, str] | None = None) -> dict:
     _, end = iso_week_period(week)
     asof = min(end, now.date())
+    instruments = listed(instruments, asof)  # avnoterade bolag hoppas över (instruments.csv)
     year_start = date(asof.year, 1, 1)
     actions = load_actions() if actions is None else actions
     known = load_known() if known is None else known

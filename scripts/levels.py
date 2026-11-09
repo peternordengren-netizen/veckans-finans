@@ -18,9 +18,11 @@ Allt gäller den senaste handelsdagen i serien (dag i, "gårdagen" i morgonens f
    annars motstånd.
 4. Per bolag (summary): närmaste stöd (högsta övre kant under stängningen; en zon som stängningen ligger i har
    avståndet 0) och närmaste motstånd (lägsta nedre kant över), med avstånd i procent och i ATR. Triggernivå =
-   dag i:s high. Stopp under stödet = stödets nedre kant − STOP_BUFFER_ATR × ATR. R = triggernivå − stopp.
-   Motstånd i R = (motståndets nedre kant − triggernivå) / R. Ligger stängningen inne i motståndszonen
-   ("inside") räknas i stället till zonens övre kant: kursen är redan i zonen, och det är där den tar slut.
+   dag i:s high. Stopp under stödet = stödets nedre kant − STOP_BUFFER_ATR × ATR: en alternativ stoppnivå, som
+   sidan visar i procent. Något eget R räknas inte här: fliken Swing har ett enda R, strategins (referens minus
+   strategins stopp, scripts/pullback.py), och motståndet i R räknas med det (scripts/ranking.py, room_r).
+   Ligger stängningen inne i motståndszonen ("inside") räknas motståndet till zonens övre kant
+   (resistance_edge): kursen är redan i zonen, och det är där den tar slut.
 """
 
 from __future__ import annotations
@@ -107,24 +109,22 @@ def _dist(level: dict, close: float, atr: float, side: str) -> dict:
 
 def summary(h: list[float], lo: list[float], close: float, i: int, atr: float | None, ema20: float | None,
             ma50: float | None, ma200: float | None, th: dict = THRESHOLDS, zones_only: bool = False) -> dict | None:
-    """Närmaste stöd och motstånd, triggernivå, stopp under stödet och motstånd i R (punkt 4). None utan ATR."""
+    """Närmaste stöd och motstånd, triggernivå och stopp under stödet (punkt 4). None utan ATR."""
     if not atr:
         return None
     zs = zones(pivots(h, lo, i, th["lookback"], th["pivot"]), atr, th["merge_atr"])
     sup, res = nearest(zs, [] if zones_only else ma_levels(ema20, ma50, ma200), close)
     trigger = h[i]
     stop = round(sup["low"] - th["stop_buffer_atr"] * atr, 4) if sup else None
-    r = trigger - stop if stop is not None else None
-    resistance = _dist(res, close, atr, "resistance") if res else None
     return {
         "support": _dist(sup, close, atr, "support") if sup else None,
-        "resistance": resistance,
+        "resistance": _dist(res, close, atr, "resistance") if res else None,
         "trigger": round(trigger, 4),
         "stop": stop,
-        "resistance_r": round((resistance_edge(resistance) - trigger) / r, 2) if res and r and r > 0 else None,
     }
 
 
 def resistance_edge(res: dict) -> float:
-    """Kanten som motståndet i R räknas till: övre kanten när stängningen ligger inne i zonen, annars nedre."""
+    """Kanten som motståndet i R räknas till (ranking.measures): övre kanten när stängningen ligger inne i zonen,
+    annars nedre."""
     return res["high"] if res.get("inside") else res["low"]

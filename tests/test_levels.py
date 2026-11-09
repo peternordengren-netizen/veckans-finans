@@ -47,17 +47,19 @@ def test_bruten_topp_blir_stod_och_sammanfattning():
     sup = s["support"]
     assert sup["kind"] == "zon" and sup["high"] == 110.5 and sup["tops"] == 1  # bruten topp = stöd
     assert sup["dist_pct"] == round((119 - 110.5) / 119 * 100, 2) and sup["dist_atr"] == 8.5
-    assert s["resistance"] is None and s["resistance_r"] is None  # inget motstånd inom 120 dagar
+    assert s["resistance"] is None  # inget motstånd inom 120 dagar
     assert s["trigger"] == 119.5 and s["stop"] == round(sup["low"] - 0.1, 4)
-    # Med 20 EMA över kursen blir den motstånd; motståndet i R räknas från triggernivån.
+    # Med 20 EMA över kursen blir den motstånd. Något eget R räknas inte (fliken har ett enda R, strategins).
     s2 = levels.summary(h, lo, closes[i], i, atr=1.0, ema20=125.0, ma50=112.0, ma200=None)
     assert s2["resistance"]["kind"] == "20 EMA" and s2["support"]["kind"] == "50 MA"
-    assert s2["resistance_r"] == round((125.0 - 119.5) / (119.5 - (112.0 - 0.1)), 2)
+    assert "resistance_r" not in s2
     r = Result()
     _check_sr(s2, "t", r)
     assert r.errors == []
-    s2["resistance_r"] = 9.9
-    _check_sr(s2, "t", r)
+    # Äldre filer har ett eget motstånd i R; det kontrolleras där det finns.
+    _check_sr({**s2, "resistance_r": round((125.0 - 119.5) / (119.5 - (112.0 - 0.1)), 2)}, "t", r)
+    assert r.errors == []
+    _check_sr({**s2, "resistance_r": 9.9}, "t", r)
     assert any("motståndet i R" in e for e in r.errors)
     assert levels.summary(h, lo, closes[i], i, atr=None, ema20=None, ma50=None, ma200=None) is None
 

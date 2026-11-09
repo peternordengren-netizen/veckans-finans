@@ -8,8 +8,8 @@ import type { SwingView } from "../lib/data";
 import { shortDate } from "../lib/format";
 import { signedPct } from "../lib/signals";
 import {
-  MIN_CASES, decidedShareText, labelClass, labelCounts, levelText, netText, priceText, reportText, riskText, shareText,
-  bollingerSourceText, chipText, pctBText, rText, signalText, rankText, rankTitle, srDistText, srInsideText, srKindText, srLevelText, upperRText, vsBaseText,
+  MIN_CASES, altStopText, decidedShareText, labelClass, labelCounts, levelText, missingText, netText, priceText,
+  reportText, resistanceRText, riskText, shareText, bollingerSourceText, chipText, pctBText, signalText, rankText, rankTitle, srDistText, srInsideText, srKindText, srLevelText, upperRText, vsBaseText,
 } from "../lib/swing";
 
 interface Props {
@@ -50,8 +50,8 @@ const columns = [
   // Strategin Pullback i trend: visas bara när strategin är vald i rullistan.
   { key: "pb-rank", label: "Rang", type: "num", pb: true, title: "Flest uppfyllda kriterier först (1–5 för de fem med flest, med antalet kriterier); vid lika antal mest utrymme till motståndet i R. Ingen värdering eller rekommendation" },
   { key: "pb-entry", label: "Ingång", type: "num", pb: true, title: "Vändsignal och nivån rekylen nådde; triggernivån (gårdagens high) vid vändsignal, annars gårdagens stängning som referens. Sorteras på nivån" },
-  { key: "pb-stop", label: "Stopp", type: "num", pb: true, title: "Stoppnivån, avståndet dit (1 R) i procent och ATR(14), och stoppet under närmaste stöd. Sorteras på avståndet i procent" },
-  { key: "pb-target", label: "Mål", type: "num", pb: true, title: "Föregående topp, 2R och 3R, övre Bollingerbandet (⚠ = kursen vid eller över) och närmaste motstånd i R. Sorteras på avståndet till övre bandet i R" },
+  { key: "pb-stop", label: "Stopp", type: "num", pb: true, title: "Stoppnivån och avståndet dit (1 R) i procent och ATR(14); stoppet under närmaste stöd som alternativ stoppnivå i procent. Sorteras på avståndet i procent" },
+  { key: "pb-target", label: "Mål", type: "num", pb: true, title: "Föregående topp, 2R och 3R, övre Bollingerbandet (⚠ = kursen vid eller över) och närmaste motstånd i R (samma R som stoppet). Sorteras på avståndet till övre bandet i R" },
 ] as const;
 const bbCheck = swing.bollingerCheck;
 const rankTop = t.ranking?.top ?? 5;
@@ -136,11 +136,9 @@ const rankHist = pbHist?.ranking ?? null;
               Ligger stängningen inne i zonen står "inne i stödzon" eller "inne i motståndszon" med zonens kanter.
             </li>
             <li>
-              <strong>Stopp under stöd</strong> (kolumnen Stopp): närmaste stödets nedre kant minus
-              {" "}{num(swing.thresholds.levels.stop_buffer_atr)} ATR. 1 R = triggernivån (gårdagens high) minus det stoppet.
-              <strong> Motstånd i R</strong> (kolumnen Mål): avståndet från triggernivån till närmaste motstånds nedre kant,
-              delat med det R; negativt om motståndet ligger under triggernivån. Ligger kursen inne i motståndszonen räknas
-              avståndet till zonens övre kant, där zonen tar slut.
+              <strong>Alternativt stopp under stöd</strong> (kolumnen Stopp): närmaste stödets nedre kant minus
+              {" "}{num(swing.thresholds.levels.stop_buffer_atr)} ATR, med avståndet från referensen i procent. Det är bara
+              en jämförelse med strategins stopp och har inget eget R.
             </li>
           </ul>
         </>
@@ -186,6 +184,13 @@ const rankHist = pbHist?.ranking ?? null;
               referensen till stoppet (1 R) i procent och i ATR(14).
               <strong> Mål:</strong> föregående topp (högsta high de senaste {pt.top_days} handelsdagarna), 2R och 3R
               (referensen plus två respektive tre gånger R), övre Bollingerbandet och närmaste motstånd i R.
+            </li>
+            <li>
+              <strong>Ett enda R:</strong> R är alltid referensen (triggernivån vid vändsignal) minus strategins stopp, i
+              stoppet, 2R och 3R, Bollingerbandet, motståndet och rangkriterierna.
+              <strong> Motstånd i R</strong> (kolumnen Mål) är (närmaste motstånds nedre kant − referensen) / R, samma
+              mått som rangkriteriet; negativt om motståndet ligger under referensen. Ligger kursen inne i motståndszonen
+              räknas till zonens övre kant, där zonen tar slut.
             </li>
             {
               Object.keys(swing.rankingCriteria).length > 0 && t.ranking && (
@@ -265,6 +270,36 @@ const rankHist = pbHist?.ranking ?? null;
       Bollinger: {bbCheck ? `senaste kontrollen ${bollingerSourceText(bbCheck.checked_at)}. ${bbCheck.delay_note}` : "gårdagens stängning (ingen kontroll i dag än)."}
     </span>
   </div>
+
+  {
+    (swing.missing.length > 0 || swing.delisted.length > 0) && (
+      <p class="missing-note">
+        {swing.missing.length > 0 && (
+          <>
+            Saknas i tabellen:{" "}
+            {swing.missing.map((m, i) => (
+              <>
+                {i > 0 && "; "}
+                {m.name} ({m.ticker}): {missingText(m)}
+              </>
+            ))}.{" "}
+          </>
+        )}
+        {swing.delisted.length > 0 && (
+          <>
+            Avnoterade, räknas inte:{" "}
+            {swing.delisted.map((d, i) => (
+              <>
+                {i > 0 && "; "}
+                {d.name} ({d.ticker}), sista handelsdag {shortDate(d.last_day)}{" "}
+                <a href={d.source} rel="noopener">källa</a>
+              </>
+            ))}.
+          </>
+        )}
+      </p>
+    )
+  }
 
   <div class="table-outer" data-table-outer>
     <div class="table-wrap" data-table-wrap>
@@ -361,9 +396,7 @@ const rankHist = pbHist?.ranking ?? null;
                           <>
                             <span class="line">{priceText(lv.stop)}</span>
                             <span class="sub">{riskText(lv.risk_pct, lv.risk_atr)}</span>
-                            {srStop !== null && (
-                              <span class="sub">under stöd {priceText(srStop)} (1 R {priceText(r.sr!.trigger - srStop)})</span>
-                            )}
+                            {altStopText(lv.ref, srStop) && <span class="sub">{altStopText(lv.ref, srStop)}</span>}
                           </>
                         ) : "–"}
                       </td>
@@ -388,7 +421,7 @@ const rankHist = pbHist?.ranking ?? null;
                               </span>
                             )}
                             <span class="sub">
-                              Motstånd {r.sr?.resistance ? rText(r.sr.resistance_r) : "inget inom 120 d"}
+                              Motstånd {resistanceRText(rk?.measures)}
                               {r.sr?.resistance?.inside && " (till zonens övre kant)"}
                             </span>
                           </>
@@ -792,6 +825,12 @@ const rankHist = pbHist?.ranking ?? null;
     background: var(--banner-bg);
     color: var(--banner-fg);
     border: 1px solid var(--banner-border);
+  }
+  /* Bolag utan rad i tabellen (Yahoo saknar kursdata, för kort historik, avnoterade). */
+  .missing-note {
+    font-size: 0.85rem;
+    color: var(--muted);
+    margin: 0 0 8px;
   }
   .bb-note {
     display: none;

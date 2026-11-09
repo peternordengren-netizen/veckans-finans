@@ -49,7 +49,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from prices import INDEX_NAME, INDEX_TICKER  # noqa: E402
 from retry import retry_missing  # noqa: E402
-from validate import DATA_DIR, Instrument, iso_week_period, load_instruments, validate_signals  # noqa: E402
+from validate import DATA_DIR, Instrument, iso_week_period, listed, load_instruments, validate_signals  # noqa: E402
 
 STOCKHOLM = ZoneInfo("Europe/Stockholm")
 THRESHOLDS = {"volume_ratio": 2.0, "near_52w_pct": 2.0, "short_aggregate_pp": 0.5, "big_move_pp": 5.0,
@@ -216,6 +216,7 @@ def build(week: str, instruments: dict[str, Instrument], week_data: dict | None,
           fetch: BarFetcher, today: date, now: datetime, valuation: dict | None = None) -> dict:
     start, end = iso_week_period(week)
     end = min(end, today)
+    instruments = listed(instruments, start)  # avnoterade före veckan hoppas över (instruments.csv)
     tickers = [i.yahoo_ticker for i in instruments.values()]
     bars = fetch([*tickers, INDEX_TICKER], start - timedelta(days=HISTORY_DAYS), end)
     index_change = week_change(bars.get(INDEX_TICKER, []), start, end)

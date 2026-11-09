@@ -105,8 +105,12 @@ via Cision), kan läggas in för hand med `scripts/add_raw_item.py`:
     inte.
 - [`schema/prices.schema.json`](schema/prices.schema.json): kursförändring per `yahoo_ticker`. Sidan fungerar utan filen.
 - [`data/instruments.csv`](data/instruments.csv): `namn,alias,ticker,yahoo_ticker,börs,sektor,isin,mfn_slug`, plus de
-  valfria kolumnerna `typ`, `placera_tagg`, `afv_aktie` och `cision_slug`. `cision_slug` är bolagets eget nyhetsrum
+  valfria kolumnerna `typ`, `placera_tagg`, `afv_aktie`, `cision_slug`, `avnoterad` och `avnoterad_kalla`. `cision_slug` är bolagets eget nyhetsrum
   hos Cision (`news.cision.com/<slug>`) och hämtas som ett eget flöde.
+  Avnoterade bolag har `avnoterad` (sista handelsdag, ÅÅÅÅ-MM-DD) och `avnoterad_kalla` (https-adress till källan),
+  båda eller ingen. Bolaget ligger kvar i listan, så att äldre data om det matchar och validerar, men hoppas över i
+  kurs- och swingberäkningarna (morgonrapportens kurser, kurssignaler, Kurs mot vinst, Bollingerkontrollen, Swing och
+  dess historik) efter sista handelsdagen. I dag: Humana (sista handelsdag 2026-10-27, Ambeas uppköp).
   `isin` innehåller alla bolagets aktieslag, åtskilda med `|`. Värdena kommer från samma Nasdaq-hämtning (2026-10-05)
   och används för att koppla FI:s blankningsregister och insynsregister till listan. Flera alias
   separeras med `|`. Underhålls manuellt. `sektor` är ett id ur `sectors.json` och kan vara tom. Den styr var en
@@ -459,6 +463,10 @@ dagsdata, utan extra hämtning, och skrivs till `data/swing/<datum>.json`, som �
 
 Tabellen kan sorteras och filtreras per etikett och har fast rubrikrad.
 
+Bolag utan rad i tabellen står i en rad ovanför den, i stället för att bara saknas: "Yahoo saknar kursdata"
+(`missing`, `no_data`), för kort kurshistorik med antalet handelsdagar (`short_history`), och avnoterade bolag med sista
+handelsdag och länk till källan (`delisted`, ur `instruments.csv`).
+
 **Historiken** under tabellen kommer från `scripts/swing_history.py` (`data/swing/history.json`). Den räknas med samma
 mått och etiketter på det senaste årets dagsdata, ett batchanrop till Yahoo, och visar hur ofta aktien gått bättre än
 index efter 2 och 5 handelsdagar, med antal fall och jämfört med alla aktie-dagar.
@@ -484,17 +492,22 @@ som övriga mått.
 4. **Per bolag:** närmaste stöd (avstånd till dess övre kant) och motstånd (till dess nedre kant), i procent och i
    ATR.
 5. **I strategikolumnerna för Pullback i trend:**
-   - Stopp under stöd: stödets nedre kant minus 0,1 ATR.
-   - 1 R: triggernivån (gårdagens high) minus det stoppet.
-   - Motstånd i R: avståndet från triggernivån till motståndets nedre kant, delat med R. Ligger stängningen inne i
-     motståndszonen räknas det i stället till zonens övre kant, där zonen tar slut.
+   - Fliken har ett enda R, strategins: referensen (triggernivån vid vändsignal, annars gårdagens stängning) minus
+     strategins stopp. Stoppet, 2R, 3R, Bollingerbandet, motståndet och rangkriterierna räknas med det.
+   - Alternativt stopp under stöd: stödets nedre kant minus 0,1 ATR, visat med avståndet från referensen i procent
+     ("alt. stopp under stöd 97,35 (0,8 %)"). Det har inget eget R.
+   - Motstånd i R: (motståndets nedre kant − referensen) / R, samma mått som rangkriteriet (`room_r`). Ligger
+     stängningen inne i motståndszonen räknas det i stället till zonens övre kant, där zonen tar slut.
+   - Före 2026-11-09 räknades motståndet i R på kolumnen med stoppet under stödet (triggernivån minus det stoppet),
+     så att sidan kunde visa "Motstånd 3,2 R" medan rangkriteriet hade 1,4 R. Äldre swingfiler har kvar det
+     måttet (`sr.resistance_r`); det kontrolleras där det finns men visas inte.
    - Ligger stängningen inne i en zon (`inside` i filen) står "inne i motståndszon X–Y" eller "inne i stödzon X–Y"
      i stället för bara zonens kant.
 
 Valideringen kontrollerar:
 - att stödets övre kant inte ligger över motståndets nedre kant
 - att stoppet ligger under stödet
-- att motståndet i R stämmer, till rätt kant
+- att motståndet i R stämmer, till rätt kant (rangordningens `room_r`; i äldre filer också `sr.resistance_r`)
 - att "inne i zonen" bara gäller zoner med avståndet 0
 
 Ett medelvärde inne i en zon räknas inte som egen nivå.

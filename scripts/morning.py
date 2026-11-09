@@ -53,7 +53,7 @@ import report_calendar  # noqa: E402
 from registers import _aggregate_by_ticker, insyn_summary, snapshot_at  # noqa: E402
 from signals import THRESHOLDS, BarFetcher, data_day, price_stats, week_change, yahoo_bars  # noqa: E402
 from prices import INDEX_TICKER  # noqa: E402
-from validate import DATA_DIR, RAW_DIR, Instrument, load_instruments, validate_morning  # noqa: E402
+from validate import DATA_DIR, RAW_DIR, Instrument, listed, load_instruments, validate_morning  # noqa: E402
 from workdays import non_business_days  # noqa: E402
 
 STOCKHOLM = ZoneInfo("Europe/Stockholm")
@@ -256,9 +256,10 @@ def yesterday_prices(instruments: dict[str, Instrument], today: date, fetch: Bar
     """Bolag med kurssignal den senaste handelsdagen som dagsdatan faktiskt täcker (signals.data_day: minst 90 %
     av bolagen har en kursrad den dagen). "day" är alltså datans datum, aldrig ett antaget; "expected_day" är
     förra handelsdagen och "coverage" hur många bolag som har en rad för day respektive expected_day."""
+    expected = previous_business_day(today)
+    instruments = listed(instruments, expected)  # avnoterade bolag hoppas över (instruments.csv)
     tickers = [i.yahoo_ticker for i in instruments.values()]
     bars = fetch([*tickers, INDEX_TICKER], today - timedelta(days=400), today - timedelta(days=1))
-    expected = previous_business_day(today)
     day, with_day, of = data_day(bars, tickers, today)
     with_expected = sum(1 for t in tickers if any(b.day == expected for b in bars.get(t, [])))
     coverage = {"with_day": with_day, "with_expected": with_expected, "of": of}
@@ -510,7 +511,7 @@ def write_swing(today: date, now: datetime, instruments: dict[str, Instrument], 
     import swing
 
     try:
-        tickers = [i.yahoo_ticker for i in instruments.values()]
+        tickers = [i.yahoo_ticker for i in swing.priced(instruments, today).values()]
         bars = fetch([*tickers, INDEX_TICKER], today - timedelta(days=swing.HISTORY_DAYS), today - timedelta(days=1))
         data = swing.build(today, now, instruments, bars, swing.latest_reports(today), swing.short_levels(today, instruments))
         out = swing.write(data, instruments)

@@ -4,7 +4,7 @@ import { test } from "node:test";
 
 import {
   decidedShareText, isPullbackLabel, labelClass, labelCounts, levelText, netText, priceText, reportText, riskText, shareText,
-  bollingerSourceText, chipText, pctBText, rankText, rankTitle, rText, signalText, srDistText, srInsideText, srLevelText, upperRText, vsBaseText,
+  altStopText, missingText, resistanceRText, bollingerSourceText, chipText, pctBText, rankText, rankTitle, rText, signalText, srDistText, srInsideText, srLevelText, upperRText, vsBaseText,
 } from "../src/lib/swing.ts";
 
 test("etiketternas klasser och antal", () => {
@@ -68,6 +68,20 @@ test("stöd och motstånd: texter", () => {
   assert.equal(srDistText(0, 0, "support"), "0,0 % · 0,0 ATR"); // stängningen i zonen
   assert.equal(rText(2.44), "2,4 R");
   assert.equal(rText(null), "–");
+});
+
+test("ett enda R: motståndet i strategins R och alternativt stopp i procent", () => {
+  assert.equal(resistanceRText({ room_r: 1.39, has_resistance: true }), "1,4 R"); // samma som rangkriteriet
+  assert.equal(resistanceRText({ room_r: -0.53, has_resistance: true }), "−0,5 R");
+  assert.equal(resistanceRText({ room_r: null, has_resistance: false }), "inget inom 120 d");
+  assert.equal(resistanceRText(undefined), "–"); // äldre filer utan mätvärden
+  assert.equal(altStopText(98.1, 97.35), "alt. stopp under stöd 97,35 (0,8 %)");
+  assert.equal(altStopText(98.1, null), null);
+});
+
+test("bolag som saknas i Swing", () => {
+  assert.equal(missingText({ reason: "no_data", bars: 0 }), "Yahoo saknar kursdata");
+  assert.equal(missingText({ reason: "short_history", bars: 40 }), "för kort kurshistorik (40 handelsdagar)");
 });
 
 test("golden och death cross: dagar sedan korsningen", () => {

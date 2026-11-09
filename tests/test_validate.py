@@ -1,6 +1,7 @@
 """Tester för scripts/validate.py – utgår från mockveckan och bryter den på ett ställe i taget."""
 
 import copy
+from datetime import date
 import json
 import sys
 from decimal import Decimal
@@ -344,6 +345,23 @@ def test_mfn_slug_lases_och_ar_valfri(tmp_path):
 def test_csv_utan_mfn_slug_kolumn_fungerar(tmp_path):
     p = write_csv(tmp_path, "Fjällhem,,FJLH B,FJLH-B.MOCK,Exempelbörsen", head=CSV_HEAD)
     assert validate.load_instruments(p)["FJLH B"].mfn_slug is None
+
+
+def test_avnoterad_med_datum_och_kalla(tmp_path):
+    """avnoterad (sista handelsdag) och avnoterad_kalla läses; listed hoppar över bolaget efter dagen."""
+    head = CSV_HEAD + ",avnoterad,avnoterad_kalla"
+    p = write_csv(tmp_path, "Fjällhem,,FJLH B,FJLH-B.MOCK,Exempelbörsen,2026-10-27,https://exempel.test/fjallhem-avnoteras",
+                  "Albion,,ALBN,ALBN.MOCK,Exempelbörsen,,", head=head)
+    inst = validate.load_instruments(p)
+    assert inst["FJLH B"].avnoterad == date(2026, 10, 27)
+    assert inst["FJLH B"].avnoterad_kalla == "https://exempel.test/fjallhem-avnoteras"
+    assert inst["ALBN"].avnoterad is None and inst["ALBN"].avnoterad_kalla is None
+    assert set(validate.listed(inst, date(2026, 10, 27))) == {"FJLH B", "ALBN"}  # sista handelsdagen räknas
+    assert set(validate.listed(inst, date(2026, 10, 28))) == {"ALBN"}
+    for row, msg in [("2026-10-27,", "anges tillsammans"), (",https://exempel.test/x", "anges tillsammans"),
+                     ("27/10/2026,https://exempel.test/x", "ogiltigt datum"), ("2026-10-27,exempel.test/x", "https-adress")]:
+        with pytest.raises(ValueError, match=msg):
+            validate.load_instruments(write_csv(tmp_path, f"Fjällhem,,FJLH B,FJLH-B.MOCK,Exempelbörsen,{row}", head=head))
 
 
 @pytest.mark.parametrize("slug", ["Fjallhem", "fjällhem", "fjallhem_fastigheter", "-fjallhem", "fjallhem--ab", "mfn.se/a/fjallhem"])

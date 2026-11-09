@@ -348,3 +348,51 @@ def test_swing_galler_dagsdatans_datum_inte_enstaka_bolags():
     assert data["coverage"] == {"with_day": 2, "with_expected": 1, "of": 2}
     assert {c["day"] for c in data["companies"]} == {alfa[-2].day.isoformat()}  # Alfaverken utan sista dagen
     assert validate_swing(data, INSTRUMENTS).errors == []
+
+def test_bolag_utan_kurser_och_avnoterade_visas_i_filen():
+    """Ett noterat bolag utan kurser står i "missing" (Yahoo saknar kursdata), ett med för kort historik med antalet
+    dagar, och ett avnoterat (instruments.csv) i "delisted" med sista handelsdag och källa; det hämtas inte och
+    räknas inte."""
+    alfa = make_bars([100.0 + i * 0.5 for i in range(70)])
+    last = alfa[-1].day
+    today = last + timedelta(days=1 if last.weekday() < 4 else 3)
+    src = "https://exempel.test/gammabolaget-avnoteras"
+    instruments = {
+        **INSTRUMENTS,
+        "GAMMA": Instrument("Gammabolaget", (), "GAMMA", "GAMMA.ST", "Stockholm", avnoterad=last - timedelta(days=10),
+                            avnoterad_kalla=src),
+        "DELTA": Instrument("Deltaverken", (), "DELTA", "DELTA.ST", "Stockholm"),
+    }
+    assert set(swing.priced(instruments, today)) == {"ALFA", "BETA", "DELTA"}
+    bars = {"ALFA.ST": alfa, "BETA.ST": make_bars([100.0] * 20, end=last),
+            "GAMMA.ST": make_bars([100.0] * 70, end=last - timedelta(days=10))}
+    data = swing.build(today, datetime.now(TZ), instruments, bars, {}, (None, {}))
+    assert [c["ticker"] for c in data["companies"]] == ["ALFA"]
+    assert data["missing"] == [{"ticker": "BETA", "name": "Betabolaget", "reason": "short_history", "bars": 20},
+                               {"ticker": "DELTA", "name": "Deltaverken", "reason": "no_data", "bars": 0}]
+    assert data["delisted"] == [{"ticker": "GAMMA", "name": "Gammabolaget",
+                                 "last_day": (last - timedelta(days=10)).isoformat(), "source": src}]
+    assert data["coverage"]["of"] == 2  # bolag med kurser; det avnoterade hämtas inte
+    assert validate_swing(data, instruments).errors == []
+    # Valideringen: ett bolag både i tabellen och bland de saknade, och fel sista handelsdag.
+    bad = {**data, "missing": [*data["missing"], {"ticker": "ALFA", "name": "Alfaverken", "reason": "no_data", "bars": 0}]}
+    assert any("både i tabellen" in e for e in validate_swing(bad, instruments).errors)
+    bad = {**data, "delisted": [{**data["delisted"][0], "last_day": last.isoformat()}]}
+    assert any("stämmer inte med instruments.csv" in e for e in validate_swing(bad, instruments).errors)
+
+
+def test_ett_enda_r_motstandet_i_strategins_r():
+    """Swingfilen har inget eget R för stöd och motstånd (sr): motståndet i R finns bara som rangordningens room_r,
+    räknat på strategins R (referens minus strategins stopp)."""
+    bars = make_ohlc_trend_with_pullback()
+    last = bars[-1].day
+    data = swing.build(last + timedelta(days=1), datetime.now(TZ), INSTRUMENTS, {"ALFA.ST": bars}, {}, (None, {}))
+    a = data["companies"][0]
+    assert "resistance_r" not in a["sr"]
+    lv, m = a["pullback"]["levels"], a["pullback"]["rank"]["measures"]
+    rst = a["sr"]["resistance"]
+    if rst:
+        import levels
+        assert m["room_r"] == round((levels.resistance_edge(rst) - lv["ref"]) / (lv["ref"] - lv["stop"]), 2)
+    else:
+        assert m["room_r"] is None and not m["has_resistance"]

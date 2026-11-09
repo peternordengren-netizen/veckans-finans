@@ -39,7 +39,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from morning import is_business_day  # noqa: E402
 from signals import BarFetcher, yahoo_bars  # noqa: E402
-from validate import DATA_DIR, Instrument, load_instruments  # noqa: E402
+from validate import DATA_DIR, Instrument, listed, load_instruments  # noqa: E402
 
 STOCKHOLM = ZoneInfo("Europe/Stockholm")
 BOLLINGER_DIR = DATA_DIR / "bollinger"
@@ -119,7 +119,8 @@ def status(price: float, upper: float, near_pct: float = NEAR_PCT) -> str | None
 
 def check(today: date, now: datetime, instruments: dict[str, Instrument], fetch: BarFetcher,
           swing: dict | None = None) -> dict:
-    tickers = {i.yahoo_ticker: t for t, i in instruments.items()}
+    # Avnoterade bolag hoppas över (instruments.csv).
+    tickers = {i.yahoo_ticker: t for t, i in listed(instruments, today).items()}
     bars = fetch(list(tickers), today - timedelta(days=FETCH_DAYS), today)
     over, near, missing = [], [], []
     today_bands: dict[str, tuple[float, float, float]] = {}  # ticker -> (kurs, undre, övre)

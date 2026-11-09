@@ -271,6 +271,11 @@ class Instrument:
     # Bolagets eget nyhetsrum hos Cision, news.cision.com/<slug> (valfri): för bolag som inte syns i Cisions svenska
     # lista. fetch.py hämtar då news.cision.com/<slug>/ListItems?format=rss (sidans egen RSS-ikon).
     cision_slug: str | None = None
+    # Avnoterat bolag (valfritt): sista handelsdagen och källan (en URL). Bolaget finns kvar i listan, så att äldre
+    # data om det fortfarande matchar och validerar, men hoppas över i kurs- och swingberäkningar efter dagen
+    # (listed nedan).
+    avnoterad: date | None = None
+    avnoterad_kalla: str | None = None
 
     def analyst_links(self) -> dict:
         """Länkarna för kolumnen "Analytiker" i kursreaktionen."""
@@ -307,6 +312,16 @@ def load_instruments(
             typ = (row.get("typ") or "").strip() or None
             links = {k: (row.get(k) or "").strip() or None for k in ("placera_tagg", "afv_aktie")}
             cision_slug = (row.get("cision_slug") or "").strip() or None
+            delisted_text = (row.get("avnoterad") or "").strip()
+            delisted_source = (row.get("avnoterad_kalla") or "").strip() or None
+            try:
+                delisted = date.fromisoformat(delisted_text) if delisted_text else None
+            except ValueError:
+                raise ValueError(f"{path.name} rad {line}: ogiltigt datum i avnoterad {delisted_text!r} (ÅÅÅÅ-MM-DD)") from None
+            if (delisted is None) != (delisted_source is None):
+                raise ValueError(f"{path.name} rad {line}: avnoterad och avnoterad_kalla anges tillsammans")
+            if delisted_source is not None and not delisted_source.startswith("https://"):
+                raise ValueError(f"{path.name} rad {line}: avnoterad_kalla ska vara en https-adress, inte {delisted_source!r}")
             if cision_slug is not None:
                 if not CISION_SLUG_RE.match(cision_slug):
                     raise ValueError(f"{path.name} rad {line}: ogiltig cision_slug {cision_slug!r} (gemener, siffror och bindestreck)")
@@ -336,6 +351,8 @@ def load_instruments(
                 typ=typ,
                 **links,
                 cision_slug=cision_slug,
+                avnoterad=delisted,
+                avnoterad_kalla=delisted_source,
             )
             if inst.ticker in instruments:
                 raise ValueError(f"{path.name} rad {line}: dubblett av ticker {inst.ticker!r}")
@@ -354,6 +371,12 @@ def load_instruments(
                 slugs[slug] = inst.ticker
             instruments[inst.ticker] = inst
     return instruments
+
+
+def listed(instruments: dict[str, Instrument], day: date) -> dict[str, Instrument]:
+    """Bolagen som var noterade dag `day`: utan avnoterad, eller med sista handelsdagen samma dag eller senare.
+    Används av kurs- och swingberäkningarna; matchning och validering av äldre data använder hela listan."""
+    return {t: i for t, i in instruments.items() if i.avnoterad is None or day <= i.avnoterad}
 
 
 def load_sector_ids(path: Path = DATA_DIR / "sectors.json") -> set[str]:
@@ -958,6 +981,18 @@ def validate_swing(data: dict, instruments: dict[str, Instrument]) -> Result:
         unknown = set(c["labels"]) - set(data["labels"])
         if unknown:
             res.errors.append(f"{where}: okända etiketter {sorted(unknown)}")
+    # Bolag utan rad i tabellen (saknas i äldre filer): finns i listan, och inte samtidigt i tabellen. Avnoterade
+    # ska vara avnoterade i instruments.csv med samma sista handelsdag.
+    for m in data.get("missing", []) + data.get("delisted", []):
+        where = f"{m['name']} ({m['ticker']})"
+        inst = instruments.get(m["ticker"])
+        if inst is None or inst.namn != m["name"]:
+            res.errors.append(f"{where}: finns inte i instruments.csv med samma namn")
+        elif m["ticker"] in seen:
+            res.errors.append(f"{where}: står både i tabellen och bland bolagen som saknas")
+        elif "last_day" in m and (inst.avnoterad is None or inst.avnoterad.isoformat() != m["last_day"]):
+            res.errors.append(f"{where}: avnoterad {m['last_day']} stämmer inte med instruments.csv")
+        seen.add(m["ticker"])
     _check_ranking(data, res)
     return res
 
@@ -1000,8 +1035,9 @@ def _check_ranking(data: dict, res: Result) -> None:
 
 def _check_sr(sr: dict, where: str, res: Result) -> None:
     """Stöd och motstånd (scripts/levels.py): stödets övre kant (som visas) högst motståndets nedre kant (ett
-    medelvärde inne i en zon räknas inte som egen nivå), stoppet under stödet, och motståndet i R =
-    (motståndets nedre kant − triggernivå) / (triggernivå − stopp)."""
+    medelvärde inne i en zon räknas inte som egen nivå) och stoppet under stödet. Äldre filer har också ett
+    eget motstånd i R = (motståndets kant − triggernivå) / (triggernivå − stopp), som kontrolleras där det finns;
+    nya filer har bara strategins R (ranking, room_r)."""
     sup, rst = sr["support"], sr["resistance"]
     if sup and rst and sup["high"] > rst["low"] + 1e-9:
         res.errors.append(f"{where}: stödet {sup['high']} ({sup['kind']}) ligger över motståndet {rst['low']} ({rst['kind']})")
@@ -1010,7 +1046,7 @@ def _check_sr(sr: dict, where: str, res: Result) -> None:
     for side, lv in (("stödet", sup), ("motståndet", rst)):
         if lv and lv.get("inside") and (lv["kind"] != "zon" or lv["dist_pct"] not in (0, 0.0, None)):
             res.errors.append(f"{where}: {side} är markerat \"inne i zonen\" men är ingen zon eller har avstånd")
-    if rst and sr["stop"] is not None and sr["trigger"] > sr["stop"]:
+    if "resistance_r" in sr and rst and sr["stop"] is not None and sr["trigger"] > sr["stop"]:
         from levels import resistance_edge
 
         # Inne i motståndszonen räknas R till zonens övre kant, annars till den nedre.

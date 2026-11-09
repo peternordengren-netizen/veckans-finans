@@ -45,7 +45,7 @@ from bollinger import bands, position  # noqa: E402
 from prices import INDEX_TICKER  # noqa: E402
 from signals import yahoo_bars  # noqa: E402
 from swing import LABELS, SWING_DIR, THRESHOLDS, latest_reports, reaction_day, report_label, series, technical_labels  # noqa: E402
-from validate import load_instruments  # noqa: E402
+from validate import listed, load_instruments  # noqa: E402
 
 STOCKHOLM = ZoneInfo("Europe/Stockholm")
 TEST_DAYS = 252
@@ -240,7 +240,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--cache", type=Path, help="pickle med {yahoo_ticker: [Bar]} från en tidigare hämtning")
     args = p.parse_args(argv)
     today = datetime.now(STOCKHOLM).date()
-    instruments = load_instruments()
+    # Avnoterade bolag hoppas över (instruments.csv), som i swing.py.
+    instruments = listed(load_instruments(), today - timedelta(days=1))
     if args.cache and args.cache.exists():
         bars = pickle.loads(args.cache.read_bytes())
     else:

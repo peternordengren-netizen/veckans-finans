@@ -141,6 +141,25 @@ export function rText(r: number | null | undefined): string {
   return r === null || r === undefined ? "–" : `${pctFmt.format(r)} R`;
 }
 
+/** Närmaste motstånd i strategins R (scripts/ranking.py room_r, samma R som stoppet, 2R och rangkriteriet):
+ *  "1,4 R", "inget inom 120 d" utan motstånd; "–" utan mätvärden (äldre filer). */
+export function resistanceRText(m: { room_r: number | null; has_resistance: boolean } | null | undefined): string {
+  if (!m) return "–";
+  return m.has_resistance ? rText(m.room_r) : "inget inom 120 d";
+}
+
+/** Stoppet under närmaste stöd som alternativ stoppnivå, med avståndet från referensen (triggernivån vid
+ *  vändsignal) i procent, inget eget R: "alt. stopp under stöd 97,35 (0,8 %)"; null utan nivå. */
+export function altStopText(ref: number, stop: number | null | undefined): string | null {
+  if (stop === null || stop === undefined || !(ref > 0)) return null;
+  return `alt. stopp under stöd ${priceText(stop)} (${pctFmt.format(((ref - stop) / ref) * 100)} %)`;
+}
+
+/** Varför ett noterat bolag saknas i tabellen: "Yahoo saknar kursdata" eller "för kort kurshistorik (40 dagar)". */
+export function missingText(m: { reason: string; bars: number }): string {
+  return m.reason === "no_data" ? "Yahoo saknar kursdata" : `för kort kurshistorik (${m.bars} handelsdagar)`;
+}
+
 /** Läget mellan Bollingerbanden (%B, 0 = undre bandet, 1 = övre): "%B 0,75"; "–" utan värde. */
 export function pctBText(b: number | null | undefined): string {
   return b === null || b === undefined

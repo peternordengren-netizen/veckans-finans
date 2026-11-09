@@ -114,10 +114,25 @@ export interface SupportResistance {
   resistance: SrLevel | null;
   /** Gårdagens high. */
   trigger: number;
-  /** Stödets nedre kant minus 0,1 ATR. */
+  /** Stödets nedre kant minus 0,1 ATR: en alternativ stoppnivå (visas i procent, inget eget R). */
   stop: number | null;
-  /** (Motståndets nedre kant − triggernivå) / (triggernivå − stopp). */
-  resistance_r: number | null;
+  /** Bara i äldre filer (ett eget R på stoppet under stödet); visas inte. Fliken har ett enda R, strategins. */
+  resistance_r?: number | null;
+}
+/** Ett noterat bolag utan rad i Swing (scripts/swing.py "missing"). */
+export interface SwingMissing {
+  ticker: string;
+  name: string;
+  /** no_data: Yahoo saknar kursdata; short_history: för kort historik (bars dagar). */
+  reason: "no_data" | "short_history";
+  bars: number;
+}
+/** Ett avnoterat bolag (instruments.csv), som hoppas över i Swing. */
+export interface SwingDelisted {
+  ticker: string;
+  name: string;
+  last_day: string;
+  source: string;
 }
 export interface PullbackState {
   open: number; high: number; low: number; close: number; prev_open: number; prev_close: number;
@@ -198,6 +213,9 @@ export interface SwingView {
   /** Strategier i rullistan: namn och etiketterna som räknas som träff (saknas i äldre filer). */
   strategies: Record<string, { name: string; labels: string[] }>;
   rows: SwingRow[];
+  /** Noterade bolag utan rad i tabellen, och avnoterade bolag (tomma i äldre filer). */
+  missing: SwingMissing[];
+  delisted: SwingDelisted[];
   /** Senaste Bollingerkontrollen i dag för swingfilens kandidater (scripts/bollinger.py), eller null. */
   bollingerCheck: { checked_at: string; delay_note: string; candidates: number; rows: number } | null;
   history: {
@@ -254,6 +272,8 @@ export function loadLatestSwing(): SwingView | null {
       ranking_criteria?: Record<string, string>;
       strategies?: SwingView["strategies"];
       companies: SwingRow[];
+      missing?: SwingMissing[];
+      delisted?: SwingDelisted[];
     }>(path);
     const historyPath = join(SWING_DIR, "history.json");
     const history = existsSync(historyPath) ? readJson<NonNullable<SwingView["history"]>>(historyPath) : null;
@@ -278,6 +298,8 @@ export function loadLatestSwing(): SwingView | null {
       labels: raw.labels,
       strategies: raw.strategies ?? {},
       rows,
+      missing: raw.missing ?? [],
+      delisted: raw.delisted ?? [],
       bollingerCheck: pb && check
         ? { checked_at: check.checked_at, delay_note: check.delay_note, candidates: pb.candidates, rows: pb.rows.length }
         : null,

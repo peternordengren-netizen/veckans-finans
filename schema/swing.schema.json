@@ -247,6 +247,36 @@
         "null"
       ]
     },
+    "missing": {
+      "type": "array",
+      "description": "Noterade bolag som saknas i tabellen: Yahoo saknar kursdata (no_data) eller för kort historik (short_history, bars = antal dagar). Saknas i äldre filer.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["ticker", "name", "reason", "bars"],
+        "properties": {
+          "ticker": {"type": "string"},
+          "name": {"type": "string"},
+          "reason": {"enum": ["no_data", "short_history"]},
+          "bars": {"type": "integer", "minimum": 0}
+        }
+      }
+    },
+    "delisted": {
+      "type": "array",
+      "description": "Avnoterade bolag (instruments.csv): sista handelsdag och källa. Hoppas över i beräkningarna. Saknas i äldre filer.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["ticker", "name", "last_day", "source"],
+        "properties": {
+          "ticker": {"type": "string"},
+          "name": {"type": "string"},
+          "last_day": {"type": "string", "format": "date"},
+          "source": {"type": "string"}
+        }
+      }
+    },
     "companies": {
       "type": "array",
       "items": {
@@ -509,14 +539,13 @@
               "object",
               "null"
             ],
-            "description": "Stöd och motstånd (scripts/levels.py): närmaste stöd och motstånd, triggernivå, stopp under stödet och motstånd i R; null utan ATR. Saknas i äldre filer.",
+            "description": "Stöd och motstånd (scripts/levels.py): närmaste stöd och motstånd, triggernivå och stopp under stödet (en alternativ stoppnivå); null utan ATR. Saknas i äldre filer.",
             "additionalProperties": false,
             "required": [
               "support",
               "resistance",
               "trigger",
-              "stop",
-              "resistance_r"
+              "stop"
             ],
             "properties": {
               "support": {
@@ -532,7 +561,8 @@
                 "$ref": "#/$defs/num"
               },
               "resistance_r": {
-                "$ref": "#/$defs/num"
+                "$ref": "#/$defs/num",
+                "description": "Bara i äldre filer: motståndet i R räknat på stoppet under stödet. Nya filer har ett enda R, strategins (pullback.rank.measures.room_r)."
               }
             }
           },

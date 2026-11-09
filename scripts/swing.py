@@ -22,7 +22,7 @@ Etiketter (LABELS, trösklar i THRESHOLDS):
 - "trend-upp": kurs över 20-dagars MA och 20-dagars över 50-dagars; "trend-ned" omvänt
 Stöd och motstånd per bolag ("sr", scripts/levels.py): närmaste stöd under och motstånd över gårdagens stängning
 (zoner av tidigare vändpunkter de senaste 120 dagarna, och 20 EMA, 50 och 200 MA), avstånd i procent och ATR,
-triggernivå, stopp under stödet och avstånd till motståndet i R.
+triggernivå och stopp under stödet. Fliken har ett enda R, strategins (se nedan); motståndet i R räknas med det.
 - "golden-cross" / "death-cross": 50 dagars MA har korsat upp över (ned under) 200 dagars MA de senaste 10
   handelsdagarna; ma_cross_days = handelsdagar sedan korsningen (0 = gårdagen)
 - "bollinger-ovre": stängningen vid eller över övre Bollingerbandet (20 dagars stängningar, 2 standardavvikelser;
@@ -33,6 +33,9 @@ triggernivå, stopp under stödet och avstånd till motståndet i R.
   stopp-, trigger-, topp-, 2R- och 3R-nivåer per bolag ("pullback") och strategin i "strategies". För
   kandidaterna också gårdagens stängning mot Bollingerbanden ("pullback.bollinger": %B, övre bandet, avståndet
   dit i R och om stängningen är vid eller över), som bollinger.py uppdaterar under dagen
+
+Bolag som saknas i tabellen står i "missing" (Yahoo saknar kursdata, eller för kort historik) och "delisted"
+(avnoterade enligt instruments.csv, med sista handelsdag och källa; hoppas över helt), så att sidan kan visa dem.
 
 Användning:
     python scripts/swing.py                 # i dag (förra handelsdagens stängning)
@@ -65,7 +68,7 @@ def previous_business_day(d: date) -> date:
     while d.weekday() >= 5 or d in non_business_days(d.year):
         d -= timedelta(days=1)
     return d
-from validate import DATA_DIR, RAW_DIR, Instrument, load_instruments, validate_swing  # noqa: E402
+from validate import DATA_DIR, RAW_DIR, Instrument, listed, load_instruments, validate_swing  # noqa: E402
 
 STOCKHOLM = ZoneInfo("Europe/Stockholm")
 SWING_DIR = DATA_DIR / "swing"
@@ -260,18 +263,30 @@ def short_levels(today: date, instruments: dict[str, Instrument],
 # --- Sammanställning -------------------------------------------------------------------
 
 
+def priced(instruments: dict[str, Instrument], today: date) -> dict[str, Instrument]:
+    """Bolagen som kurserna hämtas och räknas för: noterade förra handelsdagen (avnoterade hoppas över)."""
+    return listed(instruments, previous_business_day(today))
+
+
 def build(today: date, now: datetime, instruments: dict[str, Instrument], bars: dict[str, list[Bar]],
           reports: dict[str, dict], shorts: tuple[str | None, dict[str, float]]) -> dict:
     short_day, short_pct = shorts
+    active = priced(instruments, today)
+    delisted = [{"ticker": t, "name": i.namn, "last_day": i.avnoterad.isoformat(), "source": i.avnoterad_kalla}
+                for t, i in sorted(instruments.items(), key=lambda x: x[1].namn) if t not in active]
+    instruments = active
     # Dagsdatans datum (signals.data_day), inte det senaste datumet hos något bolag: har bara ett fåtal bolag
     # gårdagens rad (Yahoo kl. 08:10) gäller måtten dagen före, för alla bolag, och sidan varnar.
     as_of, with_day, of = data_day(bars, [i.yahoo_ticker for i in instruments.values()], today)
     expected = previous_business_day(today)
     with_expected = sum(1 for i in instruments.values() if any(x.day == expected for x in bars.get(i.yahoo_ticker, [])))
-    companies = []
+    companies, missing = [], []
     for t, inst in instruments.items():
         b = [x for x in bars.get(inst.yahoo_ticker, []) if as_of is not None and x.day <= as_of]
         if len(b) < MIN_BARS:
+            # Visas på sidan i stället för att bolaget bara saknas.
+            missing.append({"ticker": t, "name": inst.namn, "reason": "no_data" if not b else "short_history",
+                            "bars": len(b)})
             continue
         m = series(b)[-1]
         rep = reports.get(t)
@@ -345,6 +360,8 @@ def build(today: date, now: datetime, instruments: dict[str, Instrument], bars: 
         "strategies": {k: {**v, "labels": list(v["labels"])} for k, v in STRATEGIES.items()},  # kopia, som labels
         "short_as_of": short_day,
         "companies": companies,
+        "missing": sorted(missing, key=lambda m: m["name"]),
+        "delisted": delisted,
     }
 
 
@@ -379,7 +396,7 @@ def main(argv: list[str] | None = None, fetch: BarFetcher = yahoo_bars, now: dat
     now = now or datetime.now(STOCKHOLM)
     today = args.date or now.date()
     instruments = load_instruments()
-    tickers = [i.yahoo_ticker for i in instruments.values()]
+    tickers = [i.yahoo_ticker for i in priced(instruments, today).values()]
     bars = fetch([*tickers, INDEX_TICKER], today - timedelta(days=HISTORY_DAYS), today - timedelta(days=1))
     data = build(today, now, instruments, bars, latest_reports(today), short_levels(today, instruments))
     out = write(data, instruments)
