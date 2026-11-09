@@ -87,7 +87,7 @@ export interface SwingRow {
   short_pct: number | null;
   /** Pullback i trend (scripts/pullback.py): tillståndet och nivåerna vid träff; saknas i äldre filer.
    *  bollinger: läget mot Bollingerbanden, gårdagens stängning eller (checked_at satt) senaste kontrollen i dag. */
-  pullback?: { state: PullbackState | null; levels: PullbackLevels | null; bollinger?: PullbackBollinger };
+  pullback?: { state: PullbackState | null; levels: PullbackLevels | null; bollinger?: PullbackBollinger; rank?: PullbackRank };
   /** Senaste korsningen mellan 50 och 200 dagars MA de senaste 10 dagarna, och dagar sedan (saknas i äldre filer). */
   ma_cross?: "golden" | "death" | null;
   ma_cross_days?: number | null;
@@ -137,6 +137,13 @@ export interface PullbackLevels {
   r2: number;
   r3: number;
 }
+/** Rangordningen bland kandidaterna (scripts/ranking.py): flest uppfyllda kriterier först. */
+export interface PullbackRank {
+  rank: number;
+  score: number;
+  criteria: Record<string, boolean>;
+  measures: { signal: boolean; room_r: number | null; has_resistance: boolean; support_atr: number | null; upper_r: number | null; stop_atr: number | null; ma50_change_pct: number | null };
+}
 /** En pullback-kandidats läge mot Bollingerbanden (scripts/bollinger.py position). */
 export interface PullbackBollinger {
   price: number;
@@ -182,7 +189,11 @@ export interface SwingView {
     pullback?: { touch_pct: number; hammer_shadow: number; hammer_upper: number; stop_days: number; top_days: number; trigger_days: number; max_days: number };
     /** Stöd och motstånd (saknas i äldre filer). */
     levels?: { lookback: number; pivot: number; merge_atr: number; stop_buffer_atr: number };
+    /** Rangordningen av Pullback-kandidaterna (saknas i äldre filer). */
+    ranking?: { resistance_r: number; support_atr: number; bollinger_r: number; stop_atr: number; ma50_days: number; top: number };
   };
+  /** Rangordningens kriterier: nyckel och text (tom i äldre filer). */
+  rankingCriteria: Record<string, string>;
   labels: Record<string, string>;
   /** Strategier i rullistan: namn och etiketterna som räknas som träff (saknas i äldre filer). */
   strategies: Record<string, { name: string; labels: string[] }>;
@@ -201,6 +212,16 @@ export interface SwingView {
       all: PullbackSummary;
       /** Stöd nära och motstånd minst 2R bort, mot övriga fall; saknas i äldre filer. */
       sr_filter?: { description: string; with: PullbackSummary; without: PullbackSummary };
+      /** Rangordningen: topp N per dag mot övriga fall, och per poäng; saknas i äldre filer. */
+      ranking?: {
+        description: string;
+        top_n: number;
+        days: number;
+        days_over_top: number;
+        top: PullbackSummary;
+        others: PullbackSummary;
+        by_score: Record<string, PullbackSummary>;
+      };
       /** Samma fall med marknadsfilter (indexet över sitt 50- och 200-dagars MA); saknas i äldre filer. */
       market_filter?: {
         description: string;
@@ -230,6 +251,7 @@ export function loadLatestSwing(): SwingView | null {
       short_as_of: string | null;
       thresholds: SwingView["thresholds"];
       labels: Record<string, string>;
+      ranking_criteria?: Record<string, string>;
       strategies?: SwingView["strategies"];
       companies: SwingRow[];
     }>(path);
@@ -252,6 +274,7 @@ export function loadLatestSwing(): SwingView | null {
       coverage: raw.coverage ?? null,
       shortAsOf: raw.short_as_of,
       thresholds: raw.thresholds,
+      rankingCriteria: raw.ranking_criteria ?? {},
       labels: raw.labels,
       strategies: raw.strategies ?? {},
       rows,

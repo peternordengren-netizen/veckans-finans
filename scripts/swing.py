@@ -52,6 +52,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import levels  # noqa: E402
 import pullback  # noqa: E402
+import ranking  # noqa: E402
 from bollinger import bands, position, upper_band  # noqa: E402
 from prices import INDEX_TICKER  # noqa: E402
 from signals import Bar, BarFetcher, data_day, yahoo_bars  # noqa: E402
@@ -301,6 +302,17 @@ def build(today: date, now: datetime, instruments: dict[str, Instrument], bars: 
         ma50 = sum(c[i - 49:i + 1]) / 50
         ma200 = sum(c[i - 199:i + 1]) / 200 if i >= 199 else None
         sr = levels.summary(h, lo, c[i], i, atr, e20, ma50, ma200)
+        if pb_levels is not None:
+            # Rangordningen (scripts/ranking.py): mätvärden och uppfyllda kriterier; rangen sätts efter loopen.
+            zones_sr = levels.summary(h, lo, c[i], i, atr, None, None, None, zones_only=True)
+            zsup = (zones_sr or {}).get("support")
+            rst = (sr or {}).get("resistance")
+            meas = ranking.measures(
+                pb_levels["signal"] is not None, pb_levels["ref"], pb_levels["stop"],
+                levels.resistance_edge(rst) if rst else None, zsup["dist_atr"] if zsup else None,
+                pb["bollinger"]["upper_r"], pb_levels["risk_atr"], c, i)
+            crit = ranking.criteria(meas)
+            pb["rank"] = {"rank": None, "score": sum(crit.values()), "criteria": crit, "measures": meas}
         companies.append({
             "ticker": t, "name": inst.namn, "sector": inst.sektor, "day": m["day"].isoformat(),
             **{k: m[k] for k in ("ma20_pct", "ma50_pct", "ma20_over_ma50", "rsi2", "rsi14", "atr_pct", "volume_ratio",
@@ -314,6 +326,10 @@ def build(today: date, now: datetime, instruments: dict[str, Instrument], bars: 
             "labels": labels,
         })
     companies.sort(key=lambda c: c["name"])
+    ranked = [{**c["pullback"]["rank"], "name": c["name"], "_c": c} for c in companies if c["pullback"].get("rank")]
+    ranking.rank(ranked)
+    for e in ranked:
+        e["_c"]["pullback"]["rank"]["rank"] = e["rank"]
     return {
         "schema_version": 1,
         "date": today.isoformat(),
@@ -322,7 +338,9 @@ def build(today: date, now: datetime, instruments: dict[str, Instrument], bars: 
         "expected_day": expected.isoformat(),
         "coverage": {"with_day": with_day, "with_expected": with_expected, "of": of},
         "generated_at": now.isoformat(timespec="seconds"),
-        "thresholds": {**THRESHOLDS, "pullback": pullback.THRESHOLDS, "levels": levels.THRESHOLDS},
+        "thresholds": {**THRESHOLDS, "pullback": pullback.THRESHOLDS, "levels": levels.THRESHOLDS,
+                       "ranking": dict(ranking.THRESHOLDS)},
+        "ranking_criteria": dict(ranking.CRITERIA),
         "labels": dict(LABELS),  # en kopia: filen får inte dela modulens dict
         "strategies": {k: {**v, "labels": list(v["labels"])} for k, v in STRATEGIES.items()},  # kopia, som labels
         "short_as_of": short_day,

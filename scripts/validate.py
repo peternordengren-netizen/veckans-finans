@@ -958,7 +958,44 @@ def validate_swing(data: dict, instruments: dict[str, Instrument]) -> Result:
         unknown = set(c["labels"]) - set(data["labels"])
         if unknown:
             res.errors.append(f"{where}: okända etiketter {sorted(unknown)}")
+    _check_ranking(data, res)
     return res
+
+
+def _check_ranking(data: dict, res: Result) -> None:
+    """Rangordningen (scripts/ranking.py): kriterierna räknas om ur mätvärdena och trösklarna i filen, poängen är
+    antalet uppfyllda, mätvärdena stämmer med nivåerna och Bollingerläget, och rangerna är 1..n i sorteringsordning.
+    Kriteriernas texter får inte kalla rangen bäst eller vara en uppmaning."""
+    import ranking
+
+    th = data["thresholds"].get("ranking") or ranking.THRESHOLDS
+    for k, text in (data.get("ranking_criteria") or {}).items():
+        if re.search(r"\b(köp|sälj|kursmål|rekommend|bäst)", text, re.IGNORECASE):
+            res.errors.append(f"rangkriteriet {k!r} innehåller en värdering eller uppmaning: {text!r}")
+    entries = []
+    for c in data["companies"]:
+        pb = c.get("pullback") or {}
+        rk = pb.get("rank")
+        if rk is None:
+            continue
+        where = f"{c['name']} ({c['ticker']}) rang"
+        lv, bb, m = pb.get("levels"), pb.get("bollinger"), rk["measures"]
+        if lv is None:
+            res.errors.append(f"{where}: rang utan pullback-nivåer")
+            continue
+        if m["signal"] != (lv["signal"] is not None) or m["stop_atr"] != lv["risk_atr"] or \
+                (bb is not None and m["upper_r"] != bb["upper_r"]):
+            res.errors.append(f"{where}: mätvärdena stämmer inte med nivåerna eller Bollingerläget")
+        expected = ranking.criteria(m, th)
+        if rk["criteria"] != expected:
+            res.errors.append(f"{where}: kriterierna {rk['criteria']} stämmer inte med mätvärdena (väntat {expected})")
+        if rk["score"] != sum(expected.values()):
+            res.errors.append(f"{where}: poängen {rk['score']} ≠ antalet uppfyllda kriterier")
+        entries.append({"score": rk["score"], "measures": m, "name": c["name"], "given": rk["rank"]})
+    ranking.rank(entries)
+    wrong = [e["name"] for e in entries if e["rank"] != e["given"]]
+    if wrong:
+        res.errors.append(f"rangordningen stämmer inte med poäng och utrymme till motståndet: {wrong[:5]}")
 
 
 def _check_sr(sr: dict, where: str, res: Result) -> None:

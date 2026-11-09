@@ -40,6 +40,8 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import levels  # noqa: E402
 import pullback  # noqa: E402
+import ranking  # noqa: E402
+from bollinger import bands, position  # noqa: E402
 from prices import INDEX_TICKER  # noqa: E402
 from signals import yahoo_bars  # noqa: E402
 from swing import LABELS, SWING_DIR, THRESHOLDS, latest_reports, reaction_day, report_label, series, technical_labels  # noqa: E402
@@ -78,6 +80,22 @@ def sr_ok(h: list[float], lo: list[float], c: list[float], i: int, m: dict, st: 
     return res is None or (risk > 0 and res["low"] - ref >= 2 * risk)
 
 
+def rank_measures(h: list[float], lo: list[float], c: list[float], i: int, m: dict, st: dict) -> dict | None:
+    """Rangordningens mätvärden (scripts/ranking.py) för ett Pullback-fall på dag i, som swing.py räknar dem."""
+    atr = m["atr_pct"] / 100 * c[i] if m["atr_pct"] is not None else None
+    lv = pullback.levels(h, lo, atr, i, st)
+    full = levels.summary(h, lo, c[i], i, atr, st["ema20"], st["ma50"], st["ma200"])
+    zones_only = levels.summary(h, lo, c[i], i, atr, None, None, None, zones_only=True)
+    if full is None or zones_only is None:
+        return None
+    bb = bands(c[:i + 1])
+    upper_r = position(c[i], *bb, lv["ref"], lv["stop"])["upper_r"] if bb else None
+    rst, zsup = full["resistance"], zones_only["support"]
+    return ranking.measures(lv["signal"] is not None, lv["ref"], lv["stop"],
+                            levels.resistance_edge(rst) if rst else None, zsup["dist_atr"] if zsup else None,
+                            upper_r, lv["risk_atr"], c, i)
+
+
 def market_filter(index_bars: list) -> dict[date, bool]:
     """Per dag: ligger indexets (justerade) stängning över både 50- och 200-dagars MA? Dagar utan 200 dagars
     historik saknas (räknas som inte uppfyllt)."""
@@ -103,6 +121,8 @@ def build(bars: dict, instruments: dict, today: date, results_dir: Path | None =
     # Stöd och motstånd: fall med en stödzon inom 1 ATR under stängningen och närmaste motstånd minst 2R över
     # referensen, mot övriga fall (samma fall som utan filter).
     pb_sr: dict[str, list[dict]] = {"with": [], "without": []}
+    # Rangordningen (scripts/ranking.py): fallen som startar samma dag rangordnas; topp N per dag mot övriga.
+    pb_ranked: dict[date, list[dict]] = defaultdict(list)
     reports = latest_reports(today, results_dir) if results_dir else latest_reports(today)
     report_days: dict[str, date] = {}
     for t, r in reports.items():
@@ -132,6 +152,11 @@ def build(bars: dict, instruments: dict, today: date, results_dir: Path | None =
                         pb_cases[pls[0]].append(case)
                         busy_until = case["end"]
                         pb_sr["with" if sr_ok(h, lo, c, i, m, st, stop) else "without"].append(case)
+                        meas = rank_measures(h, lo, c, i, m, st)
+                        if meas is not None:
+                            crit = ranking.criteria(meas)
+                            pb_ranked[m["day"]].append({"score": sum(crit.values()), "measures": meas, "name": t,
+                                                        "case": case})
                     if i > busy_filtered and market_up.get(m["day"], False):
                         pb_filtered[pls[0]].append(case)
                         busy_filtered = case["end"]
@@ -156,6 +181,13 @@ def build(bars: dict, instruments: dict, today: date, results_dir: Path | None =
                 base[k].append(x)
                 for lbl in labels:
                     per_label[lbl][k].append(x)
+    top_n = ranking.THRESHOLDS["top"]
+    rank_top, rank_rest, by_score = [], [], defaultdict(list)
+    for entries in pb_ranked.values():
+        ranking.rank(entries)
+        for e in entries:
+            (rank_top if e["rank"] <= top_n else rank_rest).append(e["case"])
+            by_score[e["score"]].append(e["case"])
     return {
         "generated_at": datetime.now(STOCKHOLM).isoformat(timespec="seconds"),
         "period": {"start": start_day.isoformat(), "end": end_day.isoformat()},
@@ -176,6 +208,17 @@ def build(bars: dict, instruments: dict, today: date, results_dir: Path | None =
                                "eller inget motstånd inom 120 dagar, mot övriga fall.",
                 "with": pullback.summarize(pb_sr["with"]),
                 "without": pullback.summarize(pb_sr["without"]),
+            },
+            "ranking": {
+                "description": f"Fallen som startar samma dag rangordnade efter antal uppfyllda kriterier (vid lika "
+                               f"poäng mest utrymme till motståndet i R): topp {top_n} per dag mot övriga fall. "
+                               f"Samma fall som utan filter; en dag med högst {top_n} fall har bara topp-fall.",
+                "top_n": top_n,
+                "days": len(pb_ranked),
+                "days_over_top": sum(1 for v in pb_ranked.values() if len(v) > top_n),
+                "top": pullback.summarize(rank_top),
+                "others": pullback.summarize(rank_rest),
+                "by_score": {str(k): pullback.summarize(v) for k, v in sorted(by_score.items())},
             },
             "market_filter": {
                 "description": "Bara fall när OMX Stockholm PI vid rekyldagens stängning låg över sitt 50- och "

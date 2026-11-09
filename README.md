@@ -520,6 +520,31 @@ Då kunde ett medelvärde inne i en zon räknas som egen nivå, så att stödet 
 2026-11-05: stöd 303,21 och motstånd 302,49). Valideringen underkänner nu ett stöd vars övre kant ligger över
 motståndets nedre kant.
 
+**Rang (flest kriterier, `scripts/ranking.py`):** kandidaterna får en poäng per uppfyllt kriterium, räknat på
+gårdagens stängning:
+1. vändsignal
+2. närmaste motstånd minst 2R bort, eller inget inom 120 dagar
+3. kursen i eller högst 1 ATR över en stödzon
+4. minst 1R kvar till övre Bollingerbandet
+5. stoppet högst 1,5 ATR bort
+6. 50 MA stigande senaste 20 dagarna
+
+Vid lika poäng kommer mest utrymme till motståndet i R först. Kolumnen "Rang" visar 1–5 för de fem med flest kriterier,
+antalet kriterier under, och de uppfyllda kriterierna som tooltip. Med strategin vald sorteras tabellen på rang. Sidan
+kallar det "flest kriterier", aldrig "bäst", och valideringen räknar om kriterier, poäng och rangordning.
+
+Historiken (29 okt 2025 – 30 okt 2026, utan courtage) rangordnar fallen som startar samma dag på samma sätt. 165 av
+250 dagar hade fler än fem fall:
+
+| | Avgjorda fall | 2R före stoppet | Snitt per fall |
+|---|---|---|---|
+| De fem med flest kriterier per dag | 1 034 | 32,7 % | +0,04 R |
+| Övriga | 664 | 35,1 % | −0,02 R |
+
+De fem med flest kriterier nådde alltså inte 2R oftare. Andelen steg inte heller med antalet kriterier: 2 kriterier
+gav 40,7 % (302 fall), 4 kriterier 31,1 % (608) och 5 kriterier 31,6 % (237). Rangen är ett sätt att ordna listan,
+inget belägg för bättre utfall.
+
 #### Bollinger under dagen (`scripts/bollinger.py`, `scripts/run_bollinger.ps1`)
 
 Uppgiften **VeckansFinansBollinger** kör vardagar 09:20 och 13:20, utan Claude.

@@ -227,6 +227,20 @@ def test_swing_bygger_och_validerar_pullback():
     assert bb["at_upper"] == (bb["price"] >= bb["upper"])
     assert bb["upper_r"] == round((bb["upper"] - bb["price"]) / (lv["ref"] - lv["stop"]), 2)
     assert "bollinger" not in b["pullback"]  # inga nivåer, inget läge
+    # Rangordningen: poäng = uppfyllda kriterier, rang 1 (enda kandidaten), mätvärden som nivåerna.
+    rk = a["pullback"]["rank"]
+    assert rk["rank"] == 1 and rk["score"] == sum(rk["criteria"].values()) and rk["criteria"]["vandsignal"]
+    assert rk["measures"]["stop_atr"] == lv["risk_atr"] and rk["measures"]["upper_r"] == bb["upper_r"]
+    assert data["ranking_criteria"]["vandsignal"] == "Vändsignal" and "rank" not in b["pullback"]
+    rk["score"] += 1
+    assert any("poängen" in e for e in validate_swing(data, INSTRUMENTS).errors)
+    rk["score"] -= 1
+    rk["rank"] = 2
+    assert any("rangordningen" in e for e in validate_swing(data, INSTRUMENTS).errors)
+    rk["rank"] = 1
+    data["ranking_criteria"]["vandsignal"] = "Bästa läget"
+    assert any("värdering" in e for e in validate_swing(data, INSTRUMENTS).errors)
+    data["ranking_criteria"]["vandsignal"] = "Vändsignal"
     bb["at_upper"] = not bb["at_upper"]
     assert any("vid eller över" in e for e in validate_swing(data, INSTRUMENTS).errors)
     bb["at_upper"] = not bb["at_upper"]
@@ -250,6 +264,9 @@ def test_historiken_har_pullback():
     assert set(hist["labels"]) >= {"rekyl-i-trend", "rekyl-vandsignal"}
     sr = pb["sr_filter"]  # stöd nära och motstånd minst 2R bort, mot övriga fall
     assert sr["with"]["cases"] + sr["without"]["cases"] == pb["all"]["cases"]
+    rk = pb["ranking"]  # topp 5 per dag mot övriga, samma fall
+    assert rk["top_n"] == 5 and rk["top"]["cases"] + rk["others"]["cases"] <= pb["all"]["cases"]
+    assert sum(s["cases"] for s in rk["by_score"].values()) == rk["top"]["cases"] + rk["others"]["cases"]
 
 
 def test_marknadsfilter():

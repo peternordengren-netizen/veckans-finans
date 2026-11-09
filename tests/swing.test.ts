@@ -4,7 +4,7 @@ import { test } from "node:test";
 
 import {
   decidedShareText, isPullbackLabel, labelClass, labelCounts, levelText, netText, priceText, reportText, riskText, shareText,
-  bollingerSourceText, chipText, pctBText, rText, signalText, srDistText, srInsideText, srLevelText, upperRText, vsBaseText,
+  bollingerSourceText, chipText, pctBText, rankText, rankTitle, rText, signalText, srDistText, srInsideText, srLevelText, upperRText, vsBaseText,
 } from "../src/lib/swing.ts";
 
 test("etiketternas klasser och antal", () => {
@@ -97,4 +97,12 @@ test("kursen inne i en zon", () => {
   assert.equal(srInsideText(z, "support"), "inne i stödzon 302,49–307,95");
   assert.equal(srInsideText({ ...z, inside: false }, "support"), null);
   assert.equal(srInsideText(null, "support"), null);
+});
+test("rang: siffra för de fem första, antal kriterier och tooltip", () => {
+  assert.deepEqual(rankText(1, 5, 6, 5), { main: "1", sub: "5 av 6 kriterier" });
+  assert.deepEqual(rankText(6, 3, 6, 5), { main: "–", sub: "3 av 6 kriterier" });
+  const texts = { a: "Vändsignal", b: "Stoppet högst 1,5 ATR bort" };
+  assert.equal(rankTitle({ a: true, b: false }, texts),
+    "Uppfyllda kriterier (1 av 2): Vändsignal. Inte uppfyllda: Stoppet högst 1,5 ATR bort. Räknat på gårdagens stängning.");
+  assert.equal(rankTitle({ a: false, b: false }, texts).startsWith("Uppfyllda kriterier (0 av 2): inga."), true);
 });

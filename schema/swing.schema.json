@@ -213,8 +213,27 @@
               "type": "number"
             }
           }
+        },
+        "ranking": {
+          "type": "object",
+          "description": "Trösklar för rangordningen av Pullback-kandidaterna (scripts/ranking.py THRESHOLDS); saknas i äldre filer.",
+          "additionalProperties": false,
+          "required": ["resistance_r", "support_atr", "bollinger_r", "stop_atr", "ma50_days", "top"],
+          "properties": {
+            "resistance_r": {"type": "number"},
+            "support_atr": {"type": "number"},
+            "bollinger_r": {"type": "number"},
+            "stop_atr": {"type": "number"},
+            "ma50_days": {"type": "integer"},
+            "top": {"type": "integer"}
+          }
         }
       }
+    },
+    "ranking_criteria": {
+      "type": "object",
+      "description": "Rangordningens kriterier: nyckel och text (scripts/ranking.py CRITERIA); saknas i äldre filer.",
+      "additionalProperties": {"type": "string"}
     },
     "labels": {
       "type": "object",
@@ -437,6 +456,31 @@
                   },
                   "r3": {
                     "type": "number"
+                  }
+                }
+              },
+              "rank": {
+                "description": "Rangordningen bland kandidaterna (scripts/ranking.py): rang 1..n, poäng = antal uppfyllda kriterier, kriterierna och mätvärdena de prövas mot. Bara när levels finns; saknas i äldre filer.",
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["rank", "score", "criteria", "measures"],
+                "properties": {
+                  "rank": {"type": "integer", "minimum": 1},
+                  "score": {"type": "integer", "minimum": 0},
+                  "criteria": {"type": "object", "additionalProperties": {"type": "boolean"}},
+                  "measures": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["signal", "room_r", "has_resistance", "support_atr", "upper_r", "stop_atr", "ma50_change_pct"],
+                    "properties": {
+                      "signal": {"type": "boolean"},
+                      "room_r": {"$ref": "#/$defs/num"},
+                      "has_resistance": {"type": "boolean"},
+                      "support_atr": {"$ref": "#/$defs/num"},
+                      "upper_r": {"$ref": "#/$defs/num"},
+                      "stop_atr": {"$ref": "#/$defs/num"},
+                      "ma50_change_pct": {"$ref": "#/$defs/num"}
+                    }
                   }
                 }
               },

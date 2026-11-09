@@ -119,6 +119,23 @@ export function srInsideText(
   return `inne i ${side === "support" ? "stödzon" : "motståndszon"} ${priceText(l.low)}–${priceText(l.high)}`;
 }
 
+/** Rangen i tabellen: rangen för de `top` första ("1"), annars "–"; poängen som "5 av 6 kriterier". */
+export function rankText(rank: number, score: number, total: number, top: number): { main: string; sub: string } {
+  return { main: rank <= top ? String(rank) : "–", sub: `${score} av ${total} kriterier` };
+}
+
+/** Tooltip med uppfyllda och ej uppfyllda kriterier, i kriteriernas ordning. */
+export function rankTitle(criteria: Record<string, boolean>, texts: Record<string, string>): string {
+  const keys = Object.keys(texts);
+  const yes = keys.filter((k) => criteria[k]).map((k) => texts[k]);
+  const no = keys.filter((k) => !criteria[k]).map((k) => texts[k]);
+  return [
+    `Uppfyllda kriterier (${yes.length} av ${keys.length}): ${yes.length ? yes.join("; ") : "inga"}.`,
+    no.length ? `Inte uppfyllda: ${no.join("; ")}.` : "",
+    "Räknat på gårdagens stängning.",
+  ].filter(Boolean).join(" ");
+}
+
 /** Avstånd i R: "2,4 R"; "–" utan värde. */
 export function rText(r: number | null | undefined): string {
   return r === null || r === undefined ? "–" : `${pctFmt.format(r)} R`;

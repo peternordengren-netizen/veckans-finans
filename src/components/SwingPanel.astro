@@ -9,7 +9,7 @@ import { shortDate } from "../lib/format";
 import { signedPct } from "../lib/signals";
 import {
   MIN_CASES, decidedShareText, labelClass, labelCounts, levelText, netText, priceText, reportText, riskText, shareText,
-  bollingerSourceText, chipText, pctBText, rText, signalText, srDistText, srInsideText, srKindText, srLevelText, upperRText, vsBaseText,
+  bollingerSourceText, chipText, pctBText, rText, signalText, rankText, rankTitle, srDistText, srInsideText, srKindText, srLevelText, upperRText, vsBaseText,
 } from "../lib/swing";
 
 interface Props {
@@ -48,11 +48,14 @@ const columns = [
   { key: "support", label: "Närmaste stöd", type: "num", title: "Närmaste stöd under gårdagens stängning och avståndet dit" },
   { key: "resistance", label: "Närmaste motstånd", type: "num", title: "Närmaste motstånd över gårdagens stängning och avståndet dit" },
   // Strategin Pullback i trend: visas bara när strategin är vald i rullistan.
+  { key: "pb-rank", label: "Rang", type: "num", pb: true, title: "Flest uppfyllda kriterier först (1–5 för de fem med flest, med antalet kriterier); vid lika antal mest utrymme till motståndet i R. Ingen värdering eller rekommendation" },
   { key: "pb-entry", label: "Ingång", type: "num", pb: true, title: "Vändsignal och nivån rekylen nådde; triggernivån (gårdagens high) vid vändsignal, annars gårdagens stängning som referens. Sorteras på nivån" },
   { key: "pb-stop", label: "Stopp", type: "num", pb: true, title: "Stoppnivån, avståndet dit (1 R) i procent och ATR(14), och stoppet under närmaste stöd. Sorteras på avståndet i procent" },
   { key: "pb-target", label: "Mål", type: "num", pb: true, title: "Föregående topp, 2R och 3R, övre Bollingerbandet (⚠ = kursen vid eller över) och närmaste motstånd i R. Sorteras på avståndet till övre bandet i R" },
 ] as const;
 const bbCheck = swing.bollingerCheck;
+const rankTop = t.ranking?.top ?? 5;
+const rankHist = pbHist?.ranking ?? null;
 ---
 
 <div class="swing" data-swing>
@@ -184,6 +187,31 @@ const bbCheck = swing.bollingerCheck;
               <strong> Mål:</strong> föregående topp (högsta high de senaste {pt.top_days} handelsdagarna), 2R och 3R
               (referensen plus två respektive tre gånger R), övre Bollingerbandet och närmaste motstånd i R.
             </li>
+            {
+              Object.keys(swing.rankingCriteria).length > 0 && t.ranking && (
+                <li>
+                  <strong>Rang (flest kriterier):</strong> en poäng per uppfyllt kriterium, räknat på gårdagens stängning:
+                  <ol>
+                    <li>vändsignal (hammer eller bullish engulfing)</li>
+                    <li>
+                      närmaste motstånd minst {num(t.ranking.resistance_r, 0)}R över referensen, eller inget motstånd inom 120
+                      dagar (R = referens minus stopp; till motståndszonens övre kant om kursen ligger inne i den)
+                    </li>
+                    <li>
+                      kursen i en stödzon eller högst {num(t.ranking.support_atr, 0)} ATR över dess övre kant (bara zoner av
+                      tidigare vändpunkter, inte medelvärdena)
+                    </li>
+                    <li>minst {num(t.ranking.bollinger_r, 0)}R kvar till övre Bollingerbandet</li>
+                    <li>stoppet högst {num(t.ranking.stop_atr)} ATR från referensen</li>
+                    <li>50 dagars MA högre än för {t.ranking.ma50_days} handelsdagar sedan</li>
+                  </ol>
+                  Flest uppfyllda kriterier först; vid lika antal mest utrymme till motståndet i R (inget motstånd först).
+                  De {rankTop} med flest kriterier får rang 1–{rankTop}. Rangen säger bara hur många kriterier som är
+                  uppfyllda, inte hur det går. Historiken under tabellen visar hur ofta de {rankTop} med flest kriterier per
+                  dag nått 2R jämfört med övriga.
+                </li>
+              )
+            }
             <li>
               <strong>Bollinger:</strong> banden är snittet av de 20 senaste stängningskurserna plus och minus 2
               standardavvikelser. <em>%B</em> är kursens läge mellan banden: (kurs − undre bandet) / (övre − undre), så 0 är
@@ -302,8 +330,22 @@ const bbCheck = swing.bollingerCheck;
                   const lv = r.labels.some((l) => pbLabels.includes(l)) ? (r.pullback?.levels ?? null) : null;
                   const bb = lv ? (r.pullback?.bollinger ?? null) : null;
                   const srStop = lv && r.sr?.stop != null ? r.sr.stop : null;
+                  const rk = lv ? (r.pullback?.rank ?? null) : null;
+                  const rt = rk ? rankText(rk.rank, rk.score, Object.keys(swing.rankingCriteria).length, rankTop) : null;
                   return (
                     <>
+                      <td
+                        class:list={["num col-pb rank", rk && rk.rank <= rankTop && "top"]}
+                        data-v={v(rk ? -rk.rank : null)}
+                        title={rk ? rankTitle(rk.criteria, swing.rankingCriteria) : undefined}
+                      >
+                        {rt ? (
+                          <>
+                            <span class="line">{rt.main}</span>
+                            <span class="sub">{rt.sub}</span>
+                          </>
+                        ) : "–"}
+                      </td>
                       <td class="num col-pb pb" data-v={v(lv?.ref ?? null)}>
                         {lv ? (
                           <>
@@ -385,6 +427,15 @@ const bbCheck = swing.bollingerCheck;
           )
         }
         {
+          rankHist && (
+            <p class="note">
+              <strong>Flest kriterier:</strong> fallen som startar samma dag rangordnas som i tabellen; de {rankHist.top_n} med
+              flest kriterier per dag mot övriga fall ({rankHist.days} dagar med fall, varav {rankHist.days_over_top} med fler
+              än {rankHist.top_n}). Till skillnad från tabellen räknas bara bolag utan ett pågående fall.
+            </p>
+          )
+        }
+        {
           pbHist.market_filter && (
             <p class="note">
               <strong>Med marknadsfilter:</strong> bara fall när OMX Stockholm PI vid rekyldagens stängning låg över sitt 50-
@@ -414,6 +465,15 @@ const bbCheck = swing.bollingerCheck;
                   ? [
                       { name: "Båda, stöd nära och motstånd minst 2R bort", s: pbHist.sr_filter.with, all: false },
                       { name: "Båda, övriga", s: pbHist.sr_filter.without, all: false },
+                    ]
+                  : []),
+                ...(rankHist
+                  ? [
+                      { name: `Båda, de ${rankHist.top_n} med flest kriterier per dag`, s: rankHist.top, all: false },
+                      { name: "Båda, övriga", s: rankHist.others, all: false },
+                      ...Object.entries(rankHist.by_score).map(([k, s]) => ({
+                        name: `Båda, ${k} av ${Object.keys(swing.rankingCriteria).length || 6} kriterier`, s, all: false,
+                      })),
                     ]
                   : []),
                 ...(pbHist.market_filter
@@ -518,6 +578,12 @@ const bbCheck = swing.bollingerCheck;
       }
       if (strategy) root.dataset.strategy = strategy;
       else delete root.dataset.strategy;
+      // Med strategin vald sorteras tabellen på rang (flest kriterier först) som standard. Cellerna har −rang,
+      // så fallande ordning ger rang 1 först.
+      const rankTh = root.querySelector<HTMLElement>('thead th[data-key="pb-rank"]');
+      if (strategy && rankTh) {
+        while (rankTh.getAttribute("aria-sort") !== "descending") rankTh.querySelector("button")?.click();
+      }
       shown.textContent = want === "" ? `Visar alla ${rows.length} bolag` : `Visar ${n} av ${rows.length} bolag`;
       // Kolumnerna ändrades: den fasta rubrikraden räknar om sina bredder vid resize.
       window.dispatchEvent(new Event("resize"));
@@ -772,6 +838,18 @@ const bbCheck = swing.bollingerCheck;
   }
   td.pb .line {
     display: block;
+  }
+  /* Rang: siffran för de fem med flest kriterier, antalet kriterier under. */
+  td.rank {
+    min-width: 5.5rem;
+    white-space: nowrap;
+  }
+  td.rank .line {
+    display: block;
+  }
+  td.rank.top .line {
+    font-weight: 700;
+    font-size: 1.05rem;
   }
   .legend-head {
     margin: 10px 0 2px;
