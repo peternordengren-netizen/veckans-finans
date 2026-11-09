@@ -657,7 +657,16 @@ Skapas med `powershell -NoProfile -File scripts\install_tasks.ps1`:
   morgonlogg), vilken utlösare som än startade det. Inloggning och upplåsning startar annars morgonflödet och
   veckokörningen samtidigt. Sedan kompletterar det veckans rådata med morgonflödets lokala hämtning
   (`scripts/merge_morning_raw.py`).
-  Actions-hämtningen har haft luckor: vecka 43 saknades 46 av 68 Large Cap-rapporter. Därefter kör det
+  Actions-hämtningen har haft luckor: vecka 43 saknades 46 av 68 Large Cap-rapporter.
+  - Rubrik och publiceringsminut räknas bara som dubblett för samma avsändare. Tidigare jämfördes de utan bolag, så
+    olika bolags "Delårsrapport januari-september 2026" kl. 07:30 togs för dubbletter. ANOD B, BEIA B, BUFAB (23/10),
+    INTEA B och NORION (22/10) kom därför aldrig till rådatarepot.
+  - Morgonrådatan sparas i tre veckor. Innan en vecka rensas kopieras det som bara finns lokalt till rådatarepot.
+    Misslyckas det står veckan kvar, och felet visas i morgonrapporten.
+  - Texterna för ANOD B, BEIA B och BUFAB hämtades igen från MFN:s pressmeddelandesidor 2026-11-09, ett anrop per bolag,
+    sedan vecka 43 rensats. INTEA B och NORION saknas fortfarande.
+
+  Därefter kör det
   `/sammanfatta-veckan` för förra veckan med den fristående Claude Code-CLI:n, med Opus (`-Model`), i läget `dontAsk`
   och med en uttömmande lista över tillåtna verktyg. Rapportutfallen körs med Sonnet.
 

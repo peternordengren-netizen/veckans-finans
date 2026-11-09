@@ -320,12 +320,24 @@ def build(today: date, now: datetime, instruments: dict[str, Instrument], raw_di
     }
 
 
-def _prune_morning_raw(today: date) -> None:
-    """Rensar data/morning/raw/ från veckor äldre än KEEP_RAW_WEEKS."""
+def _prune_morning_raw(today: date, morning_raw: Path | None = None, complete=None) -> list[str]:
+    """Rensar data/morning/raw/ från veckor äldre än KEEP_RAW_WEEKS. Först kopieras veckans poster som bara finns
+    lokalt till rådatarepot (merge_morning_raw.complete); misslyckas det står veckan kvar och felet returneras.
+    (Vecka 43 rensades 2026-11-09 med tre rapporttexter som bara fanns här.)"""
+    morning_raw = morning_raw or MORNING_RAW
+    if complete is None:
+        from merge_morning_raw import complete
     keep = {_iso_week(today - timedelta(weeks=i)) for i in range(KEEP_RAW_WEEKS)}
-    for p in MORNING_RAW.glob("*-W*"):
+    errors = []
+    for p in sorted(morning_raw.glob("*-W*")):
         if p.is_dir() and re.fullmatch(r"\d{4}-W\d{2}", p.name) and p.name not in keep:
+            ok, msg, _ = complete(p.name, morning_raw=morning_raw)
+            print(f"[rensning] {msg}")
+            if not ok:
+                errors.append(f"rensning: {p.name} står kvar i data/morning/raw, kopian till rådatarepot misslyckades: {msg}")
+                continue
             shutil.rmtree(p)
+    return errors
 
 
 FETCH_FAILED = "fetch.py: alla källor fallerade"
@@ -354,7 +366,7 @@ def fetch_local(today: date) -> list[str]:
         print(f"[blankning] säkerhetskopia: {msg}")
         if not ok:
             errors.append(f"blankning: säkerhetskopian till data/raw misslyckades: {msg}")
-    _prune_morning_raw(today)
+    errors += _prune_morning_raw(today)
     return errors
 
 
