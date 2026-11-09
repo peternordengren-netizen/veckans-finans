@@ -86,8 +86,12 @@ export interface SwingRow {
   report_verdict: string | null;
   short_pct: number | null;
   /** Pullback i trend (scripts/pullback.py): tillståndet och nivåerna vid träff; saknas i äldre filer.
-   *  bollinger: läget mot Bollingerbanden, gårdagens stängning eller (checked_at satt) senaste kontrollen i dag. */
-  pullback?: { state: PullbackState | null; levels: PullbackLevels | null; bollinger?: PullbackBollinger; rank?: PullbackRank };
+   *  bollinger: läget mot Bollingerbanden, gårdagens stängning eller (checked_at satt) senaste kontrollen i dag.
+   *  today: status i dag ur senaste Bollingerkontrollen (saknas före dagens första kontroll). */
+  pullback?: {
+    state: PullbackState | null; levels: PullbackLevels | null; bollinger?: PullbackBollinger; rank?: PullbackRank;
+    today?: PullbackToday;
+  };
   /** Senaste korsningen mellan 50 och 200 dagars MA de senaste 10 dagarna, och dagar sedan (saknas i äldre filer). */
   ma_cross?: "golden" | "death" | null;
   ma_cross_days?: number | null;
@@ -158,6 +162,22 @@ export interface PullbackRank {
   score: number;
   criteria: Record<string, boolean>;
   measures: { signal: boolean; room_r: number | null; has_resistance: boolean; support_atr: number | null; upper_r: number | null; stop_atr: number | null; ma50_change_pct: number | null };
+}
+/** Status i dag för en pullback-kandidat (scripts/bollinger.py day_status), vid kontrollen checked_at. */
+export interface PullbackToday {
+  high: number;
+  low: number;
+  /** Senaste kursen vid kontrollen (fördröjd ca 15 minuter). */
+  price: number;
+  /** Gårdagens high. */
+  trigger: number;
+  ref: number;
+  stop: number;
+  ma50: number;
+  status: "waiting" | "triggered" | "late" | "below_stop" | "below_ma50";
+  /** Kontrollen där dagens high först låg över triggernivån, eller null. */
+  trigger_seen_at: string | null;
+  checked_at: string;
 }
 /** En pullback-kandidats läge mot Bollingerbanden (scripts/bollinger.py position). */
 export interface PullbackBollinger {
@@ -284,8 +304,15 @@ export function loadLatestSwing(): SwingView | null {
     const rows = raw.companies.map((c) => {
       const r = live.get(c.ticker);
       if (!r || !c.pullback?.levels || !check) return c;
-      const { ticker: _t, name: _n, ...pos } = r;
-      return { ...c, pullback: { ...c.pullback, bollinger: { ...pos, checked_at: check.checked_at } } };
+      const { ticker: _t, name: _n, today, ...pos } = r;
+      return {
+        ...c,
+        pullback: {
+          ...c.pullback,
+          bollinger: { ...pos, checked_at: check.checked_at },
+          ...(today ? { today: { ...today, checked_at: check.checked_at } } : {}),
+        },
+      };
     });
     return {
       date: raw.date,
@@ -906,7 +933,15 @@ export interface BollingerCheck {
   over: BollingerRow[];
   near: BollingerRow[];
   /** Pullback-kandidaterna i dagens swingfil, med kursen mot båda banden (saknas i äldre filer, null utan swingfil). */
-  pullback?: { swing_date: string; candidates: number; rows: (PullbackBollinger & { ticker: string; name: string })[] } | null;
+  pullback?: {
+    swing_date: string;
+    candidates: number;
+    rows: (PullbackBollinger & { ticker: string; name: string; today?: Omit<PullbackToday, "checked_at"> | null })[];
+    /** Föregående kontroll samma dag, ändringarna sedan dess och notisens text (saknas i äldre filer). */
+    status_since?: string | null;
+    changes?: { ticker: string; name: string; from: string | null; to: string }[];
+    notice?: string;
+  } | null;
 }
 
 /** Senaste Bollingerkontrollen (data/bollinger/<datum>-<hhmm>.json, scripts/bollinger.py), eller null. */

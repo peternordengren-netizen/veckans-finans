@@ -132,3 +132,94 @@ def test_etiketten_i_swing():
     assert "bollinger-ovre" not in swing.technical_labels(m2)
     old = {k: v for k, v in m.items() if k != "bb_upper_pct"}  # äldre filer saknar måttet
     assert "bollinger-ovre" not in swing.technical_labels(old)
+
+
+# --- Status i dag för pullback-kandidaterna --------------------------------------------
+
+
+def test_status_i_dag_i_prioritetsordning():
+    """Trigger 100 (gårdagens high), referens 100, stopp 98 (R = 2), 50 MA 97."""
+    s = lambda high, low, price: bollinger.day_status(high, low, price, 100.0, 100.0, 98.0, 97.0)  # noqa: E731
+    assert s(99.5, 98.5, 99.0) == "waiting"
+    assert s(100.0, 98.5, 99.0) == "waiting"  # high på triggernivån: inte över
+    assert s(100.5, 98.5, 100.2) == "triggered"
+    assert s(102.5, 99.0, 102.1) == "late"  # över 100 + 1 R
+    assert s(102.5, 99.0, 102.0) == "triggered"  # exakt 1 R över: inte mer än
+    assert s(100.5, 97.5, 99.0) == "below_stop"  # low under stoppet går före allt annat
+    bm = bollinger.day_status(100.5, 98.5, 96.9, 100.0, 100.0, 95.0, 97.0)
+    assert bm == "below_ma50"
+    assert set(bollinger.TODAY_STATUS) == {"waiting", "triggered", "late", "below_stop", "below_ma50"}
+    for text in bollinger.TODAY_STATUS.values():  # beskrivande, inga uppmaningar
+        assert not any(w in text.lower() for w in ("köp", "sälj", "kursmål"))
+
+
+def pb_status_company(ticker, name, high, ref, stop, ma50):
+    return {"ticker": ticker, "name": name, "labels": ["rekyl-i-trend"],
+            "pullback": {"state": {"high": high, "ma50": ma50}, "levels": {"ref": ref, "stop": stop}}}
+
+
+def day_series(closes, high, low, end=TODAY):
+    """Pendlande stängningar och en sista dag (i dag) med eget high och low."""
+    bars = series(closes, end)
+    last = bars[-1]
+    return bars[:-1] + [Bar(last.day, last.close, last.close, high, low, 1000.0)]
+
+
+def test_status_i_dag_och_andringar_sedan_foregaende_kontroll(tmp_path):
+    swing_file = {
+        "date": TODAY.isoformat(),
+        "strategies": {"pullback": {"name": "Pullback i trend", "labels": ["rekyl-i-trend", "rekyl-vandsignal"]}},
+        "companies": [
+            pb_status_company("ALFA", "Alfaverken", 101.5, 101.0, 100.0, 99.0),
+            pb_status_company("BETA", "Betabolaget", 101.5, 101.0, 100.0, 99.0),
+            pb_status_company("GAMMA", "Gammagruppen", 101.5, 101.0, 100.0, 99.0),
+        ],
+    }
+    first = {"ALFA.ST": day_series(BASE[1:] + [101.0], 101.2, 100.5),   # väntar
+             "BETA.ST": day_series(BASE[1:] + [101.8], 102.0, 100.6),   # trigger bruten
+             "GAMMA.ST": day_series(BASE[1:] + [101.0], 101.2, 100.5)}  # väntar
+    data1 = bollinger.check(TODAY, NOW, INSTRUMENTS, lambda *a: first, swing_file)
+    t1 = {r["ticker"]: r["today"] for r in data1["pullback"]["rows"]}
+    assert t1["ALFA"]["status"] == "waiting" and t1["ALFA"]["trigger_seen_at"] is None
+    assert t1["BETA"]["status"] == "triggered" and t1["BETA"]["trigger_seen_at"] == NOW.isoformat(timespec="seconds")
+    # Dagens första kontroll: ändringar sedan morgonen (alla väntande innan).
+    assert data1["pullback"]["status_since"] is None
+    assert data1["pullback"]["changes"] == [{"ticker": "BETA", "name": "Betabolaget", "from": "waiting", "to": "triggered"}]
+    assert data1["pullback"]["notice"] == "Status i dag, ändringar sedan morgonen: Betabolaget väntar på trigger → trigger bruten."
+    assert bollinger.validate(data1) == []
+
+    # 13:20: Alfaverken under stoppet, Betabolaget mer än 1 R över (tiden för triggern står kvar från 09:20).
+    later = datetime(2026, 11, 4, 13, 20, tzinfo=TZ)
+    second = {"ALFA.ST": day_series(BASE[1:] + [100.2], 101.2, 99.8),
+              "BETA.ST": day_series(BASE[1:] + [102.8], 103.0, 100.6),
+              "GAMMA.ST": day_series(BASE[1:] + [101.0], 101.2, 100.5)}
+    data2 = bollinger.check(TODAY, later, INSTRUMENTS, lambda *a: second, swing_file, previous=data1)
+    t2 = {r["ticker"]: r["today"] for r in data2["pullback"]["rows"]}
+    assert t2["ALFA"]["status"] == "below_stop"
+    assert t2["BETA"]["status"] == "late" and t2["BETA"]["trigger_seen_at"] == NOW.isoformat(timespec="seconds")
+    assert data2["pullback"]["status_since"] == data1["checked_at"]
+    assert [(c["ticker"], c["from"], c["to"]) for c in data2["pullback"]["changes"]] == [
+        ("ALFA", "waiting", "below_stop"), ("BETA", "triggered", "late")]
+    assert data2["pullback"]["notice"].startswith("Status i dag, ändringar sedan kl. 09:20: Alfaverken väntar på trigger → ogiltig: under stopp; ")
+    assert bollinger.validate(data2) == []
+    # Inga ändringar.
+    data3 = bollinger.check(TODAY, later, INSTRUMENTS, lambda *a: second, swing_file, previous=data2)
+    assert data3["pullback"]["changes"] == [] and data3["pullback"]["notice"] == "Status i dag: inga ändringar sedan kl. 13:20."
+    # Valideringen räknar om statusen.
+    bad = data2["pullback"]["rows"][0]["today"]
+    bad["status"] = "waiting"
+    assert any("stämmer inte med dagens kurser" in e for e in bollinger.validate(data2))
+
+    # Föregående kontroll ur katalogen: senaste filen samma dag före klockslaget.
+    import json
+    (tmp_path / f"{TODAY}-0920.json").write_text(json.dumps(data1), encoding="utf-8")
+    (tmp_path / f"{TODAY}-1320.json").write_text(json.dumps(data2), encoding="utf-8")
+    assert bollinger.load_previous(TODAY, later, tmp_path)["checked_at"] == data1["checked_at"]
+    assert bollinger.load_previous(TODAY, NOW, tmp_path) is None
+    assert bollinger.load_previous(TODAY, datetime(2026, 11, 4, 15, 0, tzinfo=TZ), tmp_path)["checked_at"] == later.isoformat(timespec="seconds")
+
+
+def test_notisen_kortar_langa_listor():
+    changes = [{"ticker": f"T{i}", "name": f"Bolag {i}", "from": None, "to": "triggered"} for i in range(10)]
+    text = bollinger.status_notice(changes, None, max_names=8)
+    assert "Bolag 0 trigger bruten" in text and "Bolag 8" not in text and text.endswith(" och 2 till.")

@@ -4,7 +4,8 @@ import { test } from "node:test";
 
 import {
   decidedShareText, isPullbackLabel, labelClass, labelCounts, levelText, netText, priceText, reportText, riskText, shareText,
-  altStopText, missingText, resistanceRText, bollingerSourceText, chipText, pctBText, rankText, rankTitle, rText, signalText, srDistText, srInsideText, srLevelText, upperRText, vsBaseText,
+  altStopText, missingText, resistanceRText, todayInvalid, todayLines, todayOrder, TODAY_STATUS,
+  bollingerSourceText, chipText, pctBText, rankText, rankTitle, rText, signalText, srDistText, srInsideText, srLevelText, upperRText, vsBaseText,
 } from "../src/lib/swing.ts";
 
 test("etiketternas klasser och antal", () => {
@@ -77,6 +78,27 @@ test("ett enda R: motståndet i strategins R och alternativt stopp i procent", (
   assert.equal(resistanceRText(undefined), "–"); // äldre filer utan mätvärden
   assert.equal(altStopText(98.1, 97.35), "alt. stopp under stöd 97,35 (0,8 %)");
   assert.equal(altStopText(98.1, null), null);
+});
+
+test("status i dag för pullback-kandidaterna", () => {
+  const base = { high: 98.5, low: 96.8, price: 98.2, trigger_seen_at: null, checked_at: "2026-11-09T13:20:02+01:00" };
+  const w = todayLines({ ...base, status: "waiting" });
+  assert.equal(w.main, "Väntar på trigger");
+  assert.equal(w.seen, null);
+  assert.equal(w.prices, "high 98,50 · low 96,80 · senast 98,20 · kl. 13:20");
+  const t = todayLines({ ...base, status: "triggered", trigger_seen_at: "2026-11-09T09:20:05+01:00" });
+  assert.equal(t.main, "Trigger bruten");
+  assert.equal(t.seen, "trigger sedd kl. 09:20");
+  assert.equal(todayLines({ ...base, status: "late", trigger_seen_at: "2026-11-09T09:20:05+01:00" }).main, "Sen: mer än 1R över trigger");
+  const inv = todayLines({ ...base, status: "below_stop", trigger_seen_at: "2026-11-09T09:20:05+01:00" });
+  assert.equal(inv.main, "Ogiltig: under stopp");
+  assert.equal(inv.seen, null); // ogiltig: ingen tid för triggern
+  assert.equal(todayLines({ ...base, status: "below_ma50" }).main, "Ogiltig: under 50 MA");
+  assert.ok(todayInvalid("below_stop") && todayInvalid("below_ma50"));
+  assert.ok(!todayInvalid("late") && !todayInvalid(undefined));
+  assert.deepEqual(["waiting", "triggered", "late", "below_ma50", "below_stop"].map(todayOrder), [0, 1, 2, 3, 4]);
+  assert.equal(todayOrder(null), null);
+  for (const text of Object.values(TODAY_STATUS)) assert.ok(!/köp|sälj|kursmål/i.test(text));
 });
 
 test("bolag som saknas i Swing", () => {

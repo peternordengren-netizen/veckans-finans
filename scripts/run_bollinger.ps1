@@ -7,8 +7,9 @@
 #   avstängd inte visar en kontroll utanför handelstid.
 # - Notisen listar bolagen vid eller över det övre bandet och, separat, de inom 1 % under det, och säger att
 #   kurserna är fördröjda ca 15 minuter. Ett eget avsnitt listar pullback-kandidaterna (strategin Pullback i
-#   trend i fliken Swing) vid eller över övre bandet, med avståndet dit i R. Ett klick öppnar sidan.
-# - Bygget uppdaterar kolumnen "Bollinger" i fliken Swing med kontrollens kurser och tid.
+#   trend i fliken Swing) vid eller över övre bandet, med avståndet dit i R, och kandidaternas ändrade
+#   "Status i dag" sedan föregående kontroll (väntar på trigger, trigger bruten, sen, ogiltig). Ett klick öppnar sidan.
+# - Bygget uppdaterar kolumnerna "Bollinger" och "Status i dag" i fliken Swing med kontrollens kurser och tid.
 # - Logg i logs/bollinger/<datum>.log.
 #
 # Manuellt: powershell -NoProfile -File scripts\run_bollinger.ps1
@@ -79,8 +80,10 @@ $pbText = if ($null -eq $data.pullback) { "Pullback-kandidater: ingen swingfil f
     $list = if ($names.Count -eq 0) { "inga" } else { $names -join ", " }
     "Pullback-kandidater vid övre bandet: $list (av $($data.pullback.candidates))."
 }
+# Status i dag för pullback-kandidaterna: ändringarna sedan föregående kontroll (bollinger.py status_notice).
+$statusText = if ($null -ne $data.pullback -and $data.pullback.notice) { "$($data.pullback.notice) " } else { "" }
 $foot = $data.delay_note
-Log "Notis: $over | $near | $pbText"
+Log "Notis: $over | $near | $statusText$pbText"
 
 try {
     [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
@@ -91,7 +94,7 @@ try {
     <binding template="ToastGeneric">
       <text>$(Esc $title)</text>
       <text>$(Esc "$over. $near.")</text>
-      <text>$(Esc "$pbText $foot")</text>
+      <text>$(Esc "$statusText$pbText $foot")</text>
     </binding>
   </visual>
 </toast>

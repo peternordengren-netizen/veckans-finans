@@ -160,6 +160,38 @@ export function missingText(m: { reason: string; bars: number }): string {
   return m.reason === "no_data" ? "Yahoo saknar kursdata" : `för kort kurshistorik (${m.bars} handelsdagar)`;
 }
 
+/** Status i dag för en pullback-kandidat (scripts/bollinger.py TODAY_STATUS). Beskrivande, inga uppmaningar. */
+export const TODAY_STATUS: Record<string, string> = {
+  waiting: "Väntar på trigger",
+  triggered: "Trigger bruten",
+  late: "Sen: mer än 1R över trigger",
+  below_ma50: "Ogiltig: under 50 MA",
+  below_stop: "Ogiltig: under stopp",
+};
+
+/** Ogiltig i dag (under stoppet eller 50 MA): sorteras sist i strategin. */
+export function todayInvalid(status: string | null | undefined): boolean {
+  return status === "below_stop" || status === "below_ma50";
+}
+
+/** Sorteringsvärde för kolumnen Status i dag: väntar 0, trigger bruten 1, sen 2, under 50 MA 3, under stopp 4. */
+export function todayOrder(status: string | null | undefined): number | null {
+  const i = status ? Object.keys(TODAY_STATUS).indexOf(status) : -1;
+  return i < 0 ? null : i;
+}
+
+/** Cellens rader: statusen, tiden då triggern först sågs ("trigger sedd kl. 09:20"), och dagens kurser. */
+export function todayLines(t: { status: string; trigger_seen_at: string | null; high: number; low: number; price: number; checked_at: string }): {
+  main: string; seen: string | null; prices: string;
+} {
+  return {
+    main: TODAY_STATUS[t.status] ?? t.status,
+    seen: t.trigger_seen_at && t.status !== "below_stop" && t.status !== "below_ma50"
+      ? `trigger sedd ${bollingerSourceText(t.trigger_seen_at)}` : null,
+    prices: `high ${priceText(t.high)} · low ${priceText(t.low)} · senast ${priceText(t.price)} · ${bollingerSourceText(t.checked_at)}`,
+  };
+}
+
 /** Läget mellan Bollingerbanden (%B, 0 = undre bandet, 1 = övre): "%B 0,75"; "–" utan värde. */
 export function pctBText(b: number | null | undefined): string {
   return b === null || b === undefined

@@ -9,7 +9,8 @@ import { shortDate } from "../lib/format";
 import { signedPct } from "../lib/signals";
 import {
   MIN_CASES, altStopText, decidedShareText, labelClass, labelCounts, levelText, missingText, netText, priceText,
-  reportText, resistanceRText, riskText, shareText, bollingerSourceText, chipText, pctBText, signalText, rankText, rankTitle, srDistText, srInsideText, srKindText, srLevelText, upperRText, vsBaseText,
+  reportText, resistanceRText, riskText, shareText, bollingerSourceText, chipText, pctBText, signalText,
+  TODAY_STATUS, todayInvalid, todayLines, todayOrder, rankText, rankTitle, srDistText, srInsideText, srKindText, srLevelText, upperRText, vsBaseText,
 } from "../lib/swing";
 
 interface Props {
@@ -49,6 +50,7 @@ const columns = [
   { key: "resistance", label: "Närmaste motstånd", type: "num", title: "Närmaste motstånd över gårdagens stängning och avståndet dit" },
   // Strategin Pullback i trend: visas bara när strategin är vald i rullistan.
   { key: "pb-rank", label: "Rang", type: "num", pb: true, title: "Flest uppfyllda kriterier först (1–5 för de fem med flest, med antalet kriterier); vid lika antal mest utrymme till motståndet i R. Ingen värdering eller rekommendation" },
+  { key: "pb-today", label: "Status i dag", type: "num", pb: true, title: "Dagens high, low och senaste kurs mot triggernivån (gårdagens high), stoppet och 50 MA, vid Bollingerkontrollerna 09:20 och 13:20. Kurserna är fördröjda ca 15 minuter. Ogiltiga kandidater sorteras sist" },
   { key: "pb-entry", label: "Ingång", type: "num", pb: true, title: "Vändsignal och nivån rekylen nådde; triggernivån (gårdagens high) vid vändsignal, annars gårdagens stängning som referens. Sorteras på nivån" },
   { key: "pb-stop", label: "Stopp", type: "num", pb: true, title: "Stoppnivån och avståndet dit (1 R) i procent och ATR(14); stoppet under närmaste stöd som alternativ stoppnivå i procent. Sorteras på avståndet i procent" },
   { key: "pb-target", label: "Mål", type: "num", pb: true, title: "Föregående topp, 2R och 3R, övre Bollingerbandet (⚠ = kursen vid eller över) och närmaste motstånd i R (samma R som stoppet). Sorteras på avståndet till övre bandet i R" },
@@ -227,6 +229,24 @@ const rankHist = pbHist?.ranking ?? null;
               kurser) och visar kontrollens tid i cellen.
             </li>
             <li>
+              <strong>Status i dag</strong> uppdateras vid Bollingerkontrollerna 09:20 och 13:20, med samma hämtning:
+              dagens high, low och senaste kurs (fördröjda ca 15 minuter) mot triggernivån (gårdagens high), strategins
+              stopp och 50 dagars MA. I den här ordningen:
+              <ul>
+                <li><em>{TODAY_STATUS.below_stop}:</em> dagens low under stoppet.</li>
+                <li><em>{TODAY_STATUS.below_ma50}:</em> senaste kursen under 50 dagars MA.</li>
+                <li><em>{TODAY_STATUS.late}:</em> senaste kursen över triggernivån plus 1 R.</li>
+                <li>
+                  <em>{TODAY_STATUS.triggered}:</em> dagens high över triggernivån, med tiden för kontrollen där det syntes
+                  första gången (den exakta tiden är okänd).
+                </li>
+                <li><em>{TODAY_STATUS.waiting}:</em> dagens high högst triggernivån.</li>
+              </ul>
+              Dagens high och low gäller hela dagen, så en bruten trigger och ett underskridet stopp står kvar. Ogiltiga
+              kandidater sorteras sist. Före 09:20 står "–". Windows-notisen vid varje kontroll listar ändringarna sedan
+              föregående kontroll.
+            </li>
+            <li>
               <strong>Historiken</strong> under tabellen följer varje sådan dag det senaste året, ett fall i taget per bolag.
               Fallet startar på nästa dags öppning; vid vändsignal i stället när triggernivån nås inom {pt.trigger_days}
               {" "}handelsdagar, annars räknas det som ej utlöst. Det avgörs när 2R eller stoppet nås. Nås båda samma dag räknas
@@ -267,7 +287,7 @@ const rankHist = pbHist?.ranking ?? null;
     </label>
     <span class="shown" data-shown aria-live="polite">Visar alla {swing.rows.length} bolag</span>
     <span class="bb-note">
-      Bollinger: {bbCheck ? `senaste kontrollen ${bollingerSourceText(bbCheck.checked_at)}. ${bbCheck.delay_note}` : "gårdagens stängning (ingen kontroll i dag än)."}
+      Bollinger och status i dag: {bbCheck ? `senaste kontrollen ${bollingerSourceText(bbCheck.checked_at)}. ${bbCheck.delay_note}` : "gårdagens stängning, ingen kontroll i dag än (09:20 och 13:20). Kurserna är fördröjda ca 15 minuter."}
     </span>
   </div>
 
@@ -318,7 +338,10 @@ const rankHist = pbHist?.ranking ?? null;
         <tbody>
           {
             swing.rows.map((r) => (
-              <tr data-labels={r.labels.join(" ")}>
+              <tr
+                data-labels={r.labels.join(" ")}
+                data-pb-invalid={r.labels.some((l) => pbLabels.includes(l)) && todayInvalid(r.pullback?.today?.status) ? "1" : undefined}
+              >
                 <th scope="row" data-v={r.name}>
                   <span class="name">{r.name}</span> <span class="ticker">{r.ticker}</span>
                 </th>
@@ -367,6 +390,8 @@ const rankHist = pbHist?.ranking ?? null;
                   const srStop = lv && r.sr?.stop != null ? r.sr.stop : null;
                   const rk = lv ? (r.pullback?.rank ?? null) : null;
                   const rt = rk ? rankText(rk.rank, rk.score, Object.keys(swing.rankingCriteria).length, rankTop) : null;
+                  const td = lv ? (r.pullback?.today ?? null) : null;
+                  const tl = td ? todayLines(td) : null;
                   return (
                     <>
                       <td
@@ -378,6 +403,19 @@ const rankHist = pbHist?.ranking ?? null;
                           <>
                             <span class="line">{rt.main}</span>
                             <span class="sub">{rt.sub}</span>
+                          </>
+                        ) : "–"}
+                      </td>
+                      <td
+                        class:list={["num col-pb pb today", td && `today-${td.status}`]}
+                        data-v={v(td ? todayOrder(td.status) : null)}
+                        title={lv && !td ? "Ingen kontroll i dag än (09:20 och 13:20)" : undefined}
+                      >
+                        {tl ? (
+                          <>
+                            <span class="line">{tl.main}</span>
+                            {tl.seen && <span class="sub">{tl.seen}</span>}
+                            <span class="sub">{tl.prices}</span>
                           </>
                         ) : "–"}
                       </td>
@@ -614,17 +652,20 @@ const rankHist = pbHist?.ranking ?? null;
       // Med strategin vald sorteras tabellen på rang (flest kriterier först) som standard. Cellerna har −rang,
       // så fallande ordning ger rang 1 först.
       const rankTh = root.querySelector<HTMLElement>('thead th[data-key="pb-rank"]');
+      // Klicket görs alltid (två gånger om rangen redan var sorterad), så att ogiltiga kandidater hamnar sist.
       if (strategy && rankTh) {
-        while (rankTh.getAttribute("aria-sort") !== "descending") rankTh.querySelector("button")?.click();
+        do rankTh.querySelector("button")?.click();
+        while (rankTh.getAttribute("aria-sort") !== "descending");
       }
       shown.textContent = want === "" ? `Visar alla ${rows.length} bolag` : `Visar ${n} av ${rows.length} bolag`;
       // Kolumnerna ändrades: den fasta rubrikraden räknar om sina bredder vid resize.
       window.dispatchEvent(new Event("resize"));
     };
     select.addEventListener("change", applyFilter);
+    // Med strategin vald sorteras ogiltiga kandidater (Status i dag) sist, oavsett kolumn.
+    setupSortable(root, undefined, (r) => !!root.dataset.strategy && r.dataset.pbInvalid === "1");
     applyFilter();
     setupFullWidth(root);
-    setupSortable(root);
     setupStickyHeader(root);
   }
 </script>
@@ -825,6 +866,15 @@ const rankHist = pbHist?.ranking ?? null;
     background: var(--banner-bg);
     color: var(--banner-fg);
     border: 1px solid var(--banner-border);
+  }
+  /* Status i dag: ogiltiga dämpade, bruten trigger markerad. */
+  td.today.today-below_stop .line,
+  td.today.today-below_ma50 .line {
+    color: var(--muted);
+  }
+  td.today.today-triggered .line,
+  td.today.today-late .line {
+    font-weight: 600;
   }
   /* Bolag utan rad i tabellen (Yahoo saknar kursdata, för kort historik, avnoterade). */
   .missing-note {

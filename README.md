@@ -577,6 +577,19 @@ Uppgiften **VeckansFinansBollinger** kör vardagar 09:20 och 13:20, utan Claude.
   - ⚠ när kursen är vid eller över övre bandet
 
   Före dagens första kontroll visar kolumnen gårdagens stängning, ur swingfilen (`pullback.bollinger`).
+- **Status i dag** (kolumnen i fliken Swing, `pullback.rows[].today` i kontrollfilen) räknas ur samma hämtning:
+  dagens high, low och senaste kurs mot triggernivån (gårdagens high), strategins stopp och R, och 50 dagars MA.
+  I prioritetsordning:
+  - "Ogiltig: under stopp": dagens low under stoppet
+  - "Ogiltig: under 50 MA": senaste kursen under 50 MA
+  - "Sen: mer än 1R över trigger": senaste kursen över triggernivån + 1 R
+  - "Trigger bruten": dagens high över triggernivån, med tiden för kontrollen där det syntes första gången (den
+    exakta tiden är okänd)
+  - "Väntar på trigger": dagens high högst triggernivån
+
+  Ogiltiga kandidater sorteras sist i tabellen, oavsett kolumn. Notisen listar ändringarna sedan föregående kontroll
+  samma dag (vid 09:20 sedan morgonen, då alla räknas som väntande). Valideringen räknar om statusen ur de sparade
+  kurserna. Före 09:20 står "–".
 - Senaste kontrollen visas överst på startsidan, med tid (`data/bollinger/<datum>-<hhmm>.json`, git-ignorerad).
 - Inget körs på börsens stängda dagar eller utanför 09:00–17:30. En missad kontroll tas inte igen senare.
 - Logg i `logs/bollinger/`.

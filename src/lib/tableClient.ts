@@ -9,7 +9,12 @@
  */
 import { compareValues } from "./signals";
 
-export function setupSortable(root: HTMLElement, onSort?: () => void): void {
+export function setupSortable(
+  root: HTMLElement,
+  onSort?: () => void,
+  /** Rader som alltid sorteras sist, oavsett kolumn och riktning (t.ex. ogiltiga kandidater i Swing). */
+  sortLast?: (r: HTMLTableRowElement) => boolean,
+): void {
   const tbody = root.querySelector("tbody")!;
   const rows = Array.from(tbody.querySelectorAll<HTMLTableRowElement>("tr"));
   const headers = Array.from(root.querySelectorAll<HTMLTableCellElement>("thead th"));
@@ -27,7 +32,9 @@ export function setupSortable(root: HTMLElement, onSort?: () => void): void {
       };
       // Lika värden ordnas efter bolagsnamn, så att ordningen alltid blir densamma.
       const name = (r: HTMLTableRowElement) => (r.children[0] as HTMLElement).dataset.v ?? "";
-      rows.sort((a, b) => compareValues(value(a), value(b), ascending) || compareValues(name(a), name(b), true));
+      const last = (r: HTMLTableRowElement) => (sortLast?.(r) ? 1 : 0);
+      rows.sort((a, b) => last(a) - last(b) || compareValues(value(a), value(b), ascending)
+        || compareValues(name(a), name(b), true));
       tbody.append(...rows);
       onSort?.();
     });
