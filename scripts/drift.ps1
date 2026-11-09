@@ -27,6 +27,8 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+# Git skriver commitrubrikerna (å, ä, ö) i UTF-8; utan detta blir de fel i logs\drift.log.
+[Console]::OutputEncoding = [Text.Encoding]::UTF8
 $Root = Split-Path -Parent $PSScriptRoot
 # Bara i driftkopian: där är .git en fil (worktree), i arbetskopian en mapp.
 if (-not (Test-Path (Join-Path $Root ".git") -PathType Leaf)) {
