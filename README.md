@@ -641,7 +641,25 @@ npm run preview       # visa dist/ lokalt
 
 ### Automatiskt (schemalagda uppgifter)
 
-Skapas med `powershell -NoProfile -File scripts\install_tasks.ps1`:
+**Driftkopian.** Alla schemalagda uppgifter och genvägen "Uppdatera nu" kör från en separat kopia av repot,
+`veckans-finans-drift` bredvid arbetskopian. Det är en git worktree med `origin/main`, och arbetskopian används aldrig
+av dem. Bakgrund: 6 och 9/11 2026 körde morgonen halvfärdig kod ur arbetskopian.
+- **Före varje körning** hämtar `scripts\drift.ps1` senaste main från GitHub och checkar ut den i driftkopian. Bara
+  det som är committat och pushat körs. Ett lås hindrar att två uppgifter uppdaterar samtidigt. Går GitHub inte att
+  nå körs befintlig version, med en varning i `logs\drift.log`. Loggen visar vilken commit varje körning använde.
+- **Delad data:** katalogkopplingar (junctions) från driftkopian till arbetskopian, så att sidan och körningarna ser
+  samma data. Det gäller datamapparna som inte ligger i git (`data\raw`, `weeks`, `morning`, `results`, `swing` med
+  flera) samt `logs`, `.venv` och `node_modules`.
+- **Spårad data** (`instruments.csv`, `sectors.json` med flera) kommer från main och gäller för körningarna först när
+  den pushats.
+- **FI-filer** som laddas ner för hand sparas som förut i arbetskopians `data\fi_manual`. Driftkopian läser dem
+  därifrån (`VF_FI_MANUAL_DIR`).
+- **Sidan:** servern (VeckansFinansServer) serverar driftkopians `dist\`. Ett bygge i arbetskopian påverkar inte
+  sidan.
+- **Uppsättning:** kör `powershell -NoProfile -File scripts\setup_drift.ps1` och sedan `scripts\install_tasks.ps1`,
+  båda från arbetskopian. De går att köra om.
+
+Uppgifterna skapas med `powershell -NoProfile -File scripts\install_tasks.ps1`:
 
 - **VeckansFinansServer** startar `scripts/serve.ps1` dolt vid inloggning. Sidan finns på
   http://localhost:4321/veckans-finans/. Utskrifterna hamnar i `logs/server.log`. Om Node kraschar startar

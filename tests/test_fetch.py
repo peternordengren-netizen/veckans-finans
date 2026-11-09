@@ -208,6 +208,36 @@ def cision_company_item(guid, title, pub, slug="alfaverken-inc"):
       <pubDate>{pub}</pubDate></item>"""
 
 
+def test_utan_mfn_hoppar_over_bara_mfn(tmp_path):
+    calls = []
+
+    def get(url):
+        calls.append(url)
+        return fake_get({fetch.MFN_URL: mfn_feed(), fetch.CISION_URL: cision_feed(), fetch.RIKSBANK_URL: RIKSBANK,
+                         fetch.RIKSBANK_RSS_URL: RIKSBANK_RSS})(url)
+
+    assert fetch.main(["--raw-dir", str(tmp_path), "--utan-mfn"], get=get, now=NOW) == 0
+    assert not any("mfn.se" in u for u in calls) and any("cision" in u for u in calls)
+    run = read_index(tmp_path, "2026-W40")["runs"][-1]["sources"]
+    assert "mfn" not in run and "cision" in run
+
+
+def test_mfn_anrop_per_dygn_ur_korningsloggarna(tmp_path):
+    import mfn_calls
+
+    for label, runs in (("raw", ["2026-11-09T01:17:00+01:00", "2026-11-09T05:17:00+01:00"]),
+                        ("morning", ["2026-11-09T08:10:00+01:00"])):
+        p = tmp_path / label / "2026-W46" / "index.json"
+        p.parent.mkdir(parents=True)
+        entries = [{"time": t, "sources": {"mfn": {"status": "ok"}, "cision": {"status": "ok"}}} for t in runs]
+        entries.append({"time": "2026-11-09T03:17:00+01:00", "sources": {"cision": {"status": "ok"}}})  # utan MFN
+        p.write_text(json.dumps({"runs": entries}), encoding="utf-8")
+    counts = mfn_calls.count({"Actions": tmp_path / "raw", "lokalt": tmp_path / "morning"})
+    c = counts[date(2026, 11, 9)]
+    assert (c["Actions"], c["lokalt"]) == (2, 1)
+    assert mfn_calls.line(date(2026, 11, 9), c) == "MFN-anrop 2026-11-09: 3 (Actions 2, lokalt 1)"
+
+
 def test_bolagens_egna_cision_floden_ur_instruments_csv(tmp_path, monkeypatch):
     csv_path = tmp_path / "instruments.csv"
     csv_path.write_text(

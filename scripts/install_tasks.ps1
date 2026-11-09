@@ -20,18 +20,27 @@
 # Alla körs som den inloggade användaren, bara när hen är inloggad, utan förhöjd behörighet.
 # - Skrivbordsgenvägen "Veckans finans" kör scripts\open_site.ps1 dolt.
 #
-# Körs manuellt: powershell -NoProfile -File scripts\install_tasks.ps1
+# Alla uppgifter och "Uppdatera nu" kör från driftkopian (<arbetskopian>-drift) via scripts\drift.ps1, som först
+# uppdaterar den till senaste main från GitHub; skripten ovan är driftkopians. Ändringar i arbetskopian körs alltså
+# först när de är pushade. Driftkopian och dess kopplingar till datamapparna skapas av scripts\setup_drift.ps1.
+#
+# Körs manuellt från arbetskopian (efter setup_drift.ps1): powershell -NoProfile -File scripts\install_tasks.ps1
 
 $ErrorActionPreference = "Stop"
-$Root = Split-Path -Parent $PSScriptRoot
+$Main = Split-Path -Parent $PSScriptRoot
+# Uppgifterna och genvägen "Uppdatera nu" kör från driftkopian via scripts\drift.ps1, som först uppdaterar den till
+# senaste main från GitHub. Arbetskopian ($Main) används aldrig av dem. Driftkopian skapas av setup_drift.ps1.
+$Root = "$Main-drift"
+if (-not (Test-Path (Join-Path $Root "scripts\drift.ps1"))) { throw "Driftkopian saknas ($Root): kör scripts\setup_drift.ps1 först." }
+$Drift = Join-Path $Root "scripts\drift.ps1"
 $Conhost = Join-Path $env:WINDIR "System32\conhost.exe"
 $Ps = Join-Path $env:WINDIR "System32\WindowsPowerShell\v1.0\powershell.exe"
 $User = "$env:USERDOMAIN\$env:USERNAME"
 $Principal = New-ScheduledTaskPrincipal -UserId $User -LogonType Interactive -RunLevel Limited
 
-function HiddenAction([string]$Script) {
+function HiddenAction([string]$Script, [string]$ScriptArgs = "") {
     New-ScheduledTaskAction -Execute $Conhost -WorkingDirectory $Root `
-        -Argument "--headless `"$Ps`" -NoProfile -File `"$(Join-Path $Root $Script)`""
+        -Argument "--headless `"$Ps`" -NoProfile -ExecutionPolicy Bypass -File `"$Drift`" -Script $Script $ScriptArgs"
 }
 
 $serverSettings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) `
@@ -95,8 +104,8 @@ $afternoon.StartBoundary = (Get-Date "17:45").ToString("yyyy-MM-dd'T'HH:mm:ss")
 $afternoonSettings = New-ScheduledTaskSettingsSet -WakeToRun -StartWhenAvailable `
     -ExecutionTimeLimit (New-TimeSpan -Hours 1) -MultipleInstances IgnoreNew `
     -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
-$afternoonAction = New-ScheduledTaskAction -Execute $Conhost -WorkingDirectory $Root `
-    -Argument "--headless `"$Ps`" -NoProfile -File `"$(Join-Path $Root 'scripts\run_update.ps1')`" -Scheduled"
+$afternoonAction = HiddenAction "scripts\run_update.ps1" "-Scheduled"
+
 Register-ScheduledTask -TaskName "VeckansFinansEftermiddag" -Force `
     -Description "Veckans finans: eftermiddagsuppdatering (rapportutfall sedan morgonen med Claude Code om det finns nya rapporter, dagens kursreaktion), bygger sedan om sidan. Loggar i logs\updates\." `
     -Action $afternoonAction -Trigger @($afternoon, $atLogon, $atUnlock) `
@@ -112,8 +121,8 @@ $bbMidday.StartBoundary = (Get-Date "13:20").ToString("yyyy-MM-dd'T'HH:mm:ss")
 $bollingerSettings = New-ScheduledTaskSettingsSet -WakeToRun -StartWhenAvailable `
     -ExecutionTimeLimit (New-TimeSpan -Minutes 15) -MultipleInstances IgnoreNew `
     -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
-$bollingerAction = New-ScheduledTaskAction -Execute $Conhost -WorkingDirectory $Root `
-    -Argument "--headless `"$Ps`" -NoProfile -File `"$(Join-Path $Root 'scripts\run_bollinger.ps1')`" -Scheduled"
+$bollingerAction = HiddenAction "scripts\run_bollinger.ps1" "-Scheduled"
+
 Register-ScheduledTask -TaskName "VeckansFinansBollinger" -Force `
     -Description "Veckans finans: Bollingerkontroll under handelsdagen (bolag vid eller nära övre bandet), Windows-notis och bygget av sidan. Utan Claude. Loggar i logs\bollinger\." `
     -Action $bollingerAction -Trigger @($bbMorning, $bbMidday) `
@@ -123,7 +132,7 @@ $shell = New-Object -ComObject WScript.Shell
 # "Uppdatera nu": samma flöde direkt, i ett synligt fönster så att förloppet syns; öppnar sidan när den är klar.
 $upd = $shell.CreateShortcut((Join-Path ([Environment]::GetFolderPath("Desktop")) "Uppdatera nu.lnk"))
 $upd.TargetPath = $Ps
-$upd.Arguments = "-NoProfile -File `"$(Join-Path $Root 'scripts\run_update.ps1')`" -Open"
+$upd.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$Drift`" -Script scripts\run_update.ps1 -Open"
 $upd.WorkingDirectory = $Root
 $upd.IconLocation = "$env:WINDIR\System32\shell32.dll,238"
 $upd.Description = "Veckans finans: hämta, ta fram nya rapportutfall och dagens kursreaktion, och öppna sidan"

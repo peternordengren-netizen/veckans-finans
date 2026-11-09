@@ -9,9 +9,12 @@ name: Hämta råtext
 
 on:
   schedule:
-    # Varannan timme, dygnet runt (UTC). Minut 17 för att undvika
-    # rusningen vid hel timme i GitHub Actions.
-    - cron: "17 */2 * * *"
+    # Varannan timme, dygnet runt (UTC). Minut 17 för att undvika rusningen vid hel timme i GitHub Actions.
+    # MFN:s RSS bara var fjärde timme (MFN:s robots.txt spärrar "*.rss$"; tills vidare glesare, se fetch.py):
+    # körningarna från det första schemat hämtar MFN, de från det andra hoppar över det (--utan-mfn).
+    # Cision och Riksbanken hämtas vid båda.
+    - cron: "17 */4 * * *"
+    - cron: "17 2-23/4 * * *"
   workflow_dispatch:
 
 permissions:
@@ -51,7 +54,11 @@ jobs:
         id: fetch
         run: |
           set +e
-          python app/scripts/fetch.py --raw-dir raw
+          # Schemat som utlöste körningen avgör, inte klockslaget: en försenad körning ska inte byta grupp.
+          EXTRA=""
+          if [ "${{ github.event.schedule }}" = "17 2-23/4 * * *" ]; then EXTRA="--utan-mfn"; fi
+          echo "MFN: $([ -n "$EXTRA" ] && echo 'hoppas över' || echo 'hämtas') (schema: ${{ github.event.schedule || 'manuell' }})"
+          python app/scripts/fetch.py --raw-dir raw $EXTRA
           echo "code=$?" >> "$GITHUB_OUTPUT"
 
       # Committa alltid, även när alla källor fallerat – då sparas åtminstone

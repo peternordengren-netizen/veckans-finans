@@ -28,8 +28,11 @@ function Register-ClaudeRetry([string]$TaskName, [string]$Script, [string]$Scrip
     $root = Split-Path -Parent $PSScriptRoot
     $conhost = Join-Path $env:WINDIR "System32\conhost.exe"
     $ps = Join-Path $env:WINDIR "System32\WindowsPowerShell\v1.0\powershell.exe"
-    $action = New-ScheduledTaskAction -Execute $conhost -WorkingDirectory $root `
-        -Argument "--headless `"$ps`" -NoProfile -File `"$(Join-Path $root $Script)`" $ScriptArgs"
+    # Via driftkopian (scripts\drift.ps1), som de övriga schemalagda uppgifterna; körs detta i arbetskopian
+    # (för hand) pekar omförsöket ändå på driftkopian.
+    $driftRoot = if ($root -match '-drift$') { $root } else { "$root-drift" }
+    $action = New-ScheduledTaskAction -Execute $conhost -WorkingDirectory $driftRoot `
+        -Argument "--headless `"$ps`" -NoProfile -ExecutionPolicy Bypass -File `"$(Join-Path $driftRoot 'scripts\drift.ps1')`" -Script $Script $ScriptArgs"
     $trigger = New-ScheduledTaskTrigger -Once -At $at
     $trigger.StartBoundary = $at.ToString("yyyy-MM-dd'T'HH:mm:ss")  # lokal tid utan förskjutning
     $trigger.EndBoundary = $at.AddDays(2).ToString("yyyy-MM-dd'T'HH:mm:ss")

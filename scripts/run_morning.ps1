@@ -175,4 +175,7 @@ while ((@(Retry $Report) -contains "kurser") -and (Get-Date).AddMinutes(10) -le 
 if (@(Retry $Report) -contains "kurser") {
     Log "FEL: gårdagens kurser saknas fortfarande - sidan visar dagsdatans datum med en varning."
 }
+# Anrop till MFN:s RSS föregående dygn (Actions och lokalt), ur körningsloggarna (scripts/mfn_calls.py).
+& cmd.exe /c ".venv\Scripts\python.exe scripts\mfn_calls.py --dag $((Get-Date).AddDays(-1).ToString('yyyy-MM-dd')) 2>&1" |
+    ForEach-Object { Log $_ }
 Log "Klart"

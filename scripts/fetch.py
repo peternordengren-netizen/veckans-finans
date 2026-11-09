@@ -52,6 +52,9 @@ STOCKHOLM = ZoneInfo("Europe/Stockholm")
 USER_AGENT = "veckans-finans-fetch/0.1 (+https://github.com/peternordengren-netizen/veckans-finans)"
 TIMEOUT_S = 30
 
+# MFN:s robots.txt (läst 2026-11-09) spärrar "*.rss$". Vår adress slutar på ?limit=… och träffas inte bokstavligt,
+# men hämtningen glesas ut tills vidare: Actions hämtar MFN var fjärde timme (--utan-mfn övriga körningar), plus
+# morgon- och eftermiddagskörningen lokalt. scripts/mfn_calls.py räknar anropen per dygn ur körningsloggarna.
 # Kontrollerade 2026-10-02. MFN:s RSS och limit-parametern är odokumenterade
 # men fungerar; limit=200 täcker ungefär ett dygn. Cisions flöde täcker ungefär
 # 7 timmar och kan inte pagineras – därav körning varannan timme (GitHub hoppar ibland
@@ -699,11 +702,13 @@ def main(argv: list[str] | None = None, get: Callable[[str], bytes] = http_get, 
     parser.add_argument("--raw-dir", type=Path, default=ROOT / "data" / "raw")
     parser.add_argument("--mfn-limit", type=int, default=MFN_LIMIT,
                         help=f"antal poster i MFN:s flöde (standard {MFN_LIMIT}; morgonflödet 500)")
+    parser.add_argument("--utan-mfn", action="store_true",
+                        help="hämta inte MFN:s RSS den här körningen (Actions hämtar MFN bara var fjärde timme)")
     args = parser.parse_args(argv)
 
     now = now or datetime.now(STOCKHOLM)
     sources = [(name, MFN_URL.replace(f"limit={MFN_LIMIT}", f"limit={args.mfn_limit}") if name == "mfn" else url, parse)
-               for name, url, parse in SOURCES]
+               for name, url, parse in SOURCES if not (args.utan_mfn and name == "mfn")]
     sources += cision_company_sources(INSTRUMENTS_CSV)  # läses vid körning (testerna pekar om INSTRUMENTS_CSV)
     result = fetch_all(sources, get=get, today=now.astimezone(STOCKHOLM).date(), known_ids=known_ids(args.raw_dir))
     new = store(result, args.raw_dir, now)

@@ -56,7 +56,8 @@ import urllib.request  # noqa: E402
 FI_TIMEOUT_S = 90
 INSYN_URL = "https://marknadssok.fi.se/Publiceringsklient/sv-SE/Search/Search"
 BLANKNING_PAGE = "https://www.fi.se/sv/vara-register/blankningsregistret/"
-MANUAL_DIR = ROOT / "data" / "fi_manual"
+# Driftkopian (scripts\drift.ps1) pekar hit arbetskopians data\fi_manual, där filerna sparas för hand.
+MANUAL_DIR = Path(os.environ["VF_FI_MANUAL_DIR"]) if os.environ.get("VF_FI_MANUAL_DIR") else ROOT / "data" / "fi_manual"
 # Filnamnen som FI:s knappar ger (webbläsaren kan lägga till " (1)" o.d.).
 MANUAL_FILES = {
     "aktuella": re.compile(r"^aktuella[ _-]?positioner.*\.ods$", re.IGNORECASE),
