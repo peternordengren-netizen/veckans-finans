@@ -73,8 +73,9 @@ $pbText = if ($null -eq $data.pullback) { "Pullback-kandidater: ingen swingfil f
     $hit = @($data.pullback.rows | Where-Object { $_.at_upper })
     $sv = [Globalization.CultureInfo]::GetCultureInfo("sv-SE")
     $names = @($hit | ForEach-Object {
-        $over = -[double]$_.upper_r  # vid eller över bandet: upper_r <= 0
-        $where = if ($null -eq $_.upper_r) { "" } elseif ([math]::Round($over, 1) -eq 0) { " (vid bandet)" } else { " ({0} R över)" -f $over.ToString("0.0", $sv) }
+        # Eget namn: ForEach-Object körs i skriptets scope, och $over är listan "Vid eller över" i notisen.
+        $overR = -[double]$_.upper_r  # vid eller över bandet: upper_r <= 0
+        $where = if ($null -eq $_.upper_r) { "" } elseif ([math]::Round($overR, 1) -eq 0) { " (vid bandet)" } else { " ({0} R över)" -f $overR.ToString("0.0", $sv) }
         "$($_.name)$where"
     })
     $list = if ($names.Count -eq 0) { "inga" } else { $names -join ", " }
