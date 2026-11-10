@@ -642,6 +642,40 @@ ungefär en fjärdedel av fallen, och de fallen gick bättre än genomsnittet. V
 osäkerheten är för stor för att skilja den från rekyler utan vändsignal. Fallen är dessutom inte oberoende, eftersom
 många infaller samma dagar.
 
+#### Strategin "Rekyl efter Bollingerutbrott" (`scripts/bbrekyl.py`)
+
+Det andra valet under "Strategi" i flikens rullista, på samma dagsdata och med samma justerade kurser.
+1. **Utbrottsdag:** en av de 7 handelsdagarna före gårdagen där stängningen låg över övre Bollingerbandet (20 dagar,
+   2 standardavvikelser), omsättningen var minst 1,5 gånger snittet för de 20 dagarna före och stängningen låg över
+   50 MA. Finns flera gäller den senaste. Var utbrottsdagen reaktionsdag för en rapport står "rapportdag" med utfallet
+   mot förväntan.
+2. **Rekyl:** gårdagens low ligger högst 1 % från mittbandet (20 dagars MA) eller 20 EMA, eller mellan dem. Ingen
+   stängning sedan utbrottet under utbrottsdagens low eller under mittbandet. Sidan visar om snittomsättningen i
+   rekylen varit lägre än på utbrottsdagen.
+3. **Vändsignal** som i Pullback (hammer, bullish engulfing). Triggernivån är gårdagens high, annars är gårdagens
+   stängning referens.
+4. **Nivåer:** stopp vid rekylens lägsta low, mål vid utbrottets högsta high (med avståndet i R), 2R, 3R och övre
+   bandet. R = referens − stopp, samma R överallt.
+5. **Rang:** en poäng per kriterium: vändsignal, lägre omsättning i rekylen, utbrottets high minst 2R bort, minst 1R
+   kvar till övre bandet, stoppet högst 1,5 ATR bort, 50 MA stigande. Vid lika poäng mest utrymme till utbrottets high.
+6. **Status i dag** vid Bollingerkontrollerna 09:20 och 13:20 (`bbrekyl` i kontrollfilen), med samma statusar som
+   Pullback, och notisen tar med ändringarna.
+7. **Historik:** hur ofta 2R nåddes före stoppet, på samma sätt som för Pullback (`bbrekyl` i `history.json`).
+
+Swingfilen sparar per bolag fönstret med de senaste nio dagarnas kurser, omsättning, band och 50 MA
+(`bbrekyl.state`), och valideringen räknar om etiketten, nivåerna och rangen ur det.
+
+Historiken 30 okt 2025 – 2 nov 2026 (första körningen 2026-11-10):
+
+| | Avgjorda fall | 2R före stoppet | Snitt per fall |
+|---|---|---|---|
+| Rekyl efter utbrott | 175 | 29,1 % | +0,14 R |
+| Rekyl efter utbrott, vändsignal | 45 | 28,9 % | −0,22 R |
+| Båda | 220 | 29,1 % | +0,01 R |
+
+Med 2R som mål är jämviktsnivån utan courtage en tredjedel, och strategin låg under den. Vändsignalen gjorde det inte
+bättre.
+
 ## Sidan (Astro)
 
 Kräver Node 22 eller senare.
