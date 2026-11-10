@@ -19,7 +19,9 @@ Andelen 2R först och stopp först räknas på de avgjorda fallen, med snittresu
 Dagsdatan hämtas med öppningskurser i samma batchanrop.
 
 Rekyl efter Bollingerutbrott (scripts/bbrekyl.py): samma uppföljning av varje dag med strategins etiketter, med
-rekylens lägsta low som stopp ("bbrekyl" i filen).
+rekylens lägsta low som stopp ("bbrekyl" i filen). Volymvillkoren prövas också var för sig ("bbrekyl.rules"):
+grundregeln (utbrott med 1,5× omsättning, inga övriga volymvillkor), grundregeln plus ett villkor i taget, och alla
+tillsammans (= strategins etiketter), varje variant med sina egna fall (ett i taget per bolag).
 
 Användning:
     python scripts/swing_history.py                    # hämtar dagsdata (ett batchanrop till Yahoo)
@@ -120,6 +122,9 @@ def build(bars: dict, instruments: dict, today: date, results_dir: Path | None =
     per_label: dict[str, dict[int, list[float]]] = {k: defaultdict(list) for k in LABELS}
     pb_cases: dict[str, list[dict]] = {k: [] for k in pullback.LABELS}
     bb_cases: dict[str, list[dict]] = {k: [] for k in bbrekyl.LABELS}
+    # Volymvillkoren var för sig: variant -> villkor som krävs.
+    bb_variants = {"base": (), **{r: (r,) for r in bbrekyl.RULES}, "all": bbrekyl.ALL_RULES}
+    bb_rule_cases: dict[str, list[dict]] = {k: [] for k in bb_variants}
     # Marknadsfilter: bara fall när indexet vid rekyldagens stängning ligger över sitt 50- och 200-dagars MA.
     market_up = market_filter(bars.get(INDEX_TICKER, []))
     pb_filtered: dict[str, list[dict]] = {k: [] for k in pullback.LABELS}
@@ -145,6 +150,7 @@ def build(bars: dict, instruments: dict, today: date, results_dir: Path | None =
         # Ett pullback-fall i taget per bolag, räknat var för sig utan och med marknadsfilter (ett bortfiltrerat
         # fall ska inte spärra nästa fall som klarar filtret).
         busy_until, busy_filtered, busy_bb = -1, -1, -1
+        busy_rule = {k: -1 for k in bb_variants}
         vols = [x.volume for x in b]
         for i, m in enumerate(ms):
             bb_labels: list[str] = []
@@ -156,6 +162,11 @@ def build(bars: dict, instruments: dict, today: date, results_dir: Path | None =
                     case = bbrekyl.simulate(o, h, lo, i, bst, bbrekyl.stop_of(bst))
                     bb_cases[bb_labels[0]].append(case)
                     busy_bb = case["end"]
+                for name, rules in bb_variants.items():
+                    if i > busy_rule[name] and bst is not None and bbrekyl.labels(bst, rules=rules):
+                        case = bbrekyl.simulate(o, h, lo, i, bst, bbrekyl.stop_of(bst, rules))
+                        bb_rule_cases[name].append(case)
+                        busy_rule[name] = case["end"]
             # Pullback i trend: utfall mot stopp och 2R, oberoende av indexjämförelsen nedan (som kräver 5 dagar framåt).
             if m is not None and start_day <= m["day"] <= end_day and (i > busy_until or i > busy_filtered):
                 st = pullback.state(o, h, lo, c, e20, i)
@@ -249,6 +260,13 @@ def build(bars: dict, instruments: dict, today: date, results_dir: Path | None =
             "thresholds": {**pullback.THRESHOLDS, **bbrekyl.THRESHOLDS},
             "labels": {k: pullback.summarize(v) for k, v in bb_cases.items()},
             "all": pullback.summarize([x for v in bb_cases.values() for x in v]),
+            "rules": {
+                "description": "Volymvillkoren var för sig: grundregeln (utbrott med minst 1,5× omsättning, inga övriga "
+                               "volymvillkor), grundregeln plus ett villkor i taget, och alla tillsammans (strategins "
+                               "etiketter). Båda etiketterna, varje variant med sina egna fall.",
+                "texts": dict(bbrekyl.RULES),
+                **{k: pullback.summarize(v) for k, v in bb_rule_cases.items()},
+            },
         },
         "labels": {lbl: {str(k): _stats(per_label[lbl].get(k, [])) for k in HORIZONS} for lbl in LABELS},
     }

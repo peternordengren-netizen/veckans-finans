@@ -183,6 +183,11 @@ export interface BbrekylLevels {
   };
   /** Lägre snittomsättning under rekylen än på utbrottsdagen. */
   lower_volume: boolean;
+  /** Volymvillkoren r1–r4 med siffrorna (saknas i äldre filer). */
+  volume?: {
+    breakout_ratio: number; r1: boolean; red_days: number; red_max_ratio: number | null; r2: boolean;
+    rekyl_avg_ratio: number | null; r3: boolean; up_volume: number; down_volume: number; r4: boolean;
+  };
 }
 export interface BbrekylRank {
   rank: number;
@@ -211,6 +216,8 @@ export interface PullbackToday {
   status: "waiting" | "triggered" | "late" | "below_stop" | "below_ma50";
   /** Kontrollen där dagens high först låg över triggernivån, eller null. */
   trigger_seen_at: string | null;
+  /** Dagens omsättning hittills mot normalt vid samma tid (bara Rekyl efter Bollingerutbrott; null utan timdata). */
+  volume?: { so_far: number; normal: number; ratio: number; until: string; days: number } | null;
   checked_at: string;
 }
 /** En pullback-kandidats läge mot Bollingerbanden (scripts/bollinger.py position). */
@@ -263,6 +270,7 @@ export interface SwingView {
     /** Rekyl efter Bollingerutbrott (saknas i äldre filer). */
     bbrekyl?: {
       breakout_days: number; volume_ratio: number; touch_pct: number; bb_period: number; bb_width: number; volume_days: number;
+      base_volume_ratio?: number; red_volume_ratio?: number;
       ranking: { target_r: number; bollinger_r: number; stop_atr: number; ma50_days: number; top: number };
     };
   };
@@ -285,6 +293,8 @@ export interface SwingView {
       thresholds: { max_days: number; trigger_days: number };
       labels: Record<string, PullbackSummary>;
       all: PullbackSummary;
+      /** Volymvillkoren var för sig: grundregeln, ett villkor i taget och alla (saknas i äldre filer). */
+      rules?: { description: string; texts: Record<string, string> } & Record<string, PullbackSummary | string | Record<string, string>>;
     };
     period: { start: string; end: string };
     method: string;

@@ -4,7 +4,7 @@ import { test } from "node:test";
 
 import {
   decidedShareText, isPullbackLabel, labelClass, labelCounts, levelText, netText, priceText, reportText, riskText, shareText,
-  altStopText, bbLevelText, breakoutLines, missingText, resistanceRText, todayInvalid, todayLines, todayOrder, TODAY_STATUS,
+  altStopText, bbLevelText, breakoutLines, todayVolumeText, volumeRuleLines, missingText, resistanceRText, todayInvalid, todayLines, todayOrder, TODAY_STATUS,
   bollingerSourceText, chipText, pctBText, rankText, rankTitle, rText, signalText, srDistText, srInsideText, srLevelText, upperRText, vsBaseText,
 } from "../src/lib/swing.ts";
 
@@ -115,6 +115,26 @@ test("Rekyl efter Bollingerutbrott: texter", () => {
   assert.equal(bbLevelText("ema20"), "20 EMA");
   assert.equal(bbLevelText("mellan"), "mellan mittbandet och 20 EMA");
   assert.equal(labelClass("bbrekyl-vandsignal"), "pullback");
+});
+
+test("Rekyl efter Bollingerutbrott: volymvillkoren och omsättningen i dag", () => {
+  const th = { volumeRatio: 2, redRatio: 1.5 };
+  const v = {
+    breakout_ratio: 2.14, r1: true, red_days: 2, red_max_ratio: 0.7, r2: true, rekyl_avg_ratio: 0.67, r3: true,
+    up_volume: 2000, down_volume: 1000, r4: true,
+  };
+  assert.deepEqual(volumeRuleLines(v, th), [
+    { ok: true, text: "Utbrottet 2,1× 20-dagarssnittet (krav minst 2,0×)" },
+    { ok: true, text: "Röda dagar i rekylen högst 0,7× snittet (krav högst 1,5×)" },
+    { ok: true, text: "Rekylen i snitt 0,7× 20-dagarssnittet (krav under 1,0×)" },
+    { ok: true, text: "Uppdagar 67 % av omsättningen på upp- och neddagar (krav minst 50 %)" },
+  ]);
+  const no = volumeRuleLines({ ...v, r1: false, breakout_ratio: 1.6, red_days: 0, red_max_ratio: null, up_volume: 0, down_volume: 0 }, th);
+  assert.equal(no[0].ok, false);
+  assert.equal(no[1].text, "Inga röda dagar i rekylen");
+  assert.equal(no[3].text, "Inga upp- eller neddagar i rekylen");
+  assert.equal(todayVolumeText({ ratio: 1.34, until: "09:00" }), "omsättning hittills 1,3× normalt (t.o.m. 09:00)");
+  assert.equal(todayVolumeText(null), null);
 });
 
 test("bolag som saknas i Swing", () => {

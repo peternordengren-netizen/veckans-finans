@@ -8,13 +8,21 @@ Priser: justerade som övriga swingmått (scripts/pullback.adjusted). Dag i är 
 scripts/bollinger.bands); mittbandet är 20 dagars glidande medelvärde.
 
 1. Utbrottsdag: en av de BREAKOUT_DAYS handelsdagarna före dag i (i−7 … i−1) där stängningen ligger över övre bandet,
-   omsättningen är minst volume_ratio gånger snittet för de 20 dagarna före, och stängningen ligger över 50 dagars
-   MA. Finns flera gäller den senaste. Var utbrottsdagen en rapportdag (reaktionsdagen, scripts/swing.reaction_day)
-   märks det, med utfallet mot förväntan (läggs till av swing.py).
+   omsättningen är minst volume_ratio (2) gånger snittet för de 20 dagarna före, och stängningen ligger över 50
+   dagars MA. Finns flera gäller den senaste. Var utbrottsdagen en rapportdag (reaktionsdagen,
+   scripts/swing.reaction_day) märks det, med utfallet mot förväntan (läggs till av swing.py).
 2. Rekyl: dag i:s low ligger högst touch_pct % från mittbandet eller 20 dagars EMA, eller mellan dem. Ingen
    stängning efter utbrottsdagen (t.o.m. dag i) under utbrottsdagens low eller under dagens mittband.
    "lower_volume": snittomsättningen under rekylen (dagarna efter utbrottet t.o.m. dag i) är lägre än på
-   utbrottsdagen (visas, och är ett rangkriterium).
+   utbrottsdagen (ett rangkriterium; med volymvillkor 3 nedan alltid uppfyllt).
+   Volymvillkoren (volume_checks, RULES), alla krav för etiketten sedan 2026-11-10:
+   r1 utbrottsdagens omsättning minst volume_ratio (2) gånger 20-dagarssnittet (grundregeln var base_volume_ratio, 1,5)
+   r2 ingen röd dag i rekylen (stängning under öppningen) med omsättning över red_volume_ratio (1,5) gånger dagens
+      20-dagarssnitt
+   r3 snittomsättningen under rekyldagarna under 20-dagarssnittet före utbrottsdagen
+   r4 summan av omsättningen på uppdagar i rekylen (stängning över föregående dags) minst lika stor som på neddagar
+      (stängning under föregående dags); oförändrade dagar räknas inte
+   Historiken prövar grundregeln, varje villkor för sig ovanpå den och alla tillsammans (labels med rules).
 3. Vändsignal som i Pullback i trend (scripts/pullback.signal: hammer eller bullish engulfing). Etikett
    "Rekyl efter utbrott, vändsignal" i stället för "Rekyl efter utbrott". Triggernivå = dag i:s high.
 4. Nivåer: referens = triggernivån vid vändsignal, annars dag i:s stängning (som Pullback). Stopp = rekylens lägsta
@@ -37,8 +45,16 @@ import pullback
 import ranking
 
 BREAKOUT_DAYS = 7
-THRESHOLDS = {"breakout_days": BREAKOUT_DAYS, "volume_ratio": 1.5, "touch_pct": 1.0, "bb_period": 20, "bb_width": 2.0,
-              "volume_days": 20}
+THRESHOLDS = {"breakout_days": BREAKOUT_DAYS, "volume_ratio": 2.0, "base_volume_ratio": 1.5, "red_volume_ratio": 1.5,
+              "touch_pct": 1.0, "bb_period": 20, "bb_width": 2.0, "volume_days": 20}
+# Volymvillkoren (punkt 2 i modulbeskrivningen): nyckel och kort text.
+RULES = {
+    "r1": "Utbrottsdagens omsättning minst 2× 20-dagarssnittet",
+    "r2": "Ingen röd dag i rekylen med omsättning över 1,5× snittet",
+    "r3": "Snittomsättningen i rekylen under 20-dagarssnittet",
+    "r4": "Omsättning på uppdagar minst lika stor som på neddagar i rekylen",
+}
+ALL_RULES = tuple(RULES)
 LABELS = {"bbrekyl": "Rekyl efter utbrott", "bbrekyl-vandsignal": "Rekyl efter utbrott, vändsignal"}
 # Rangordningen: en poäng per uppfyllt kriterium (beskrivande, ingen värdering eller uppmaning).
 CRITERIA = {
@@ -75,18 +91,43 @@ def window(o: list[float], h: list[float], lo: list[float], c: list[float], v: l
     return {"days": days, "ema20": r(ema20[i])}
 
 
-def breakout(state: dict | None, th: dict = THRESHOLDS) -> int | None:
-    """Index i fönstret för den senaste utbrottsdagen (punkt 1), eller None."""
+def breakout(state: dict | None, th: dict = THRESHOLDS, rules: tuple[str, ...] = ALL_RULES) -> int | None:
+    """Index i fönstret för den senaste utbrottsdagen (punkt 1), eller None. Omsättningskravet är volume_ratio med
+    villkor r1, annars grundregelns base_volume_ratio."""
     if not state:
         return None
+    ratio = th["volume_ratio"] if "r1" in rules else th.get("base_volume_ratio", th["volume_ratio"])
     days = state["days"]
     last = len(days) - 1
     for k in range(last - 1, last - th["breakout_days"] - 1, -1):
         d = days[k]
-        if d["close"] > d["upper"] and d["volume_avg"] > 0 and d["volume"] >= th["volume_ratio"] * d["volume_avg"] \
+        if d["close"] > d["upper"] and d["volume_avg"] > 0 and d["volume"] >= ratio * d["volume_avg"] \
                 and d["close"] > d["ma50"]:
             return k
     return None
+
+
+def volume_checks(state: dict, k: int, th: dict = THRESHOLDS) -> dict:
+    """Volymvillkoren r1–r4 för utbrottsdagen k, med siffrorna (visas på sidan och sparas i nivåerna)."""
+    days = state["days"]
+    b, rekyl = days[k], days[k + 1:]
+    reds = [d["volume"] / d["volume_avg"] for d in rekyl if d["close"] < d["open"] and d["volume_avg"] > 0]
+    up = sum(d["volume"] for p, d in zip(days[k:], rekyl) if d["close"] > p["close"])
+    down = sum(d["volume"] for p, d in zip(days[k:], rekyl) if d["close"] < p["close"])
+    avg_ratio = statistics.fmean(d["volume"] for d in rekyl) / b["volume_avg"] if b["volume_avg"] > 0 else None
+    br = b["volume"] / b["volume_avg"] if b["volume_avg"] > 0 else 0.0
+    return {
+        "breakout_ratio": round(br, 2),
+        "r1": br >= th["volume_ratio"],
+        "red_days": len(reds),
+        "red_max_ratio": round(max(reds), 2) if reds else None,
+        "r2": all(x <= th["red_volume_ratio"] for x in reds),
+        "rekyl_avg_ratio": round(avg_ratio, 2) if avg_ratio is not None else None,
+        "r3": avg_ratio is not None and avg_ratio < 1,
+        "up_volume": up,
+        "down_volume": down,
+        "r4": up >= down,
+    }
 
 
 def touched(state: dict, th: dict = THRESHOLDS) -> str | None:
@@ -112,10 +153,14 @@ def candle(state: dict) -> dict:
             "prev_open": p["open"], "prev_close": p["close"]}
 
 
-def labels(state: dict | None, th: dict = THRESHOLDS) -> list[str]:
-    """[], ["bbrekyl"] eller ["bbrekyl-vandsignal"] (används även av historiken och valideringen)."""
-    k = breakout(state, th)
+def labels(state: dict | None, th: dict = THRESHOLDS, rules: tuple[str, ...] = ALL_RULES) -> list[str]:
+    """[], ["bbrekyl"] eller ["bbrekyl-vandsignal"] (används även av historiken och valideringen). rules: volymvillkoren
+    som krävs (alla för etiketten; historiken prövar dem var för sig, och () är grundregeln)."""
+    k = breakout(state, th, rules)
     if k is None or touched(state, th) is None or not held(state, k):
+        return []
+    vc = volume_checks(state, k, th) if any(r in rules for r in ("r2", "r3", "r4")) else {}
+    if any(not vc[r] for r in rules if r != "r1"):
         return []
     days = state["days"]
     stop = min(d["low"] for d in days[k + 1:])
@@ -129,10 +174,10 @@ def _ref(state: dict) -> float:
     return d["high"] if pullback.signal(candle(state)) else d["close"]
 
 
-def levels(state: dict, atr: float | None, th: dict = THRESHOLDS) -> dict:
-    """Nivåerna för ett bolag med etikett (punkt 2 och 4 i modulbeskrivningen)."""
+def levels(state: dict, atr: float | None, th: dict = THRESHOLDS, rules: tuple[str, ...] = ALL_RULES) -> dict:
+    """Nivåerna för ett bolag med etikett (punkt 2 och 4 i modulbeskrivningen), med volymvillkoren och siffrorna."""
     days = state["days"]
-    k = breakout(state, th)
+    k = breakout(state, th, rules)
     b, d = days[k], days[-1]
     sig = pullback.signal(candle(state))
     ref = d["high"] if sig else d["close"]
@@ -149,6 +194,7 @@ def levels(state: dict, atr: float | None, th: dict = THRESHOLDS) -> dict:
         "breakout": {"days_ago": len(days) - 1 - k, "close": b["close"], "upper": b["upper"], "low": b["low"],
                      "volume_ratio": round(b["volume"] / b["volume_avg"], 2)},
         "lower_volume": statistics.fmean(x["volume"] for x in rekyl) < b["volume"],
+        "volume": volume_checks(state, k, th),
     }
 
 
@@ -190,7 +236,7 @@ def simulate(o: list[float], h: list[float], lo: list[float], i: int, state: dic
     return pullback.simulate(o, h, lo, i, candle(state), stop)
 
 
-def stop_of(state: dict) -> float:
-    """Rekylens lägsta low (stoppet) för ett fönster med etikett."""
-    k = breakout(state)
+def stop_of(state: dict, rules: tuple[str, ...] = ALL_RULES) -> float:
+    """Rekylens lägsta low (stoppet) för ett fönster med etikett (med samma volymvillkor som etiketten)."""
+    k = breakout(state, THRESHOLDS, rules)
     return min(d["low"] for d in state["days"][k + 1:])

@@ -28,14 +28,17 @@ def state(days, ema20=101.0):
 
 
 def base_days():
-    """Nio dagar: två lugna, utbrott dag 2 (stängning 105 > övre 104, omsättning 2×), rekyl ned mot mittbandet."""
+    """Nio dagar: två lugna, utbrott dag 2 (stängning 105 > övre 104, omsättning 2×), rekyl ned mot mittbandet med
+    uppdagar (2 000) lika stor omsättning som neddagar (700 + 500 + 400 + 400), snitt 0,67× och inga tunga röda dagar."""
     return [
         day(100, 101, 99, 100), day(100, 101, 99, 100.5),
         day(101, 106, 100.8, 105, volume=2000),                       # utbrott (index 2, 6 dagar före dag i)
-        day(105, 107, 103, 104, volume=900), day(104, 104.5, 102, 102.5, volume=800),
-        day(102.5, 103, 101.5, 102, volume=700), day(102, 102.5, 101, 101.5, volume=700),
-        day(101.5, 102, 100.8, 101.2, volume=600),
-        day(101.2, 101.6, 100.4, 101.0, volume=600),                  # dag i: low 100,4 nära mittbandet 100
+        day(105, 107, 103, 104, volume=700),                          # ned, röd
+        day(104, 105, 103, 104.5, volume=1000),                       # upp
+        day(104.5, 104.8, 102, 102.5, volume=500),                    # ned, röd
+        day(102.5, 103.5, 102, 103, volume=1000),                     # upp
+        day(103, 103, 101, 101.5, volume=400),                        # ned, röd
+        day(101.5, 101.6, 100.4, 101.0, volume=400),                  # dag i: low 100,4 nära mittbandet 100
     ]
 
 
@@ -54,10 +57,46 @@ def test_utbrott_rekyl_och_etikett():
     assert lv["risk_atr"] == 0.3
 
 
+def test_volymvillkoren_med_siffror():
+    st = state(base_days())
+    vc = bbrekyl.volume_checks(st, 2)
+    assert vc == {"breakout_ratio": 2.0, "r1": True, "red_days": 4, "red_max_ratio": 0.7, "r2": True,
+                  "rekyl_avg_ratio": round(4000 / 6 / 1000, 2), "r3": True, "up_volume": 2000, "down_volume": 2000,
+                  "r4": True}
+    assert bbrekyl.levels(st, atr=2.0)["volume"] == vc
+    # r1: utbrottet med 1,8× räknas av grundregeln men inte av r1.
+    d = base_days()
+    d[2] = {**d[2], "volume": 1800}
+    assert bbrekyl.labels(state(d)) == [] and bbrekyl.labels(state(d), rules=()) == ["bbrekyl"]
+    assert bbrekyl.labels(state(d), rules=("r2", "r3", "r4")) == ["bbrekyl"]
+    # r2: en röd dag med 1,6× omsättning.
+    d = base_days()
+    d[5] = {**d[5], "volume": 1600}
+    vc = bbrekyl.volume_checks(state(d), 2)
+    assert not vc["r2"] and vc["red_max_ratio"] == 1.6
+    assert bbrekyl.labels(state(d)) == [] and bbrekyl.labels(state(d), rules=("r1",)) == ["bbrekyl"]
+    # Exakt 1,5× är inte "över" 1,5×.
+    d[5] = {**d[5], "volume": 1500}
+    assert bbrekyl.volume_checks(state(d), 2)["r2"]
+    # r3: snittet i rekylen på eller över 20-dagarssnittet.
+    d = base_days()
+    for j in (4, 6):
+        d[j] = {**d[j], "volume": 2600}
+    vc = bbrekyl.volume_checks(state(d), 2)
+    assert not vc["r3"] and vc["r4"] and bbrekyl.labels(state(d)) == []
+    # r4: mer omsättning på neddagar än uppdagar.
+    d = base_days()
+    d[6] = {**d[6], "volume": 900}
+    vc = bbrekyl.volume_checks(state(d), 2)
+    assert (vc["up_volume"], vc["down_volume"], vc["r4"]) == (1900, 2000, False)
+    assert bbrekyl.labels(state(d)) == [] and bbrekyl.labels(state(d), rules=("r1", "r2", "r3")) == ["bbrekyl"]
+
+
 def test_villkor_som_inte_uppfylls():
-    # Omsättningen under 1,5× snittet: inget utbrott.
+    # Omsättningen under 1,5× snittet: inget utbrott, inte ens med grundregeln.
     d = base_days()
     d[2] = {**d[2], "volume": 1400}
+    assert bbrekyl.breakout(state(d), rules=()) is None
     assert bbrekyl.breakout(state(d)) is None and bbrekyl.labels(state(d)) == []
     # Stängningen under 50 MA på utbrottsdagen.
     d = base_days()
@@ -123,9 +162,10 @@ def make_breakout_bars(end=date(2026, 11, 6)):
     days.sort()
     bars = [Bar(dd, c, c, c + 0.4, c - 0.4, 1000.0, c) for dd, c in zip(days, closes)]
     last = closes[-1]
+    # Rekylen: upp- och neddagar med lika stor omsättning (1 500), snitt under 20-dagarssnittet.
     tail = [(last + 4.5, last + 5.5, last + 0.5, 3000.0),   # utbrott
-            (last + 4.0, last + 4.8, last + 3.0, 900.0), (last + 3.0, last + 3.6, last + 2.2, 800.0),
-            (last + 2.0, last + 2.6, last + 1.6, 700.0), (last + 1.6, last + 2.0, last + 1.2, 700.0),
+            (last + 4.0, last + 4.8, last + 3.0, 600.0), (last + 4.4, last + 4.9, last + 3.6, 900.0),
+            (last + 2.6, last + 3.2, last + 2.2, 500.0), (last + 1.6, last + 2.0, last + 1.2, 400.0),
             (last + 1.7, last + 2.0, last + 1.0, 600.0)]  # dag i
     for (c, h, lo, v), dd in zip(tail, days[84:]):
         bars.append(Bar(dd, c, c, h, lo, v, c + 0.1))
@@ -167,8 +207,16 @@ def test_swing_bygger_och_validerar_strategin():
     def fetch(tickers, start, end):
         return {"ALFA.ST": bars + [tb]}
 
-    check = bollinger.check(today, now, inst, fetch, data)
+    calls = []
+
+    def intraday(tickers, d):
+        calls.append(tickers)
+        return None  # timdatan gick inte att hämta: ingen jämförelse, statusen påverkas inte
+
+    check = bollinger.check(today, now, inst, fetch, data, intraday=intraday)
+    assert calls == [["ALFA.ST"]]  # ett anrop, bara strategins kandidater
     rows = check["bbrekyl"]["rows"]
+    assert rows[0]["today"]["volume"] is None
     assert [r["ticker"] for r in rows] == ["ALFA"]
     assert rows[0]["today"]["trigger"] == bb["state"]["days"][-1]["high"]
     assert rows[0]["today"]["status"] in bollinger.TODAY_STATUS
@@ -187,3 +235,25 @@ def test_historiken_har_strategin():
     hb = data["bbrekyl"]
     assert set(hb["labels"]) == set(bbrekyl.LABELS) and "all" in hb
     assert hb["all"]["cases"] >= 0
+
+
+def test_omsattning_hittills_mot_normalt():
+    """Dagens 15-minutersstaplar mot snittet för tidigare dagar fram till samma klockslag."""
+    import pandas as pd
+
+    stamps, vols = [], []
+    for d in pd.bdate_range("2026-10-26", "2026-11-09"):  # 11 handelsdagar före i dag
+        for hhmm, v in (("09:00", 100.0), ("09:15", 50.0), ("09:30", 50.0), ("17:15", 300.0)):
+            stamps.append(pd.Timestamp(f"{d.date()} {hhmm}", tz="Europe/Stockholm"))
+            vols.append(v)
+    for hhmm, v in (("09:00", 200.0), ("09:15", 100.0)):  # i dag t.o.m. 09:15-stapeln
+        stamps.append(pd.Timestamp(f"2026-11-10 {hhmm}", tz="Europe/Stockholm"))
+        vols.append(v)
+    cols = pd.MultiIndex.from_tuples([("ALFA.ST", "Volume")])
+    df = pd.DataFrame([[v] for v in vols], index=pd.DatetimeIndex(stamps), columns=cols)
+    vol = bollinger.volume_vs_normal(df, "ALFA.ST", date(2026, 11, 10))
+    assert vol == {"so_far": 300, "normal": 150, "ratio": 2.0, "until": "09:15", "days": 11}
+    assert bollinger.volume_vs_normal(df, "BETA.ST", date(2026, 11, 10)) is None
+    assert bollinger.volume_vs_normal(df, "ALFA.ST", date(2026, 11, 11)) is None  # inga staplar den dagen
+    short = df[df.index >= pd.Timestamp("2026-11-06", tz="Europe/Stockholm")]
+    assert bollinger.volume_vs_normal(short, "ALFA.ST", date(2026, 11, 10)) is None  # för få tidigare dagar

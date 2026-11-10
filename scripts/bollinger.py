@@ -30,6 +30,12 @@ mot bandet och är ingen uppmaning.
 - Samma avsnitt ("bbrekyl") för strategin Rekyl efter Bollingerutbrott (scripts/bbrekyl.py): kandidaterna med en
   etikett ur den strategin, läget mot banden med strategins referens och stopp, och status i dag med triggernivån
   gårdagens high och gårdagens 50 MA ur strategins fönster.
+- Dagens omsättning hittills mot normalt vid samma tid ("today.volume", bara för Rekyl efter Bollingerutbrott):
+  ett batchanrop till Yahoo med 15-minutersstaplar för strategins kandidater (de senaste INTRADAY_DAYS kalender-
+  dagarna). Hittills = summan av dagens staplar; normalt = snittet för de VOLUME_PROFILE_DAYS senaste handelsdagarna
+  av summan av staplarna som börjar senast vid samma klockslag som dagens sista stapel ("until"). Dagens sista stapel
+  kan vara ofullständig, så kvoten är något låg strax efter en ny stapel. Fördröjd ca 15 minuter som övriga kurser.
+  Går timdatan inte att hämta saknas jämförelsen (statusen påverkas inte).
 - Ändringar sedan föregående kontroll samma dag (data/bollinger/<datum>-<hhmm>.json): "changes" och texten
   "notice" till Windows-notisen. Vid dagens första kontroll räknas alla som väntande innan.
 
@@ -64,6 +70,9 @@ WIDTH = 2.0
 NEAR_PCT = 1.0
 FETCH_DAYS = 45  # 20 handelsdagar och marginal för helger och helgdagar
 DELAY_NOTE = "Kurserna från Yahoo är fördröjda ca 15 minuter."
+INTRADAY_DAYS = 35  # kalenderdagar med 15-minutersstaplar (minst 20 handelsdagar före i dag)
+VOLUME_PROFILE_DAYS = 20
+MIN_PROFILE_DAYS = 5
 # Status i dag för pullback-kandidaterna (day_status), i prioritetsordning. Beskrivande, inga uppmaningar.
 TODAY_STATUS = {
     "below_stop": "Ogiltig: under stopp",
@@ -236,9 +245,49 @@ def status(price: float, upper: float, near_pct: float = NEAR_PCT) -> str | None
     return None
 
 
+def volume_vs_normal(df, yahoo_ticker: str, today: date, days: int = VOLUME_PROFILE_DAYS) -> dict | None:
+    """Dagens omsättning hittills mot normalt vid samma tid, ur en tabell med 15-minutersstaplar grupperad per ticker
+    (se modulbeskrivningen). None utan staplar i dag eller med färre än MIN_PROFILE_DAYS tidigare dagar."""
+    try:
+        sub = df[yahoo_ticker].dropna(subset=["Volume"])
+    except KeyError:
+        return None
+    by_day: dict[date, list[tuple]] = {}
+    for idx, r in sub.iterrows():
+        ts = idx.tz_convert("Europe/Stockholm") if getattr(idx, "tzinfo", None) else idx
+        by_day.setdefault(ts.date(), []).append((ts.time(), float(r["Volume"])))
+    todays = by_day.get(today)
+    if not todays:
+        return None
+    until = max(t for t, _ in todays)
+    so_far = sum(v for _, v in todays)
+    past = sorted(d for d in by_day if d < today)[-days:]
+    if len(past) < MIN_PROFILE_DAYS:
+        return None
+    normal = sum(sum(v for t, v in by_day[d] if t <= until) for d in past) / len(past)
+    if normal <= 0:
+        return None
+    return {"so_far": round(so_far), "normal": round(normal), "ratio": round(so_far / normal, 2),
+            "until": until.strftime("%H:%M"), "days": len(past)}
+
+
+def intraday_15m(tickers: list[str], today: date):
+    """15-minutersstaplar för tickers (ett batchanrop), eller None om hämtningen misslyckas."""
+    import yfinance as yf
+
+    try:
+        return yf.download(tickers, start=(today - timedelta(days=INTRADAY_DAYS)).isoformat(),
+                           end=(today + timedelta(days=1)).isoformat(), interval="15m", group_by="ticker",
+                           auto_adjust=False, actions=False, threads=True, progress=False)
+    except Exception as exc:  # noqa: BLE001 - jämförelsen får aldrig stoppa kontrollen
+        print(f"15-minutersdatan kunde inte hämtas: {type(exc).__name__}", file=sys.stderr)
+        return None
+
+
 def check(today: date, now: datetime, instruments: dict[str, Instrument], fetch: BarFetcher,
-          swing: dict | None = None, previous: dict | None = None) -> dict:
-    """previous: föregående kontroll samma dag (load_previous), för statusändringarna."""
+          swing: dict | None = None, previous: dict | None = None, intraday=intraday_15m) -> dict:
+    """previous: föregående kontroll samma dag (load_previous), för statusändringarna. intraday: hämtar
+    15-minutersstaplar för omsättningen hittills (Rekyl efter Bollingerutbrott)."""
     # Avnoterade bolag hoppas över (instruments.csv).
     tickers = {i.yahoo_ticker: t for t, i in listed(instruments, today).items()}
     bars = fetch(list(tickers), today - timedelta(days=FETCH_DAYS), today)
@@ -267,6 +316,14 @@ def check(today: date, now: datetime, instruments: dict[str, Instrument], fetch:
         rows.sort(key=lambda r: -r["vs_upper_pct"])
     sections = {key: strategy_section(key, swing, previous, today_bands, today_bars, now) if swing is not None
                 else None for key in STRATEGY_KEYS}
+    # Omsättningen hittills mot normalt, för Rekyl efter Bollingerutbrott (ett extra batchanrop, bara med kandidater).
+    bb_rows = [r for r in (sections.get("bbrekyl") or {}).get("rows", []) if r.get("today")]
+    if bb_rows:
+        yt = {r["ticker"]: instruments[r["ticker"]].yahoo_ticker for r in bb_rows if r["ticker"] in instruments}
+        df = intraday(sorted(set(yt.values())), today) if yt else None
+        for r in bb_rows:
+            r["today"]["volume"] = volume_vs_normal(df, yt[r["ticker"]], today) if df is not None and r["ticker"] in yt \
+                else None
     return {
         "date": today.isoformat(),
         "checked_at": now.isoformat(timespec="seconds"),
@@ -317,6 +374,9 @@ def validate(data: dict) -> list[str]:
                 errors.append(f"{r['name']}: status {td['status']!r} stämmer inte med dagens kurser (väntat {expected!r})")
             if (td["trigger_seen_at"] is not None) != (td["high"] > td["trigger"]):
                 errors.append(f"{r['name']}: tiden för bruten trigger stämmer inte med dagens high mot triggernivån")
+            vol = td.get("volume")
+            if vol and abs(vol["ratio"] - vol["so_far"] / vol["normal"]) > 0.011:
+                errors.append(f"{r['name']}: omsättningen hittills mot normalt stämmer inte med siffrorna")
     for key in ("over", "near"):
         for r in data[key]:
             if status(r["price"], r["upper"], data["thresholds"]["near_pct"]) != key:

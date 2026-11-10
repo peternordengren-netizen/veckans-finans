@@ -236,6 +236,8 @@
           "properties": {
             "breakout_days": {"type": "integer"},
             "volume_ratio": {"type": "number"},
+            "base_volume_ratio": {"type": "number"},
+            "red_volume_ratio": {"type": "number"},
             "touch_pct": {"type": "number"},
             "bb_period": {"type": "integer"},
             "bb_width": {"type": "number"},
@@ -613,6 +615,25 @@
                   "r2": {"type": "number"},
                   "r3": {"type": "number"},
                   "lower_volume": {"type": "boolean"},
+                  "volume": {
+                    "type": "object",
+                    "description": "Volymvillkoren r1–r4 med siffrorna (scripts/bbrekyl.volume_checks); saknas i äldre filer.",
+                    "additionalProperties": false,
+                    "required": ["breakout_ratio", "r1", "red_days", "red_max_ratio", "r2", "rekyl_avg_ratio", "r3",
+                                 "up_volume", "down_volume", "r4"],
+                    "properties": {
+                      "breakout_ratio": {"type": "number"},
+                      "r1": {"type": "boolean"},
+                      "red_days": {"type": "integer", "minimum": 0},
+                      "red_max_ratio": {"$ref": "#/$defs/num"},
+                      "r2": {"type": "boolean"},
+                      "rekyl_avg_ratio": {"$ref": "#/$defs/num"},
+                      "r3": {"type": "boolean"},
+                      "up_volume": {"type": "number"},
+                      "down_volume": {"type": "number"},
+                      "r4": {"type": "boolean"}
+                    }
+                  },
                   "breakout": {
                     "type": "object",
                     "additionalProperties": false,

@@ -4,13 +4,13 @@
  * etiketter, i en sorterbar och filtrerbar tabell med fast rubrikrad. Under tabellen historiken per etikett
  * (scripts/swing_history.py). Ett informationsverktyg: etiketterna beskriver vad som hänt, inga uppmaningar.
  */
-import type { SwingView } from "../lib/data";
+import type { PullbackSummary, SwingView } from "../lib/data";
 import { shortDate } from "../lib/format";
 import { signedPct } from "../lib/signals";
 import {
   MIN_CASES, altStopText, decidedShareText, labelClass, labelCounts, levelText, missingText, netText, priceText,
   reportText, resistanceRText, riskText, shareText, bollingerSourceText, chipText, pctBText, signalText,
-  TODAY_STATUS, todayInvalid, todayLines, todayOrder, bbLevelText, breakoutLines, rText, rankText, rankTitle, srDistText, srInsideText, srKindText, srLevelText, upperRText, vsBaseText,
+  TODAY_STATUS, todayInvalid, todayLines, todayOrder, bbLevelText, breakoutLines, todayVolumeText, volumeRuleLines, rText, rankText, rankTitle, srDistText, srInsideText, srKindText, srLevelText, upperRText, vsBaseText,
 } from "../lib/swing";
 
 interface Props {
@@ -279,6 +279,26 @@ const rankHist = pbHist?.ranking ?? null;
               dagars MA. Finns flera gäller den senaste. "Rapportdag" när utbrottsdagen var reaktionsdag för en rapport, med
               utfallet mot förväntan för vinst per aktie där det finns.
             </li>
+            {
+              bt.red_volume_ratio !== undefined && (
+                <li>
+                  <strong>Volymvillkoren</strong>, alla krav, visas med ✓ (uppfyllt) eller ✗ och siffrorna i kolumnen
+                  "Utbrott och rekyl":
+                  <ol>
+                    <li>utbrottsdagens omsättning minst {num(bt.volume_ratio)} gånger 20-dagarssnittet</li>
+                    <li>
+                      ingen röd dag i rekylen (stängning under öppningen) med omsättning över {num(bt.red_volume_ratio)} gånger
+                      den dagens 20-dagarssnitt
+                    </li>
+                    <li>snittomsättningen under rekyldagarna under 20-dagarssnittet före utbrottsdagen</li>
+                    <li>
+                      summan av omsättningen på uppdagar i rekylen (stängning över föregående dags) minst lika stor som på
+                      neddagar; oförändrade dagar räknas inte
+                    </li>
+                  </ol>
+                </li>
+              )
+            }
             <li>
               <strong>Rekyl:</strong> gårdagens low ligger högst {num(bt.touch_pct, 0)} % från mittbandet (20 dagars MA) eller
               20 dagars EMA, eller mellan dem. Ingen stängning sedan utbrottet har legat under utbrottsdagens low eller under
@@ -307,7 +327,9 @@ const rankHist = pbHist?.ranking ?? null;
             }
             <li>
               <strong>Status i dag</strong> räknas som för Pullback i trend vid Bollingerkontrollerna 09:20 och 13:20
-              (fördröjda ca 15 minuter), med triggernivån gårdagens high, rekylens stopp och gårdagens 50 MA.
+              (fördröjda ca 15 minuter), med triggernivån gårdagens high, rekylens stopp och gårdagens 50 MA. Under
+              statusen står dagens omsättning hittills mot normalt vid samma tid: summan av dagens 15-minutersstaplar mot
+              snittet för de 20 senaste handelsdagarna fram till samma klockslag. Dagens sista stapel kan vara ofullständig.
             </li>
           </ul>
         </>
@@ -533,6 +555,10 @@ const rankHist = pbHist?.ranking ?? null;
                   const td = lv ? (r.bbrekyl?.today ?? null) : null;
                   const tl = td ? todayLines(td) : null;
                   const bo = lv ? breakoutLines(lv.breakout, lv.lower_volume, shortDate) : null;
+                  const vr = lv?.volume
+                    ? volumeRuleLines(lv.volume, { volumeRatio: bt?.volume_ratio ?? 2, redRatio: bt?.red_volume_ratio ?? 1.5 })
+                    : null;
+                  const tv = td ? todayVolumeText(td.volume) : null;
                   return (
                     <>
                       <td
@@ -557,6 +583,7 @@ const rankHist = pbHist?.ranking ?? null;
                             <span class="line">{tl.main}</span>
                             {tl.seen && <span class="sub">{tl.seen}</span>}
                             <span class="sub">{tl.prices}</span>
+                            {tv && <span class="sub">{tv}</span>}
                           </>
                         ) : "–"}
                       </td>
@@ -565,7 +592,11 @@ const rankHist = pbHist?.ranking ?? null;
                           <>
                             <span class="line">{bo.main}</span>
                             {bo.report && <span class="sub">{bo.report}</span>}
-                            <span class="sub">{bo.volume}</span>
+                            {vr ? vr.map((x) => (
+                              <span class:list={["sub rule", x.ok ? "rule-ok" : "rule-no"]}>
+                                <span aria-label={x.ok ? "uppfyllt" : "ej uppfyllt"}>{x.ok ? "✓" : "✗"}</span> {x.text}
+                              </span>
+                            )) : <span class="sub">{bo.volume}</span>}
                             <span class="line">{lv.signal ? signalText(lv.signal) : "Ingen vändsignal"}, vid {bbLevelText(lv.level)}</span>
                             <span class="sub">{lv.trigger !== null ? "Trigger" : "Referens"} {priceText(lv.ref)}{lv.trigger === null ? " (gårdagens stängning)" : ""}</span>
                           </>
@@ -626,6 +657,15 @@ const rankHist = pbHist?.ranking ?? null;
           utlösta (triggernivån nåddes inte inom {bbHist.thresholds.trigger_days} dagar) inte in i andelarna. Fallen
           infaller ofta samma dagar och är inte oberoende. Historiken säger inget om hur det går nästa gång.
         </p>
+        {
+          bbHist.rules && (
+            <p class="note">
+              <strong>Volymvillkoren var för sig:</strong> grundregeln är strategin med utbrott vid minst 1,5× omsättning
+              och utan övriga volymvillkor. Raderna under den lägger till ett villkor i taget, och den sista kräver alla
+              (strategins etiketter). Varje rad har sina egna fall, ett i taget per bolag, och båda etiketterna.
+            </p>
+          )
+        }
         <div class="hist-wrap">
           <table class="hist" data-hist="bbrekyl">
             <thead>
@@ -643,6 +683,15 @@ const rankHist = pbHist?.ranking ?? null;
               {[
                 ...bbLabels.map((l) => ({ name: swing.labels[l], s: bbHist.labels[l], all: false })),
                 { name: "Båda", s: bbHist.all, all: true },
+                ...(bbHist.rules
+                  ? [
+                      { name: "Grundregeln (utbrott 1,5×, inga övriga volymvillkor)", s: bbHist.rules.base as PullbackSummary, all: false },
+                      ...Object.entries(bbHist.rules.texts).map(([k, text]) => ({
+                        name: `Grundregeln + ${text.charAt(0).toLowerCase()}${text.slice(1)}`, s: bbHist.rules![k] as PullbackSummary, all: false,
+                      })),
+                      { name: "Alla volymvillkor (strategin)", s: bbHist.rules.all as PullbackSummary, all: true },
+                    ]
+                  : []),
               ].map(({ name, s, all }) =>
                 s && (
                   <tr class:list={{ base: all }}>
@@ -1063,6 +1112,10 @@ const rankHist = pbHist?.ranking ?? null;
     background: var(--banner-bg);
     color: var(--banner-fg);
     border: 1px solid var(--banner-border);
+  }
+  /* Volymvillkoren: ✗ markerat. */
+  .rule-no {
+    color: var(--neg);
   }
   /* Status i dag: ogiltiga dämpade, bruten trigger markerad. */
   td.today.today-below_stop .line,

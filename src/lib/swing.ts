@@ -90,6 +90,43 @@ export function breakoutLines(
   };
 }
 
+/** Volymvillkoren i Rekyl efter Bollingerutbrott (scripts/bbrekyl.volume_checks), ett per rad med ✓ (uppfyllt) eller
+ *  ✗ (ej uppfyllt) och siffrorna. th: kraven ur swingfilen (utbrottet minst volumeRatio×, röda dagar högst redRatio×). */
+export function volumeRuleLines(
+  v: {
+    breakout_ratio: number; r1: boolean; red_days: number; red_max_ratio: number | null; r2: boolean;
+    rekyl_avg_ratio: number | null; r3: boolean; up_volume: number; down_volume: number; r4: boolean;
+  },
+  th: { volumeRatio: number; redRatio: number },
+): { ok: boolean; text: string }[] {
+  const x = (n: number) => `${pctFmt.format(n)}×`;
+  const total = v.up_volume + v.down_volume;
+  return [
+    { ok: v.r1, text: `Utbrottet ${x(v.breakout_ratio)} 20-dagarssnittet (krav minst ${x(th.volumeRatio)})` },
+    {
+      ok: v.r2,
+      text: v.red_days === 0 || v.red_max_ratio === null
+        ? "Inga röda dagar i rekylen"
+        : `Röda dagar i rekylen högst ${x(v.red_max_ratio)} snittet (krav högst ${x(th.redRatio)})`,
+    },
+    {
+      ok: v.r3,
+      text: v.rekyl_avg_ratio === null ? "Snittomsättning i rekylen saknas"
+        : `Rekylen i snitt ${x(v.rekyl_avg_ratio)} 20-dagarssnittet (krav under 1,0×)`,
+    },
+    {
+      ok: v.r4,
+      text: total === 0 ? "Inga upp- eller neddagar i rekylen"
+        : `Uppdagar ${Math.round((v.up_volume / total) * 100)} % av omsättningen på upp- och neddagar (krav minst 50 %)`,
+    },
+  ];
+}
+
+/** Dagens omsättning hittills mot normalt vid samma tid: "omsättning hittills 1,3× normalt (t.o.m. 09:15)". */
+export function todayVolumeText(v: { ratio: number; until: string } | null | undefined): string | null {
+  return v ? `omsättning hittills ${pctFmt.format(v.ratio)}× normalt (t.o.m. ${v.until})` : null;
+}
+
 /** Avstånd till stoppet: "2,8 % · 1,4 ATR". */
 export function riskText(pct: number | null, atr: number | null): string {
   const p = pct === null ? "–" : `${pctFmt.format(pct)} %`;

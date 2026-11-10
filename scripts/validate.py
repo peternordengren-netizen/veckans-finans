@@ -1078,7 +1078,9 @@ def _check_bbrekyl(c: dict, th: dict | None, where: str, expected: list[str], re
 
     bb = c["bbrekyl"]
     t = {k: v for k, v in (th or bbrekyl.THRESHOLDS).items() if k != "ranking"}
-    labels = bbrekyl.labels(bb["state"], t)
+    # Volymvillkoren finns sedan 2026-11-10; äldre filer räknas med grundregeln.
+    rules = bbrekyl.ALL_RULES if "red_volume_ratio" in t else ()
+    labels = bbrekyl.labels(bb["state"], t, rules)
     expected += labels
     lv = bb["levels"]
     if bool(labels) != (lv is not None):
@@ -1088,13 +1090,15 @@ def _check_bbrekyl(c: dict, th: dict | None, where: str, expected: list[str], re
         if bb.get("bollinger") is not None or bb.get("rank") is not None:
             res.errors.append(f"{where}: Bollingerläge eller rang utan nivåer (Rekyl efter Bollingerutbrott)")
         return
-    again = bbrekyl.levels(bb["state"], None, t)
+    again = bbrekyl.levels(bb["state"], None, t, rules)
     for key in ("level", "signal", "trigger", "ref", "stop", "target", "target_r", "r2", "r3", "lower_volume"):
         a, b = again[key], lv[key]
         if (abs(a - b) > 1e-3) if isinstance(a, float) and isinstance(b, (int, float)) else a != b:
             res.errors.append(f"{where}: {key} {b!r} stämmer inte med fönstret (väntat {a!r})")
     if lv["breakout"]["days_ago"] != again["breakout"]["days_ago"]:
         res.errors.append(f"{where}: utbrottsdagen stämmer inte med fönstret")
+    if "volume" in lv and lv["volume"] != again["volume"]:
+        res.errors.append(f"{where}: volymvillkoren stämmer inte med fönstret")
     if bb.get("bollinger") is not None:
         from bollinger import position_errors
 
