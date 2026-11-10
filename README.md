@@ -646,12 +646,17 @@ många infaller samma dagar.
 
 Det andra valet under "Strategi" i flikens rullista, på samma dagsdata och med samma justerade kurser.
 1. **Utbrottsdag:** en av de 7 handelsdagarna före gårdagen där stängningen låg över övre Bollingerbandet (20 dagar,
-   2 standardavvikelser), omsättningen var minst 1,5 gånger snittet för de 20 dagarna före och stängningen låg över
-   50 MA. Finns flera gäller den senaste. Var utbrottsdagen reaktionsdag för en rapport står "rapportdag" med utfallet
+   2 standardavvikelser), omsättningen var minst 2 gånger snittet för de 20 dagarna före (1,5 gånger till och med
+   2026-11-10) och stängningen låg över 50 MA. Finns flera gäller den senaste. Var utbrottsdagen reaktionsdag för en rapport står "rapportdag" med utfallet
    mot förväntan.
 2. **Rekyl:** gårdagens low ligger högst 1 % från mittbandet (20 dagars MA) eller 20 EMA, eller mellan dem. Ingen
-   stängning sedan utbrottet under utbrottsdagens low eller under mittbandet. Sidan visar om snittomsättningen i
-   rekylen varit lägre än på utbrottsdagen.
+   stängning sedan utbrottet under utbrottsdagens low eller under mittbandet.
+   **Volymvillkor** (krav sedan 2026-11-10, visas med ✓/✗ och siffrorna i kolumnen "Utbrott och rekyl"):
+   - r1: utbrottsdagens omsättning minst 2× 20-dagarssnittet
+   - r2: ingen röd dag i rekylen (stängning under öppningen) med omsättning över 1,5× den dagens 20-dagarssnitt
+   - r3: snittomsättningen under rekyldagarna under 20-dagarssnittet före utbrottsdagen
+   - r4: omsättningen på uppdagar i rekylen (stängning över föregående dags) minst lika stor som på neddagar
+     (oförändrade dagar räknas inte)
 3. **Vändsignal** som i Pullback (hammer, bullish engulfing). Triggernivån är gårdagens high, annars är gårdagens
    stängning referens.
 4. **Nivåer:** stopp vid rekylens lägsta low, mål vid utbrottets högsta high (med avståndet i R), 2R, 3R och övre
@@ -659,22 +664,29 @@ Det andra valet under "Strategi" i flikens rullista, på samma dagsdata och med 
 5. **Rang:** en poäng per kriterium: vändsignal, lägre omsättning i rekylen, utbrottets high minst 2R bort, minst 1R
    kvar till övre bandet, stoppet högst 1,5 ATR bort, 50 MA stigande. Vid lika poäng mest utrymme till utbrottets high.
 6. **Status i dag** vid Bollingerkontrollerna 09:20 och 13:20 (`bbrekyl` i kontrollfilen), med samma statusar som
-   Pullback, och notisen tar med ändringarna.
-7. **Historik:** hur ofta 2R nåddes före stoppet, på samma sätt som för Pullback (`bbrekyl` i `history.json`).
+   Pullback, och notisen tar med ändringarna. Under statusen står dagens omsättning hittills mot normalt vid samma
+   tid: summan av dagens 15-minutersstaplar mot snittet för de 20 senaste handelsdagarna fram till samma klockslag
+   (ett extra batchanrop med strategins kandidater; dagens sista stapel kan vara ofullständig).
+7. **Historik:** hur ofta 2R nåddes före stoppet, på samma sätt som för Pullback (`bbrekyl` i `history.json`), och
+   för volymvillkoren var för sig (`bbrekyl.rules`).
 
 Swingfilen sparar per bolag fönstret med de senaste nio dagarnas kurser, omsättning, band och 50 MA
 (`bbrekyl.state`), och valideringen räknar om etiketten, nivåerna och rangen ur det.
 
-Historiken 30 okt 2025 – 2 nov 2026 (första körningen 2026-11-10):
+Historiken 30 okt 2025 – 2 nov 2026, båda etiketterna, varje rad med sina egna fall (körd 2026-11-10):
 
-| | Avgjorda fall | 2R före stoppet | Snitt per fall |
-|---|---|---|---|
-| Rekyl efter utbrott | 175 | 29,1 % | +0,14 R |
-| Rekyl efter utbrott, vändsignal | 45 | 28,9 % | −0,22 R |
-| Båda | 220 | 29,1 % | +0,01 R |
+| | Fall | Avgjorda | 2R före stoppet | Snitt per fall |
+|---|---|---|---|---|
+| Grundregeln (utbrott 1,5×, inga övriga volymvillkor) | 256 | 220 | 29,1 % | +0,01 R |
+| + r1 utbrott minst 2× | 167 | 138 | 24,6 % | −0,21 R |
+| + r2 ingen tung röd dag i rekylen | 170 | 148 | 31,8 % | +0,14 R |
+| + r3 lägre snittomsättning i rekylen | 126 | 113 | 25,7 % | −0,20 R |
+| + r4 mer omsättning på uppdagar | 88 | 73 | 34,2 % | −0,03 R |
+| Alla volymvillkor (strategin) | 23 | 20 | 20,0 % | −0,15 R |
 
-Med 2R som mål är jämviktsnivån utan courtage en tredjedel, och strategin låg under den. Vändsignalen gjorde det inte
-bättre.
+Med 2R som mål är jämviktsnivån utan courtage en tredjedel. Ingen variant låg tydligt över den: r2 och r4 låg något
+högre än grundregeln, r1 och r3 lägre, och med alla villkor återstår bara 20 avgjorda fall, för få för att säga något.
+Fallen är dessutom inte oberoende.
 
 ## Sidan (Astro)
 
