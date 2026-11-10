@@ -89,20 +89,73 @@ def _download_bars(tickers: list[str], start: date, end_inclusive: date) -> dict
     df = yf.download(tickers, start=start.isoformat(), end=(end_inclusive + timedelta(days=1)).isoformat(),
                      interval="1d", group_by="ticker", auto_adjust=False, actions=False, threads=True,
                      progress=False)
+    # Rader där Yahoo har high och low men ingen stängning (2026-11-10: måndagens rad för 262 av 266 bolag, Close
+    # NaN): stängningen hämtas ur timdatan, ett batchanrop för de bolagen (_hourly_closes).
+    gaps: dict[str, list[date]] = {}
+    for t in tickers:
+        try:
+            sub = df[t]
+        except KeyError:
+            continue
+        miss = sub[sub["Close"].isna() & sub["High"].notna() & sub["Low"].notna()]
+        if len(miss):
+            gaps[t] = [idx.date() for idx in miss.index]
+    filled = _hourly_closes(gaps) if gaps else {}
+    if gaps:
+        n = sum(len(v) for v in filled.values())
+        print(f"Yahoo saknar stängningskurs i dagsdatan för {len(gaps)} bolag "
+              f"({', '.join(sorted({d.isoformat() for v in gaps.values() for d in v}))}); "
+              f"{n} hämtade ur timdatan (sista timmens stängning)", file=sys.stderr)
     out: dict[str, list[Bar]] = {}
     for t in tickers:
+        try:
+            sub = df[t]
+        except KeyError:
+            continue
+        bars = []
+        for idx, r in sub.iterrows():
+            close = float(r["Close"]) if r["Close"] == r["Close"] else filled.get(t, {}).get(idx.date())
+            if close is None or r["High"] != r["High"] or r["Low"] != r["Low"]:
+                continue
+            # Ur timdatan: ingen justerad stängning (senaste dagarna, faktorn är 1 utan utdelning efteråt).
+            adj = float(r["Adj Close"]) if r["Adj Close"] == r["Adj Close"] else close
+            bars.append(Bar(idx.date(), close, adj, float(r["High"]), float(r["Low"]),
+                            float(r["Volume"]) if r["Volume"] == r["Volume"] else 0.0,
+                            float(r["Open"]) if r["Open"] == r["Open"] else None))
+        if bars:
+            out[t] = bars
+    return out
+
+
+def _hourly_closes(gaps: dict[str, list[date]]) -> dict[str, dict[date, float]]:
+    """Stängningen för dagar där dagsdatan saknar den: sista timstapelns stängning samma dag (Stockholmstid),
+    som innehåller stängningsauktionen 17:25–17:30. Ett batchanrop (yfinance, intervall 60m) för alla bolagen.
+    Kontrollerat 2026-11-10: Betsson 98,20 och Hexagon 107,20 för 2026-11-09, samma som dagsstängningen kvällen före."""
+    import yfinance as yf
+
+    days = sorted({d for v in gaps.values() for d in v})
+    try:
+        df = yf.download(list(gaps), start=days[0].isoformat(), end=(days[-1] + timedelta(days=1)).isoformat(),
+                         interval="60m", group_by="ticker", auto_adjust=False, actions=False, threads=True,
+                         progress=False)
+    except Exception as exc:  # noqa: BLE001 - reserven får aldrig stoppa hämtningen
+        print(f"Timdatan kunde inte hämtas: {type(exc).__name__}", file=sys.stderr)
+        return {}
+    return hourly_closes_from(df, gaps)
+
+
+def hourly_closes_from(df, gaps: dict[str, list[date]]) -> dict[str, dict[date, float]]:
+    """{ticker: {dag: sista timstapelns stängning}} för dagarna i gaps, ur en timtabell grupperad per ticker."""
+    out: dict[str, dict[date, float]] = {}
+    for t, wanted in gaps.items():
         try:
             sub = df[t].dropna(subset=["Close"])
         except KeyError:
             continue
-        bars = [
-            Bar(idx.date(), float(r["Close"]), float(r["Adj Close"]) if r["Adj Close"] == r["Adj Close"] else float(r["Close"]),
-                float(r["High"]), float(r["Low"]), float(r["Volume"]) if r["Volume"] == r["Volume"] else 0.0,
-                float(r["Open"]) if r["Open"] == r["Open"] else None)
-            for idx, r in sub.iterrows()
-        ]
-        if bars:
-            out[t] = bars
+        for idx, r in sub.iterrows():
+            ts = idx.tz_convert("Europe/Stockholm") if getattr(idx, "tzinfo", None) else idx
+            if ts.date() in wanted:
+                out.setdefault(t, {})[ts.date()] = float(r["Close"])  # stigande tid: sista stapeln vinner
     return out
 
 

@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
+import signals  # noqa: E402
 from signals import THRESHOLDS, Bar, build, tone_of  # noqa: E402
 from validate import Instrument, validate_signals  # noqa: E402
 
@@ -189,3 +190,42 @@ def test_blankning_bara_vid_andrad_sammanlagd_blankning():
     assert signals_for({**base, "short_aggregate_pp": -0.6}, THRESHOLDS) == ["blankning"]
     old = {k: v for k, v in THRESHOLDS.items() if k != "short_only_aggregate"}
     assert signals_for({**base, "short_positions_pp": 0.3, "short_aggregate_pp": 0.2}, old) == ["blankning"]
+
+
+def test_saknad_stangning_hamtas_ur_timdatan(monkeypatch):
+    """Yahoo har en dagsrad med high och low men utan stängning (2026-11-10): stängningen hämtas ur timdatan (sista
+    timstapeln samma dag), med ett extra batchanrop bara för de bolagen. Utan high/low hoppas raden över som förut."""
+    import types
+
+    import pandas as pd
+
+    fields = ["Open", "High", "Low", "Close", "Adj Close", "Volume"]
+    nan = float("nan")
+
+    def frame(index, rows):
+        cols = pd.MultiIndex.from_tuples([(t, f) for t in rows for f in fields])
+        data = [[v for t in rows for v in rows[t][i]] for i in range(len(index))]
+        return pd.DataFrame(data, index=index, columns=cols)
+
+    days = pd.DatetimeIndex(["2026-11-06", "2026-11-09"])
+    daily = frame(days, {
+        "ALFA.ST": [[97.6, 98.1, 96.7, 97.75, 97.75, 1000], [97.55, 99.4, 97.2, nan, nan, 900]],
+        "BETA.ST": [[50.0, 51.0, 49.0, 50.5, 50.5, 100], [50.5, 52.0, 50.0, 51.0, 51.0, 120]],
+        "GAMMA.ST": [[10.0, 11.0, 9.0, 10.5, 10.5, 10], [nan, nan, nan, nan, nan, nan]],
+    })
+    hours = pd.DatetimeIndex(["2026-11-09 15:00", "2026-11-09 16:00", "2026-11-09 17:00"]).tz_localize("Europe/Stockholm")
+    hourly = frame(hours, {"ALFA.ST": [[98.75, 98.8, 97.9, 98.05, 98.05, 1], [98.05, 98.15, 97.75, 98.05, 98.05, 1],
+                                       [98.0, 98.2, 97.8, 98.2, 98.2, 1]]})
+    calls = []
+
+    def download(tickers, **kw):
+        calls.append((list(tickers), kw["interval"]))
+        return hourly if kw["interval"] == "60m" else daily
+
+    monkeypatch.setitem(sys.modules, "yfinance", types.SimpleNamespace(download=download))
+    bars = signals._download_bars(["ALFA.ST", "BETA.ST", "GAMMA.ST"], date(2026, 11, 2), date(2026, 11, 9))
+    assert calls == [(["ALFA.ST", "BETA.ST", "GAMMA.ST"], "1d"), (["ALFA.ST"], "60m")]
+    a = bars["ALFA.ST"][-1]
+    assert a.day == date(2026, 11, 9) and a.close == 98.2 and a.adj_close == 98.2 and a.high == 99.4 and a.volume == 900
+    assert bars["BETA.ST"][-1].close == 51.0
+    assert [b.day for b in bars["GAMMA.ST"]] == [date(2026, 11, 6)]  # tom rad: hoppas över
