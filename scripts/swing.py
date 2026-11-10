@@ -37,6 +37,8 @@ triggernivå och stopp under stödet. Fliken har ett enda R, strategins (se neda
 - "bbrekyl" / "bbrekyl-vandsignal": strategin "Rekyl efter Bollingerutbrott" (scripts/bbrekyl.py), med fönstret
   ("bbrekyl.state"), nivåerna, utbrottsdagen (och om den var en rapportdag, med utfallet mot förväntan), Bollinger-
   läget och rangen per bolag ("bbrekyl"), som för Pullback
+- "momentum" för kandidaterna i båda strategierna: RSI(14) och Stoch RSI (3, 3, 14, 14) med varning
+  (scripts/momentum.py), som bollinger.py uppdaterar under dagen
 
 Bolag som saknas i tabellen står i "missing" (Yahoo saknar kursdata, eller för kort historik) och "delisted"
 (avnoterade enligt instruments.csv, med sista handelsdag och källa; hoppas över helt), så att sidan kan visa dem.
@@ -59,6 +61,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import bbrekyl  # noqa: E402
 import levels  # noqa: E402
+import momentum  # noqa: E402
 import pullback  # noqa: E402
 import ranking  # noqa: E402
 from bollinger import bands, position, upper_band  # noqa: E402
@@ -338,6 +341,9 @@ def build(today: date, now: datetime, instruments: dict[str, Instrument], bars: 
             crit = ranking.criteria(meas)
             pb["rank"] = {"rank": None, "score": sum(crit.values()), "criteria": crit, "measures": meas}
         bb = bb_strategy(b, o, h, lo, c, i, atr, rep)
+        # RSI(14) och Stoch RSI för strategivyerna (scripts/momentum.py), bara för kandidaterna; ingen påverkan på
+        # rang eller krav.
+        mom = momentum.snapshot(c[:i + 1]) if pb_levels is not None or bb.get("levels") else None
         companies.append({
             "ticker": t, "name": inst.namn, "sector": inst.sektor, "day": m["day"].isoformat(),
             **{k: m[k] for k in ("ma20_pct", "ma50_pct", "ma20_over_ma50", "rsi2", "rsi14", "atr_pct", "volume_ratio",
@@ -348,6 +354,7 @@ def build(today: date, now: datetime, instruments: dict[str, Instrument], bars: 
             "short_pct": short_pct.get(t),
             "pullback": pb,
             "bbrekyl": bb,
+            "momentum": mom,
             "sr": sr,
             "labels": labels + bbrekyl.labels(bb["state"]),
         })
@@ -370,7 +377,8 @@ def build(today: date, now: datetime, instruments: dict[str, Instrument], bars: 
         "generated_at": now.isoformat(timespec="seconds"),
         "thresholds": {**THRESHOLDS, "pullback": pullback.THRESHOLDS, "levels": levels.THRESHOLDS,
                        "ranking": dict(ranking.THRESHOLDS),
-                       "bbrekyl": {**bbrekyl.THRESHOLDS, "ranking": dict(bbrekyl.RANK_THRESHOLDS)}},
+                       "bbrekyl": {**bbrekyl.THRESHOLDS, "ranking": dict(bbrekyl.RANK_THRESHOLDS)},
+                       "momentum": dict(momentum.THRESHOLDS)},
         "ranking_criteria": dict(ranking.CRITERIA),
         "bbrekyl_criteria": dict(bbrekyl.CRITERIA),
         "labels": dict(LABELS),  # en kopia: filen får inte dela modulens dict

@@ -5,12 +5,14 @@
  * (scripts/swing_history.py). Ett informationsverktyg: etiketterna beskriver vad som hänt, inga uppmaningar.
  */
 import type { PullbackSummary, SwingView } from "../lib/data";
+import Momentum from "./SwingMomentum.astro";
 import { shortDate } from "../lib/format";
 import { signedPct } from "../lib/signals";
 import {
   MIN_CASES, altStopText, decidedShareText, labelClass, labelCounts, levelText, missingText, netText, priceText,
   reportText, resistanceRText, riskText, shareText, bollingerSourceText, chipText, pctBText, signalText,
-  TODAY_STATUS, todayInvalid, todayLines, todayOrder, bbLevelText, breakoutLines, todayVolumeText, volumeRuleLines, rText, rankText, rankTitle, srDistText, srInsideText, srKindText, srLevelText, upperRText, vsBaseText,
+  TODAY_STATUS, todayInvalid, todayLines, todayOrder, bbLevelText, breakoutLines, todayVolumeText, volumeRuleLines,
+  momentumText, rText, rankText, rankTitle, srDistText, srInsideText, srKindText, srLevelText, upperRText, vsBaseText,
 } from "../lib/swing";
 
 interface Props {
@@ -190,7 +192,10 @@ const rankHist = pbHist?.ranking ?? null;
             </li>
             <li>
               <strong>Ingång:</strong> vändsignalen, nivån rekylen nådde och triggernivån vid vändsignal, annars gårdagens
-              stängning som referens.
+              stängning som referens. Under den RSI(14) och Stoch RSI (3, 3, 14, 14, %K/%D), med ⚠ när RSI(14) är över 70
+              eller Stoch RSI %K över 80. De räknas på gårdagens stängning och, vid Bollingerkontrollerna 09:20 och 13:20,
+              med dagens kurs (fördröjd ca 15 minuter). De påverkar inte rang eller krav, och visas också i Rekyl efter
+              Bollingerutbrott.
               <strong> Stopp:</strong> lägsta low under rekylen, alltså sedan den högsta toppen de senaste
               {" "}{pt.stop_days} handelsdagarna, eller MA-nivån om den ligger lägre. Under nivån står avståndet från
               referensen till stoppet (1 R) i procent och i ATR(14).
@@ -505,6 +510,7 @@ const rankHist = pbHist?.ranking ?? null;
                             <span class="sub">vid {levelText(lv.level)}</span>
                             <span class="line">{lv.trigger !== null ? "Trigger" : "Referens"} {priceText(lv.ref)}</span>
                             {lv.trigger === null && <span class="sub">gårdagens stängning</span>}
+                            <Momentum m={r.momentum} />
                           </>
                         ) : "–"}
                       </td>
@@ -602,6 +608,7 @@ const rankHist = pbHist?.ranking ?? null;
                             )) : <span class="sub">{bo.volume}</span>}
                             <span class="line">{lv.signal ? signalText(lv.signal) : "Ingen vändsignal"}, vid {bbLevelText(lv.level)}</span>
                             <span class="sub">{lv.trigger !== null ? "Trigger" : "Referens"} {priceText(lv.ref)}{lv.trigger === null ? " (gårdagens stängning)" : ""}</span>
+                            <Momentum m={r.momentum} />
                           </>
                         ) : "–"}
                       </td>

@@ -197,6 +197,10 @@ def test_swing_bygger_och_validerar_strategin():
     assert lv["breakout"]["day"] == bo_day.isoformat() and lv["breakout"]["days_ago"] == 5
     assert lv["breakout"]["report"] == {"published": rep["ALFA"]["published"], "verdict": "över"}
     assert bb["rank"]["rank"] == 1 and bb["bollinger"]["price"] == round(bars[-1].close, 4)
+    # RSI(14) och Stoch RSI för kandidaten (scripts/momentum.py), samma RSI som swingfilens rsi14.
+    import momentum
+    assert a["momentum"] == momentum.snapshot([x.adj_close for x in bars])
+    assert a["momentum"]["rsi14"] == a["rsi14"]
     assert data["strategies"]["bbrekyl"]["name"] == "Rekyl efter Bollingerutbrott"
     assert validate_swing(data, inst).errors == []
     # Valideringen räknar om nivåerna ur fönstret.
@@ -223,6 +227,8 @@ def test_swing_bygger_och_validerar_strategin():
     assert calls == [["ALFA.ST"]]  # ett anrop, bara strategins kandidater
     rows = check["bbrekyl"]["rows"]
     assert rows[0]["today"]["volume"] is None
+    # Vid kontrollen: RSI och Stoch RSI med dagens kurs som sista värde.
+    assert rows[0]["momentum"] == momentum.snapshot([x.adj_close for x in bars] + [tb.close])
     assert [r["ticker"] for r in rows] == ["ALFA"]
     assert rows[0]["today"]["trigger"] == bb["state"]["days"][-1]["high"]
     assert rows[0]["today"]["status"] in bollinger.TODAY_STATUS

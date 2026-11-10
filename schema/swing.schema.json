@@ -228,6 +228,20 @@
             "top": {"type": "integer"}
           }
         },
+        "momentum": {
+          "type": "object",
+          "description": "RSI och Stoch RSI (scripts/momentum.py THRESHOLDS); saknas i äldre filer.",
+          "additionalProperties": false,
+          "required": ["rsi_len", "stoch_len", "k", "d", "rsi_high", "stoch_high"],
+          "properties": {
+            "rsi_len": {"type": "integer"},
+            "stoch_len": {"type": "integer"},
+            "k": {"type": "integer"},
+            "d": {"type": "integer"},
+            "rsi_high": {"type": "number"},
+            "stoch_high": {"type": "number"}
+          }
+        },
         "bbrekyl": {
           "type": "object",
           "description": "Trösklar för Rekyl efter Bollingerutbrott (scripts/bbrekyl.py THRESHOLDS och RANK_THRESHOLDS); saknas i äldre filer.",
@@ -562,6 +576,18 @@
                   "at_upper": {"type": "boolean"}
                 }
               }
+            }
+          },
+          "momentum": {
+            "type": ["object", "null"],
+            "description": "RSI(14) och Stoch RSI (3, 3, 14, 14) med varning, för kandidaterna i strategierna (scripts/momentum.py); null för övriga, saknas i äldre filer.",
+            "additionalProperties": false,
+            "required": ["rsi14", "stoch_k", "stoch_d", "warn"],
+            "properties": {
+              "rsi14": {"$ref": "#/$defs/num"},
+              "stoch_k": {"$ref": "#/$defs/num"},
+              "stoch_d": {"$ref": "#/$defs/num"},
+              "warn": {"type": "boolean"}
             }
           },
           "bbrekyl": {

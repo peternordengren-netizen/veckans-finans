@@ -1,0 +1,36 @@
+---
+/**
+ * RSI(14) och Stoch RSI i kolumnen Ingång i strategivyerna (scripts/momentum.py), med ⚠ när RSI(14) är över 70
+ * eller Stoch RSI %K över 80, och var värdet kommer ifrån (gårdagens stängning eller kontrollens tid).
+ * Beskrivande; påverkar inte rang eller krav.
+ */
+import type { SwingMomentum } from "../lib/data";
+import { bollingerSourceText, momentumText } from "../lib/swing";
+
+interface Props {
+  m: SwingMomentum | null | undefined;
+}
+const { m } = Astro.props;
+const t = momentumText(m);
+---
+
+{
+  t && m && (
+    <span class:list={["sub", "mom", t.warn && "mom-warn"]} title={t.warn ? "RSI(14) över 70 eller Stoch RSI över 80" : undefined}>
+      {t.warn && <span class="warn-icon" aria-label="RSI eller Stoch RSI högt">⚠ </span>}
+      {t.text} · {bollingerSourceText(m.checked_at)}
+    </span>
+  )
+}
+
+<style>
+  .mom {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--muted);
+  }
+  .mom-warn .warn-icon {
+    color: var(--neg);
+    font-weight: 700;
+  }
+</style>

@@ -642,6 +642,19 @@ ungefär en fjärdedel av fallen, och de fallen gick bättre än genomsnittet. V
 osäkerheten är för stor för att skilja den från rekyler utan vändsignal. Fallen är dessutom inte oberoende, eftersom
 många infaller samma dagar.
 
+#### RSI och Stoch RSI i strategivyerna (`scripts/momentum.py`)
+
+I båda strategierna visar kolumnen Ingång RSI(14) och Stoch RSI (3, 3, 14, 14) som %K/%D. ⚠ visas när RSI(14) är
+över 70 eller Stoch RSI %K över 80.
+- RSI(14) räknas med Wilders utjämning, som swingfilens `rsi14`.
+- Stoch RSI är (RSI − lägsta RSI) / (högsta − lägsta) över 14 dagar. %K är 3 dagars medel av det, och %D 3 dagars
+  medel av %K.
+- Morgonens swingfil räknar på gårdagens stängning (`momentum` per kandidat).
+- Bollingerkontrollerna 09:20 och 13:20 räknar om med dagens kurs som sista värde (`momentum` per rad i kontrollfilen),
+  och cellen visar kontrollens tid.
+- Kontrollen hämtar därför 400 dagars dagsdata i stället för 45, i samma batchanrop.
+- Värdena påverkar inte rang, krav eller status.
+
 #### Strategin "Rekyl efter Bollingerutbrott" (`scripts/bbrekyl.py`)
 
 Det andra valet under "Strategi" i flikens rullista, på samma dagsdata och med samma justerade kurser.

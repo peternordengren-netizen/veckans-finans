@@ -131,6 +131,17 @@ export function todayVolumeText(v: { ratio: number; until: string } | null | und
   return v ? `omsättning hittills ${pctFmt.format(v.ratio)}× normalt (t.o.m. ${v.until})` : null;
 }
 
+/** RSI(14) och Stoch RSI i kolumnen Ingång: "RSI(14) 72 · Stoch RSI 85/80" (%K/%D), med varning (⚠) när RSI är över
+ *  70 eller %K över 80. null utan värden. */
+export function momentumText(m: { rsi14: number | null; stoch_k: number | null; stoch_d: number | null; warn: boolean } | null | undefined): {
+  text: string; warn: boolean;
+} | null {
+  if (!m || (m.rsi14 === null && m.stoch_k === null)) return null;
+  const n = (v: number | null) => (v === null ? "–" : String(Math.round(v)));
+  const stoch = m.stoch_k === null ? "–" : `${n(m.stoch_k)}/${n(m.stoch_d)}`;
+  return { text: `RSI(14) ${n(m.rsi14)} · Stoch RSI ${stoch}`, warn: m.warn };
+}
+
 /** Avstånd till stoppet: "2,8 % · 1,4 ATR". */
 export function riskText(pct: number | null, atr: number | null): string {
   const p = pct === null ? "–" : `${pctFmt.format(pct)} %`;

@@ -976,6 +976,10 @@ def validate_swing(data: dict, instruments: dict[str, Instrument]) -> Result:
             _check_pullback(c, data["thresholds"].get("pullback"), where, expected, res)
         if "bbrekyl" in c:
             _check_bbrekyl(c, data["thresholds"].get("bbrekyl"), where, expected, res)
+        if c.get("momentum"):
+            from bollinger import momentum_errors
+
+            res.errors += momentum_errors(c["momentum"], where)
         if c.get("sr"):
             _check_sr(c["sr"], where, res)
         if sorted(c["labels"]) != sorted(expected):

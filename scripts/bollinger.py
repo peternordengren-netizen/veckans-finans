@@ -59,6 +59,7 @@ from zoneinfo import ZoneInfo
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
+import momentum  # noqa: E402
 from morning import is_business_day  # noqa: E402
 from signals import BarFetcher, yahoo_bars  # noqa: E402
 from validate import DATA_DIR, Instrument, listed, load_instruments  # noqa: E402
@@ -68,7 +69,9 @@ BOLLINGER_DIR = DATA_DIR / "bollinger"
 PERIOD = 20
 WIDTH = 2.0
 NEAR_PCT = 1.0
-FETCH_DAYS = 45  # 20 handelsdagar och marginal för helger och helgdagar
+# Kalenderdagar dagsdata: 20 dagar räcker för banden, men RSI(14) med Wilders utjämning och Stoch RSI behöver lång
+# historik för att bli samma som morgonens swingfil (samma period som scripts/swing.HISTORY_DAYS). Ett batchanrop.
+FETCH_DAYS = 400
 DELAY_NOTE = "Kurserna från Yahoo är fördröjda ca 15 minuter."
 INTRADAY_DAYS = 35  # kalenderdagar med 15-minutersstaplar (minst 20 handelsdagar före i dag)
 VOLUME_PROFILE_DAYS = 20
@@ -294,6 +297,7 @@ def check(today: date, now: datetime, instruments: dict[str, Instrument], fetch:
     over, near, missing = [], [], []
     today_bands: dict[str, tuple[float, float, float]] = {}  # ticker -> (kurs, undre, övre)
     today_bars = {}  # ticker -> dagens dagsrad (high, low, senaste kurs)
+    today_closes = {}  # ticker -> justerade stängningar t.o.m. gårdagen och dagens kurs (RSI och Stoch RSI)
     for yt, t in tickers.items():
         b = bars.get(yt, [])
         if not b or b[-1].day != today:
@@ -306,6 +310,7 @@ def check(today: date, now: datetime, instruments: dict[str, Instrument], fetch:
             continue
         today_bands[t] = (price, *bb)
         today_bars[t] = b[-1]
+        today_closes[t] = [x.adj_close for x in b[:-1]] + [price]
         upper = bb[1]
         st = status(price, upper)
         if st:
@@ -314,7 +319,8 @@ def check(today: date, now: datetime, instruments: dict[str, Instrument], fetch:
             (over if st == "over" else near).append(row)
     for rows in (over, near):
         rows.sort(key=lambda r: -r["vs_upper_pct"])
-    sections = {key: strategy_section(key, swing, previous, today_bands, today_bars, now) if swing is not None
+    sections = {key: strategy_section(key, swing, previous, today_bands, today_bars, now, today_closes)
+                if swing is not None
                 else None for key in STRATEGY_KEYS}
     # Omsättningen hittills mot normalt, för Rekyl efter Bollingerutbrott (ett extra batchanrop, bara med kandidater).
     bb_rows = [r for r in (sections.get("bbrekyl") or {}).get("rows", []) if r.get("today")]
@@ -339,7 +345,7 @@ def check(today: date, now: datetime, instruments: dict[str, Instrument], fetch:
 
 
 def strategy_section(key: str, swing: dict, previous: dict | None, today_bands: dict, today_bars: dict,
-                     now: datetime) -> dict:
+                     now: datetime, today_closes: dict | None = None) -> dict:
     """Avsnittet för en strategi: kandidaterna med dagens kurs, läget mot banden, status i dag och ändringarna sedan
     föregående kontroll samma dag (samma swingfil)."""
     prev = (previous or {}).get(key)
@@ -354,7 +360,10 @@ def strategy_section(key: str, swing: dict, previous: dict | None, today_bands: 
         price, lower, upper = today_bands[c["ticker"]]
         prev_today = ((prev_rows or {}).get(c["ticker"]) or {}).get("today")
         rows.append({"ticker": c["ticker"], "name": c["name"], **position(price, lower, upper, lv["ref"], lv["stop"]),
-                     "today": today_row(today_bars[c["ticker"]], c, now, prev_today, key)})
+                     "today": today_row(today_bars[c["ticker"]], c, now, prev_today, key),
+                     # RSI(14) och Stoch RSI med dagens kurs (scripts/momentum.py); påverkar inte status eller rang.
+                     "momentum": momentum.snapshot(today_closes[c["ticker"]]) if today_closes and c["ticker"] in today_closes
+                     else None})
     rows.sort(key=lambda r: (not r["at_upper"], r["upper_r"] if r["upper_r"] is not None else 1e9))
     since = previous["checked_at"] if prev else None
     changes = status_changes(rows, prev_rows)
@@ -362,11 +371,23 @@ def strategy_section(key: str, swing: dict, previous: dict | None, today_bands: 
             "status_since": since, "changes": changes, "notice": status_notice(changes, since)}
 
 
+def momentum_errors(m: dict | None, where: str) -> list[str]:
+    """RSI och Stoch RSI mellan 0 och 100, och varningen stämmer med gränserna (scripts/momentum.warn)."""
+    if not m:
+        return []
+    errors = [f"{where}: {k} {m[k]} ligger utanför 0–100" for k in ("rsi14", "stoch_k", "stoch_d")
+              if m[k] is not None and not 0 <= m[k] <= 100]
+    if m["warn"] != momentum.warn(m["rsi14"], m["stoch_k"]):
+        errors.append(f"{where}: varningen för RSI/Stoch RSI stämmer inte med värdena")
+    return errors
+
+
 def validate(data: dict) -> list[str]:
     """Statusen räknas om ur pris och band; listorna får inte överlappa. Pullback-kandidaternas läge räknas om."""
     errors = []
     for r in [r for key in STRATEGY_KEYS for r in (data.get(key) or {}).get("rows", [])]:
         errors += position_errors(r, r["name"])
+        errors += momentum_errors(r.get("momentum"), r["name"])
         td = r.get("today")
         if td:
             expected = day_status(td["high"], td["low"], td["price"], td["trigger"], td["ref"], td["stop"], td["ma50"])

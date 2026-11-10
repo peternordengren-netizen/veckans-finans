@@ -4,7 +4,7 @@ import { test } from "node:test";
 
 import {
   decidedShareText, isPullbackLabel, labelClass, labelCounts, levelText, netText, priceText, reportText, riskText, shareText,
-  altStopText, bbLevelText, breakoutLines, todayVolumeText, volumeRuleLines, missingText, resistanceRText, todayInvalid, todayLines, todayOrder, TODAY_STATUS,
+  altStopText, bbLevelText, breakoutLines, momentumText, todayVolumeText, volumeRuleLines, missingText, resistanceRText, todayInvalid, todayLines, todayOrder, TODAY_STATUS,
   bollingerSourceText, chipText, pctBText, rankText, rankTitle, rText, signalText, srDistText, srInsideText, srLevelText, upperRText, vsBaseText,
 } from "../src/lib/swing.ts";
 
@@ -135,6 +135,17 @@ test("Rekyl efter Bollingerutbrott: volymvillkoren och omsättningen i dag", () 
   assert.equal(no[3].text, "Inga upp- eller neddagar i rekylen (rangkriterium)");
   assert.equal(todayVolumeText({ ratio: 1.34, until: "09:00" }), "omsättning hittills 1,3× normalt (t.o.m. 09:00)");
   assert.equal(todayVolumeText(null), null);
+});
+
+test("RSI och Stoch RSI i kolumnen Ingång", () => {
+  assert.deepEqual(momentumText({ rsi14: 72.4, stoch_k: 85.2, stoch_d: 79.6, warn: true }), {
+    text: "RSI(14) 72 · Stoch RSI 85/80", warn: true,
+  });
+  assert.deepEqual(momentumText({ rsi14: 55, stoch_k: null, stoch_d: null, warn: false }), {
+    text: "RSI(14) 55 · Stoch RSI –", warn: false,
+  });
+  assert.equal(momentumText(null), null);
+  assert.equal(momentumText({ rsi14: null, stoch_k: null, stoch_d: null, warn: false }), null);
 });
 
 test("bolag som saknas i Swing", () => {

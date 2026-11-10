@@ -97,6 +97,9 @@ export interface SwingRow {
   bbrekyl?: {
     levels: BbrekylLevels | null; bollinger?: PullbackBollinger; rank?: BbrekylRank; today?: PullbackToday;
   };
+  /** RSI(14) och Stoch RSI (3, 3, 14, 14) med varning för kandidaterna i strategierna (scripts/momentum.py); gårdagens
+   *  stängning eller (checked_at satt) senaste kontrollen i dag. Null/saknas för övriga och i äldre filer. */
+  momentum?: SwingMomentum | null;
   /** Senaste korsningen mellan 50 och 200 dagars MA de senaste 10 dagarna, och dagar sedan (saknas i äldre filer). */
   ma_cross?: "golden" | "death" | null;
   ma_cross_days?: number | null;
@@ -160,6 +163,15 @@ export interface PullbackLevels {
   top: number;
   r2: number;
   r3: number;
+}
+export interface SwingMomentum {
+  rsi14: number | null;
+  stoch_k: number | null;
+  stoch_d: number | null;
+  /** RSI(14) över 70 eller Stoch RSI %K över 80. */
+  warn: boolean;
+  /** Tiden för kontrollen under dagen; saknas för gårdagens stängning. */
+  checked_at?: string;
 }
 /** Nivåerna i Rekyl efter Bollingerutbrott (scripts/bbrekyl.levels). */
 export interface BbrekylLevels {
@@ -365,7 +377,7 @@ export function loadLatestSwing(): SwingView | null {
     // Kontrollens rad för en strategi: läget mot banden och status i dag ersätter gårdagens läge.
     const merge = <T extends { levels: unknown | null }>(part: T | undefined, r: BollingerCheckRow | undefined): T | undefined => {
       if (!part?.levels || !r || !check) return part;
-      const { ticker: _t, name: _n, today, ...pos } = r;
+      const { ticker: _t, name: _n, today, momentum: _m, ...pos } = r;
       return {
         ...part,
         bollinger: { ...pos, checked_at: check.checked_at },
@@ -374,11 +386,16 @@ export function loadLatestSwing(): SwingView | null {
     };
     const live = new Map((pb?.rows ?? []).map((r) => [r.ticker, r]));
     const liveBb = new Map((bbs?.rows ?? []).map((r) => [r.ticker, r]));
-    const rows = raw.companies.map((c) => ({
-      ...c,
-      pullback: merge(c.pullback, live.get(c.ticker)),
-      bbrekyl: merge(c.bbrekyl, liveBb.get(c.ticker)),
-    }));
+    const rows = raw.companies.map((c) => {
+      // RSI och Stoch RSI med dagens kurs (samma för båda strategierna).
+      const mom = (live.get(c.ticker) ?? liveBb.get(c.ticker))?.momentum;
+      return {
+        ...c,
+        pullback: merge(c.pullback, live.get(c.ticker)),
+        bbrekyl: merge(c.bbrekyl, liveBb.get(c.ticker)),
+        ...(mom && check ? { momentum: { ...mom, checked_at: check.checked_at } } : {}),
+      };
+    });
     return {
       date: raw.date,
       asOf: raw.as_of,
@@ -1008,7 +1025,9 @@ export interface BollingerCheck {
 }
 
 /** En kandidats rad i Bollingerkontrollen: läget mot banden och status i dag. */
-export type BollingerCheckRow = PullbackBollinger & { ticker: string; name: string; today?: Omit<PullbackToday, "checked_at"> | null };
+export type BollingerCheckRow = PullbackBollinger & {
+  ticker: string; name: string; today?: Omit<PullbackToday, "checked_at"> | null; momentum?: Omit<SwingMomentum, "checked_at"> | null;
+};
 /** En strategis avsnitt i Bollingerkontrollen (scripts/bollinger.py strategy_section). */
 export interface BollingerStrategySection {
   swing_date: string;
