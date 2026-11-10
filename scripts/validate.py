@@ -974,6 +974,8 @@ def validate_swing(data: dict, instruments: dict[str, Instrument]) -> Result:
             expected.append(rl)
         if "pullback" in c:
             _check_pullback(c, data["thresholds"].get("pullback"), where, expected, res)
+        if "bbrekyl" in c:
+            _check_bbrekyl(c, data["thresholds"].get("bbrekyl"), where, expected, res)
         if c.get("sr"):
             _check_sr(c["sr"], where, res)
         if sorted(c["labels"]) != sorted(expected):
@@ -994,6 +996,7 @@ def validate_swing(data: dict, instruments: dict[str, Instrument]) -> Result:
             res.errors.append(f"{where}: avnoterad {m['last_day']} stämmer inte med instruments.csv")
         seen.add(m["ticker"])
     _check_ranking(data, res)
+    _check_bbrekyl_ranking(data, res)
     return res
 
 
@@ -1031,6 +1034,71 @@ def _check_ranking(data: dict, res: Result) -> None:
     wrong = [e["name"] for e in entries if e["rank"] != e["given"]]
     if wrong:
         res.errors.append(f"rangordningen stämmer inte med poäng och utrymme till motståndet: {wrong[:5]}")
+
+
+def _check_bbrekyl_ranking(data: dict, res: Result) -> None:
+    """Rangordningen i Rekyl efter Bollingerutbrott (scripts/bbrekyl.py): kriterierna räknas om ur mätvärdena,
+    mätvärdena stämmer med nivåerna och Bollingerläget, och rangerna är 1..n i sorteringsordning."""
+    import bbrekyl
+
+    th = ((data["thresholds"].get("bbrekyl") or {}).get("ranking")) or bbrekyl.RANK_THRESHOLDS
+    for k, text in (data.get("bbrekyl_criteria") or {}).items():
+        if re.search(r"\b(köp|sälj|kursmål|rekommend|bäst)", text, re.IGNORECASE):
+            res.errors.append(f"rangkriteriet {k!r} innehåller en värdering eller uppmaning: {text!r}")
+    entries = []
+    for c in data["companies"]:
+        bb = c.get("bbrekyl") or {}
+        rk = bb.get("rank")
+        if rk is None:
+            continue
+        where = f"{c['name']} ({c['ticker']}) rang (Rekyl efter Bollingerutbrott)"
+        lv, pos, m = bb.get("levels"), bb.get("bollinger"), rk["measures"]
+        if lv is None:
+            res.errors.append(f"{where}: rang utan nivåer")
+            continue
+        if m["signal"] != (lv["signal"] is not None) or m["stop_atr"] != lv["risk_atr"] or \
+                m["lower_volume"] != lv["lower_volume"] or m["room_r"] != lv["target_r"] or \
+                (pos is not None and m["upper_r"] != pos["upper_r"]):
+            res.errors.append(f"{where}: mätvärdena stämmer inte med nivåerna eller Bollingerläget")
+        expected = bbrekyl.criteria(m, th)
+        if rk["criteria"] != expected:
+            res.errors.append(f"{where}: kriterierna {rk['criteria']} stämmer inte med mätvärdena (väntat {expected})")
+        if rk["score"] != sum(expected.values()):
+            res.errors.append(f"{where}: poängen {rk['score']} ≠ antalet uppfyllda kriterier")
+        entries.append({"score": rk["score"], "measures": m, "name": c["name"], "given": rk["rank"]})
+    bbrekyl.rank(entries)
+    wrong = [e["name"] for e in entries if e["rank"] != e["given"]]
+    if wrong:
+        res.errors.append(f"rangordningen (Rekyl efter Bollingerutbrott) stämmer inte: {wrong[:5]}")
+
+
+def _check_bbrekyl(c: dict, th: dict | None, where: str, expected: list[str], res: Result) -> None:
+    """Rekyl efter Bollingerutbrott: etiketten och nivåerna räknas om ur det sparade fönstret (scripts/bbrekyl.py)."""
+    import bbrekyl
+
+    bb = c["bbrekyl"]
+    t = {k: v for k, v in (th or bbrekyl.THRESHOLDS).items() if k != "ranking"}
+    labels = bbrekyl.labels(bb["state"], t)
+    expected += labels
+    lv = bb["levels"]
+    if bool(labels) != (lv is not None):
+        res.errors.append(f"{where}: nivåerna för Rekyl efter Bollingerutbrott ska finnas om och endast om etiketten finns")
+        return
+    if lv is None:
+        if bb.get("bollinger") is not None or bb.get("rank") is not None:
+            res.errors.append(f"{where}: Bollingerläge eller rang utan nivåer (Rekyl efter Bollingerutbrott)")
+        return
+    again = bbrekyl.levels(bb["state"], None, t)
+    for key in ("level", "signal", "trigger", "ref", "stop", "target", "target_r", "r2", "r3", "lower_volume"):
+        a, b = again[key], lv[key]
+        if (abs(a - b) > 1e-3) if isinstance(a, float) and isinstance(b, (int, float)) else a != b:
+            res.errors.append(f"{where}: {key} {b!r} stämmer inte med fönstret (väntat {a!r})")
+    if lv["breakout"]["days_ago"] != again["breakout"]["days_ago"]:
+        res.errors.append(f"{where}: utbrottsdagen stämmer inte med fönstret")
+    if bb.get("bollinger") is not None:
+        from bollinger import position_errors
+
+        res.errors += position_errors(bb["bollinger"], f"{where} Bollinger")
 
 
 def _check_sr(sr: dict, where: str, res: Result) -> None:

@@ -4,7 +4,7 @@ import { test } from "node:test";
 
 import {
   decidedShareText, isPullbackLabel, labelClass, labelCounts, levelText, netText, priceText, reportText, riskText, shareText,
-  altStopText, missingText, resistanceRText, todayInvalid, todayLines, todayOrder, TODAY_STATUS,
+  altStopText, bbLevelText, breakoutLines, missingText, resistanceRText, todayInvalid, todayLines, todayOrder, TODAY_STATUS,
   bollingerSourceText, chipText, pctBText, rankText, rankTitle, rText, signalText, srDistText, srInsideText, srLevelText, upperRText, vsBaseText,
 } from "../src/lib/swing.ts";
 
@@ -99,6 +99,22 @@ test("status i dag för pullback-kandidaterna", () => {
   assert.deepEqual(["waiting", "triggered", "late", "below_ma50", "below_stop"].map(todayOrder), [0, 1, 2, 3, 4]);
   assert.equal(todayOrder(null), null);
   for (const text of Object.values(TODAY_STATUS)) assert.ok(!/köp|sälj|kursmål/i.test(text));
+});
+
+test("Rekyl efter Bollingerutbrott: texter", () => {
+  const sd = (iso: string) => ({ "2026-11-04": "4 nov" } as Record<string, string>)[iso] ?? iso;
+  const b = { day: "2026-11-04", days_ago: 3, volume_ratio: 4.14, report: null };
+  assert.deepEqual(breakoutLines(b, true, sd), {
+    main: "Utbrott 4 nov (3 d sedan), 4,1× omsättning", report: null, volume: "lägre omsättning i rekylen",
+  });
+  const r = breakoutLines({ ...b, report: { verdict: "över" } }, false, sd);
+  assert.equal(r.report, "rapportdag, över förväntan");
+  assert.equal(r.volume, "inte lägre omsättning i rekylen");
+  assert.equal(breakoutLines({ ...b, report: { verdict: null } }, true, sd).report, "rapportdag");
+  assert.equal(bbLevelText("mid"), "mittbandet");
+  assert.equal(bbLevelText("ema20"), "20 EMA");
+  assert.equal(bbLevelText("mellan"), "mellan mittbandet och 20 EMA");
+  assert.equal(labelClass("bbrekyl-vandsignal"), "pullback");
 });
 
 test("bolag som saknas i Swing", () => {

@@ -8,7 +8,8 @@
 # - Notisen listar bolagen vid eller över det övre bandet och, separat, de inom 1 % under det, och säger att
 #   kurserna är fördröjda ca 15 minuter. Ett eget avsnitt listar pullback-kandidaterna (strategin Pullback i
 #   trend i fliken Swing) vid eller över övre bandet, med avståndet dit i R, och kandidaternas ändrade
-#   "Status i dag" sedan föregående kontroll (väntar på trigger, trigger bruten, sen, ogiltig). Ett klick öppnar sidan.
+#   "Status i dag" sedan föregående kontroll (väntar på trigger, trigger bruten, sen, ogiltig), och samma för
+#   strategin Rekyl efter Bollingerutbrott när den har kandidater. Ett klick öppnar sidan.
 # - Bygget uppdaterar kolumnerna "Bollinger" och "Status i dag" i fliken Swing med kontrollens kurser och tid.
 # - Logg i logs/bollinger/<datum>.log.
 #
@@ -83,6 +84,10 @@ $pbText = if ($null -eq $data.pullback) { "Pullback-kandidater: ingen swingfil f
 }
 # Status i dag för pullback-kandidaterna: ändringarna sedan föregående kontroll (bollinger.py status_notice).
 $statusText = if ($null -ne $data.pullback -and $data.pullback.notice) { "$($data.pullback.notice) " } else { "" }
+# Samma för Rekyl efter Bollingerutbrott, bara när strategin har kandidater med kurs i dag.
+if ($null -ne $data.bbrekyl -and @($data.bbrekyl.rows).Count -gt 0) {
+    $statusText += "Rekyl efter Bollingerutbrott: $($data.bbrekyl.notice) "
+}
 $foot = $data.delay_note
 Log "Notis: $over | $near | $statusText$pbText"
 

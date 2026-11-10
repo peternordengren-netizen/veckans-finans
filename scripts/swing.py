@@ -34,6 +34,10 @@ triggernivå och stopp under stödet. Fliken har ett enda R, strategins (se neda
   kandidaterna också gårdagens stängning mot Bollingerbanden ("pullback.bollinger": %B, övre bandet, avståndet
   dit i R och om stängningen är vid eller över), som bollinger.py uppdaterar under dagen
 
+- "bbrekyl" / "bbrekyl-vandsignal": strategin "Rekyl efter Bollingerutbrott" (scripts/bbrekyl.py), med fönstret
+  ("bbrekyl.state"), nivåerna, utbrottsdagen (och om den var en rapportdag, med utfallet mot förväntan), Bollinger-
+  läget och rangen per bolag ("bbrekyl"), som för Pullback
+
 Bolag som saknas i tabellen står i "missing" (Yahoo saknar kursdata, eller för kort historik) och "delisted"
 (avnoterade enligt instruments.csv, med sista handelsdag och källa; hoppas över helt), så att sidan kan visa dem.
 
@@ -53,6 +57,7 @@ from zoneinfo import ZoneInfo
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
+import bbrekyl  # noqa: E402
 import levels  # noqa: E402
 import pullback  # noqa: E402
 import ranking  # noqa: E402
@@ -93,9 +98,13 @@ LABELS = {
     "golden-cross": "Golden cross",
     "death-cross": "Death cross",
     **pullback.LABELS,
+    **bbrekyl.LABELS,
 }
 # Strategier i rullistan: namn och etiketterna som räknas som träff (scripts/pullback.py).
-STRATEGIES = {"pullback": {"name": "Pullback i trend", "labels": list(pullback.LABELS)}}
+STRATEGIES = {
+    "pullback": {"name": "Pullback i trend", "labels": list(pullback.LABELS)},
+    "bbrekyl": {"name": "Rekyl efter Bollingerutbrott", "labels": list(bbrekyl.LABELS)},
+}
 
 
 # --- Lägesmått -------------------------------------------------------------------
@@ -328,6 +337,7 @@ def build(today: date, now: datetime, instruments: dict[str, Instrument], bars: 
                 pb["bollinger"]["upper_r"], pb_levels["risk_atr"], c, i)
             crit = ranking.criteria(meas)
             pb["rank"] = {"rank": None, "score": sum(crit.values()), "criteria": crit, "measures": meas}
+        bb = bb_strategy(b, o, h, lo, c, i, atr, rep)
         companies.append({
             "ticker": t, "name": inst.namn, "sector": inst.sektor, "day": m["day"].isoformat(),
             **{k: m[k] for k in ("ma20_pct", "ma50_pct", "ma20_over_ma50", "rsi2", "rsi14", "atr_pct", "volume_ratio",
@@ -337,14 +347,19 @@ def build(today: date, now: datetime, instruments: dict[str, Instrument], bars: 
             "report_verdict": rep["verdict"] if rep else None,
             "short_pct": short_pct.get(t),
             "pullback": pb,
+            "bbrekyl": bb,
             "sr": sr,
-            "labels": labels,
+            "labels": labels + bbrekyl.labels(bb["state"]),
         })
     companies.sort(key=lambda c: c["name"])
     ranked = [{**c["pullback"]["rank"], "name": c["name"], "_c": c} for c in companies if c["pullback"].get("rank")]
     ranking.rank(ranked)
     for e in ranked:
         e["_c"]["pullback"]["rank"]["rank"] = e["rank"]
+    bb_ranked = [{**c["bbrekyl"]["rank"], "name": c["name"], "_c": c} for c in companies if c["bbrekyl"].get("rank")]
+    bbrekyl.rank(bb_ranked)
+    for e in bb_ranked:
+        e["_c"]["bbrekyl"]["rank"]["rank"] = e["rank"]
     return {
         "schema_version": 1,
         "date": today.isoformat(),
@@ -354,8 +369,10 @@ def build(today: date, now: datetime, instruments: dict[str, Instrument], bars: 
         "coverage": {"with_day": with_day, "with_expected": with_expected, "of": of},
         "generated_at": now.isoformat(timespec="seconds"),
         "thresholds": {**THRESHOLDS, "pullback": pullback.THRESHOLDS, "levels": levels.THRESHOLDS,
-                       "ranking": dict(ranking.THRESHOLDS)},
+                       "ranking": dict(ranking.THRESHOLDS),
+                       "bbrekyl": {**bbrekyl.THRESHOLDS, "ranking": dict(bbrekyl.RANK_THRESHOLDS)}},
         "ranking_criteria": dict(ranking.CRITERIA),
+        "bbrekyl_criteria": dict(bbrekyl.CRITERIA),
         "labels": dict(LABELS),  # en kopia: filen får inte dela modulens dict
         "strategies": {k: {**v, "labels": list(v["labels"])} for k, v in STRATEGIES.items()},  # kopia, som labels
         "short_as_of": short_day,
@@ -363,6 +380,33 @@ def build(today: date, now: datetime, instruments: dict[str, Instrument], bars: 
         "missing": sorted(missing, key=lambda m: m["name"]),
         "delisted": delisted,
     }
+
+
+def bb_strategy(b: list[Bar], o: list[float], h: list[float], lo: list[float], c: list[float], i: int,
+                atr: float | None, rep: dict | None) -> dict:
+    """Rekyl efter Bollingerutbrott (scripts/bbrekyl.py) för ett bolag: fönstret, och vid träff nivåerna, utbrottsdagens
+    rapport (reaktionsdagen = utbrottsdagen, med utfallet mot förväntan), Bollingerläget och rangens mätvärden."""
+    state = bbrekyl.window(o, h, lo, c, [x.volume for x in b], pullback.ema(c, 20), i) if len(b) >= bbrekyl.MIN_BARS \
+        else None
+    out: dict = {"state": state, "levels": None}
+    if not bbrekyl.labels(state):
+        return out
+    lv = bbrekyl.levels(state, atr)
+    day = b[i - lv["breakout"]["days_ago"]].day
+    lv["breakout"]["day"] = day.isoformat()
+    report = None
+    if rep and reaction_day(datetime.fromisoformat(rep["published"])) <= day:
+        # Reaktionsdagen = första handelsdagen på eller efter reaction_day; utbrottsdagen om ingen dag ligger emellan.
+        r0 = reaction_day(datetime.fromisoformat(rep["published"]))
+        if min((x.day for x in b if x.day >= r0), default=None) == day:
+            report = {"published": rep["published"], "verdict": rep["verdict"]}
+    lv["breakout"]["report"] = report
+    out["levels"] = lv
+    out["bollinger"] = position(c[i], *bands(c[:i + 1]), lv["ref"], lv["stop"])
+    meas = bbrekyl.measures(lv, out["bollinger"]["upper_r"], c, i)
+    crit = bbrekyl.criteria(meas)
+    out["rank"] = {"rank": None, "score": sum(crit.values()), "criteria": crit, "measures": meas}
+    return out
 
 
 def write(data: dict, instruments: dict[str, Instrument]) -> Path | None:

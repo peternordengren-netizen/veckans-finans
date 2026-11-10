@@ -11,7 +11,7 @@ export function labelClass(label: string): string {
   if (label.startsWith("utbrott") || label.startsWith("bollinger")) return "breakout";
   if (label.startsWith("rsi2")) return "rsi";
   if (label.startsWith("trend") || label.endsWith("-cross")) return "trend";
-  if (label.startsWith("rekyl")) return "pullback";
+  if (label.startsWith("rekyl") || label.startsWith("bbrekyl")) return "pullback";
   return "report";
 }
 
@@ -68,6 +68,26 @@ export function signalText(s: "hammer" | "engulfing" | null): string {
 /** "20 EMA" eller "50 MA". */
 export function levelText(l: "ema20" | "ma50"): string {
   return l === "ema20" ? "20 EMA" : "50 MA";
+}
+
+/** Nivån gårdagens low nådde i Rekyl efter Bollingerutbrott: "mittbandet", "20 EMA" eller "mellan mittbandet och 20 EMA". */
+export function bbLevelText(l: "mid" | "ema20" | "mellan"): string {
+  return l === "mid" ? "mittbandet" : l === "ema20" ? "20 EMA" : "mellan mittbandet och 20 EMA";
+}
+
+/** Utbrottsdagen: "Utbrott 4 nov (3 d sedan), 4,1× omsättning", rapportdagen med utfallet mot förväntan, och om
+ *  omsättningen i rekylen varit lägre än på utbrottsdagen. */
+export function breakoutLines(
+  b: { day: string; days_ago: number; volume_ratio: number; report: { verdict: string | null } | null },
+  lowerVolume: boolean,
+  shortDate: (iso: string) => string,
+): { main: string; report: string | null; volume: string } {
+  const verdict = b.report?.verdict === "över" || b.report?.verdict === "under" ? `, ${b.report.verdict} förväntan` : "";
+  return {
+    main: `Utbrott ${shortDate(b.day)} (${b.days_ago} d sedan), ${pctFmt.format(b.volume_ratio)}× omsättning`,
+    report: b.report ? `rapportdag${verdict}` : null,
+    volume: lowerVolume ? "lägre omsättning i rekylen" : "inte lägre omsättning i rekylen",
+  };
 }
 
 /** Avstånd till stoppet: "2,8 % · 1,4 ATR". */

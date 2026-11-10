@@ -92,6 +92,11 @@ export interface SwingRow {
     state: PullbackState | null; levels: PullbackLevels | null; bollinger?: PullbackBollinger; rank?: PullbackRank;
     today?: PullbackToday;
   };
+  /** Rekyl efter Bollingerutbrott (scripts/bbrekyl.py): nivåerna vid träff, läget mot banden, rangen och status i dag
+   *  (som pullback); saknas i äldre filer. */
+  bbrekyl?: {
+    levels: BbrekylLevels | null; bollinger?: PullbackBollinger; rank?: BbrekylRank; today?: PullbackToday;
+  };
   /** Senaste korsningen mellan 50 och 200 dagars MA de senaste 10 dagarna, och dagar sedan (saknas i äldre filer). */
   ma_cross?: "golden" | "death" | null;
   ma_cross_days?: number | null;
@@ -155,6 +160,35 @@ export interface PullbackLevels {
   top: number;
   r2: number;
   r3: number;
+}
+/** Nivåerna i Rekyl efter Bollingerutbrott (scripts/bbrekyl.levels). */
+export interface BbrekylLevels {
+  /** Nivån gårdagens low nådde: mittbandet, 20 EMA eller mellan dem. */
+  level: "mid" | "ema20" | "mellan";
+  signal: "hammer" | "engulfing" | null;
+  trigger: number | null;
+  ref: number;
+  stop: number;
+  risk_pct: number | null;
+  risk_atr: number | null;
+  /** Utbrottets högsta high och avståndet dit i R. */
+  target: number;
+  target_r: number;
+  r2: number;
+  r3: number;
+  breakout: {
+    day: string; days_ago: number; close: number; upper: number; low: number; volume_ratio: number;
+    /** Utbrottsdagen var reaktionsdag för en rapport, med utfallet mot förväntan (verdict null = okänt). */
+    report: { published: string; verdict: string | null } | null;
+  };
+  /** Lägre snittomsättning under rekylen än på utbrottsdagen. */
+  lower_volume: boolean;
+}
+export interface BbrekylRank {
+  rank: number;
+  score: number;
+  criteria: Record<string, boolean>;
+  measures: { signal: boolean; lower_volume: boolean; room_r: number | null; has_resistance: boolean; upper_r: number | null; stop_atr: number | null; ma50_change_pct: number | null };
 }
 /** Rangordningen bland kandidaterna (scripts/ranking.py): flest uppfyllda kriterier först. */
 export interface PullbackRank {
@@ -226,9 +260,16 @@ export interface SwingView {
     levels?: { lookback: number; pivot: number; merge_atr: number; stop_buffer_atr: number };
     /** Rangordningen av Pullback-kandidaterna (saknas i äldre filer). */
     ranking?: { resistance_r: number; support_atr: number; bollinger_r: number; stop_atr: number; ma50_days: number; top: number };
+    /** Rekyl efter Bollingerutbrott (saknas i äldre filer). */
+    bbrekyl?: {
+      breakout_days: number; volume_ratio: number; touch_pct: number; bb_period: number; bb_width: number; volume_days: number;
+      ranking: { target_r: number; bollinger_r: number; stop_atr: number; ma50_days: number; top: number };
+    };
   };
   /** Rangordningens kriterier: nyckel och text (tom i äldre filer). */
   rankingCriteria: Record<string, string>;
+  /** Rangkriterierna för Rekyl efter Bollingerutbrott (tom i äldre filer). */
+  bbrekylCriteria: Record<string, string>;
   labels: Record<string, string>;
   /** Strategier i rullistan: namn och etiketterna som räknas som träff (saknas i äldre filer). */
   strategies: Record<string, { name: string; labels: string[] }>;
@@ -239,6 +280,12 @@ export interface SwingView {
   /** Senaste Bollingerkontrollen i dag för swingfilens kandidater (scripts/bollinger.py), eller null. */
   bollingerCheck: { checked_at: string; delay_note: string; candidates: number; rows: number } | null;
   history: {
+    /** Rekyl efter Bollingerutbrott: 2R före stoppet och tvärtom (saknas i äldre filer). */
+    bbrekyl?: {
+      thresholds: { max_days: number; trigger_days: number };
+      labels: Record<string, PullbackSummary>;
+      all: PullbackSummary;
+    };
     period: { start: string; end: string };
     method: string;
     base: Record<string, SwingStat>;
@@ -290,6 +337,7 @@ export function loadLatestSwing(): SwingView | null {
       thresholds: SwingView["thresholds"];
       labels: Record<string, string>;
       ranking_criteria?: Record<string, string>;
+      bbrekyl_criteria?: Record<string, string>;
       strategies?: SwingView["strategies"];
       companies: SwingRow[];
       missing?: SwingMissing[];
@@ -300,20 +348,24 @@ export function loadLatestSwing(): SwingView | null {
     // Bollingerkontrollen under dagen (09:20, 13:20) ersätter gårdagens läge för kandidaterna i samma swingfil.
     const check = IS_MOCK ? null : loadLatestBollinger();
     const pb = check?.pullback && check.pullback.swing_date === raw.date ? check.pullback : null;
-    const live = new Map((pb?.rows ?? []).map((r) => [r.ticker, r]));
-    const rows = raw.companies.map((c) => {
-      const r = live.get(c.ticker);
-      if (!r || !c.pullback?.levels || !check) return c;
+    const bbs = check?.bbrekyl && check.bbrekyl.swing_date === raw.date ? check.bbrekyl : null;
+    // Kontrollens rad för en strategi: läget mot banden och status i dag ersätter gårdagens läge.
+    const merge = <T extends { levels: unknown | null }>(part: T | undefined, r: BollingerCheckRow | undefined): T | undefined => {
+      if (!part?.levels || !r || !check) return part;
       const { ticker: _t, name: _n, today, ...pos } = r;
       return {
-        ...c,
-        pullback: {
-          ...c.pullback,
-          bollinger: { ...pos, checked_at: check.checked_at },
-          ...(today ? { today: { ...today, checked_at: check.checked_at } } : {}),
-        },
+        ...part,
+        bollinger: { ...pos, checked_at: check.checked_at },
+        ...(today ? { today: { ...today, checked_at: check.checked_at } } : {}),
       };
-    });
+    };
+    const live = new Map((pb?.rows ?? []).map((r) => [r.ticker, r]));
+    const liveBb = new Map((bbs?.rows ?? []).map((r) => [r.ticker, r]));
+    const rows = raw.companies.map((c) => ({
+      ...c,
+      pullback: merge(c.pullback, live.get(c.ticker)),
+      bbrekyl: merge(c.bbrekyl, liveBb.get(c.ticker)),
+    }));
     return {
       date: raw.date,
       asOf: raw.as_of,
@@ -322,13 +374,17 @@ export function loadLatestSwing(): SwingView | null {
       shortAsOf: raw.short_as_of,
       thresholds: raw.thresholds,
       rankingCriteria: raw.ranking_criteria ?? {},
+      bbrekylCriteria: raw.bbrekyl_criteria ?? {},
       labels: raw.labels,
       strategies: raw.strategies ?? {},
       rows,
       missing: raw.missing ?? [],
       delisted: raw.delisted ?? [],
-      bollingerCheck: pb && check
-        ? { checked_at: check.checked_at, delay_note: check.delay_note, candidates: pb.candidates, rows: pb.rows.length }
+      bollingerCheck: (pb || bbs) && check
+        ? {
+          checked_at: check.checked_at, delay_note: check.delay_note,
+          candidates: (pb?.candidates ?? 0) + (bbs?.candidates ?? 0), rows: (pb?.rows.length ?? 0) + (bbs?.rows.length ?? 0),
+        }
         : null,
       history,
     };
@@ -933,17 +989,23 @@ export interface BollingerCheck {
   over: BollingerRow[];
   near: BollingerRow[];
   /** Pullback-kandidaterna i dagens swingfil, med kursen mot båda banden (saknas i äldre filer, null utan swingfil). */
-  pullback?: {
-    swing_date: string;
-    candidates: number;
-    rows: (PullbackBollinger & { ticker: string; name: string; today?: Omit<PullbackToday, "checked_at"> | null })[];
-    /** Föregående kontroll samma dag, ändringarna sedan dess och notisens text (saknas i äldre filer). */
-    status_since?: string | null;
-    changes?: { ticker: string; name: string; from: string | null; to: string }[];
-    notice?: string;
-  } | null;
+  pullback?: BollingerStrategySection | null;
+  /** Samma avsnitt för Rekyl efter Bollingerutbrott (saknas i äldre filer, null utan swingfil). */
+  bbrekyl?: BollingerStrategySection | null;
 }
 
+/** En kandidats rad i Bollingerkontrollen: läget mot banden och status i dag. */
+export type BollingerCheckRow = PullbackBollinger & { ticker: string; name: string; today?: Omit<PullbackToday, "checked_at"> | null };
+/** En strategis avsnitt i Bollingerkontrollen (scripts/bollinger.py strategy_section). */
+export interface BollingerStrategySection {
+  swing_date: string;
+  candidates: number;
+  rows: BollingerCheckRow[];
+  /** Föregående kontroll samma dag, ändringarna sedan dess och notisens text (saknas i äldre filer). */
+  status_since?: string | null;
+  changes?: { ticker: string; name: string; from: string | null; to: string }[];
+  notice?: string;
+}
 /** Senaste Bollingerkontrollen (data/bollinger/<datum>-<hhmm>.json, scripts/bollinger.py), eller null. */
 export function loadLatestBollinger(): BollingerCheck | null {
   if (!existsSync(BOLLINGER_DIR)) return null;

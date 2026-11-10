@@ -18,6 +18,9 @@ under samma år följs fram till att 2R eller stoppet nås (högst 60 handelsdag
 Andelen 2R först och stopp först räknas på de avgjorda fallen, med snittresultat utan courtage.
 Dagsdatan hämtas med öppningskurser i samma batchanrop.
 
+Rekyl efter Bollingerutbrott (scripts/bbrekyl.py): samma uppföljning av varje dag med strategins etiketter, med
+rekylens lägsta low som stopp ("bbrekyl" i filen).
+
 Användning:
     python scripts/swing_history.py                    # hämtar dagsdata (ett batchanrop till Yahoo)
     python scripts/swing_history.py --cache bars.pkl   # återanvänder en sparad hämtning
@@ -38,6 +41,7 @@ from zoneinfo import ZoneInfo
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
+import bbrekyl  # noqa: E402
 import levels  # noqa: E402
 import pullback  # noqa: E402
 import ranking  # noqa: E402
@@ -115,6 +119,7 @@ def build(bars: dict, instruments: dict, today: date, results_dir: Path | None =
     base: dict[int, list[float]] = defaultdict(list)
     per_label: dict[str, dict[int, list[float]]] = {k: defaultdict(list) for k in LABELS}
     pb_cases: dict[str, list[dict]] = {k: [] for k in pullback.LABELS}
+    bb_cases: dict[str, list[dict]] = {k: [] for k in bbrekyl.LABELS}
     # Marknadsfilter: bara fall när indexet vid rekyldagens stängning ligger över sitt 50- och 200-dagars MA.
     market_up = market_filter(bars.get(INDEX_TICKER, []))
     pb_filtered: dict[str, list[dict]] = {k: [] for k in pullback.LABELS}
@@ -139,8 +144,18 @@ def build(bars: dict, instruments: dict, today: date, results_dir: Path | None =
         e20 = pullback.ema(c, 20)
         # Ett pullback-fall i taget per bolag, räknat var för sig utan och med marknadsfilter (ett bortfiltrerat
         # fall ska inte spärra nästa fall som klarar filtret).
-        busy_until, busy_filtered = -1, -1
+        busy_until, busy_filtered, busy_bb = -1, -1, -1
+        vols = [x.volume for x in b]
         for i, m in enumerate(ms):
+            bb_labels: list[str] = []
+            if m is not None and start_day <= m["day"] <= end_day:
+                # Rekyl efter Bollingerutbrott: fallet följs som Pullback, med rekylens lägsta low som stopp.
+                bst = bbrekyl.window(o, h, lo, c, vols, e20, i)
+                bb_labels = bbrekyl.labels(bst)
+                if bb_labels and i > busy_bb:
+                    case = bbrekyl.simulate(o, h, lo, i, bst, bbrekyl.stop_of(bst))
+                    bb_cases[bb_labels[0]].append(case)
+                    busy_bb = case["end"]
             # Pullback i trend: utfall mot stopp och 2R, oberoende av indexjämförelsen nedan (som kräver 5 dagar framåt).
             if m is not None and start_day <= m["day"] <= end_day and (i > busy_until or i > busy_filtered):
                 st = pullback.state(o, h, lo, c, e20, i)
@@ -170,7 +185,7 @@ def build(bars: dict, instruments: dict, today: date, results_dir: Path | None =
                 fwd[k] = (closes[i + k] / closes[i] - 1) - (idx[dk] / idx[d0] - 1)
             if len(fwd) < len(HORIZONS):
                 continue
-            labels = technical_labels(m) + pullback.labels(pullback.state(o, h, lo, c, e20, i))
+            labels = technical_labels(m) + pullback.labels(pullback.state(o, h, lo, c, e20, i)) + bb_labels
             # Rapportetiketten räknas en gång per rapport, på reaktionsdagen (dag 0).
             if rday and not reacted and m["day"] >= rday:
                 reacted = True
@@ -228,6 +243,12 @@ def build(bars: dict, instruments: dict, today: date, results_dir: Path | None =
                 "labels": {k: pullback.summarize(v) for k, v in pb_filtered.items()},
                 "all": pullback.summarize([x for v in pb_filtered.values() for x in v]),
             },
+        },
+        # Rekyl efter Bollingerutbrott: hur ofta 2R nåddes före stoppet (rekylens lägsta low) och tvärtom.
+        "bbrekyl": {
+            "thresholds": {**pullback.THRESHOLDS, **bbrekyl.THRESHOLDS},
+            "labels": {k: pullback.summarize(v) for k, v in bb_cases.items()},
+            "all": pullback.summarize([x for v in bb_cases.values() for x in v]),
         },
         "labels": {lbl: {str(k): _stats(per_label[lbl].get(k, [])) for k in HORIZONS} for lbl in LABELS},
     }

@@ -10,7 +10,7 @@ import { signedPct } from "../lib/signals";
 import {
   MIN_CASES, altStopText, decidedShareText, labelClass, labelCounts, levelText, missingText, netText, priceText,
   reportText, resistanceRText, riskText, shareText, bollingerSourceText, chipText, pctBText, signalText,
-  TODAY_STATUS, todayInvalid, todayLines, todayOrder, rankText, rankTitle, srDistText, srInsideText, srKindText, srLevelText, upperRText, vsBaseText,
+  TODAY_STATUS, todayInvalid, todayLines, todayOrder, bbLevelText, breakoutLines, rText, rankText, rankTitle, srDistText, srInsideText, srKindText, srLevelText, upperRText, vsBaseText,
 } from "../lib/swing";
 
 interface Props {
@@ -54,8 +54,18 @@ const columns = [
   { key: "pb-entry", label: "Ingång", type: "num", pb: true, title: "Vändsignal och nivån rekylen nådde; triggernivån (gårdagens high) vid vändsignal, annars gårdagens stängning som referens. Sorteras på nivån" },
   { key: "pb-stop", label: "Stopp", type: "num", pb: true, title: "Stoppnivån och avståndet dit (1 R) i procent och ATR(14); stoppet under närmaste stöd som alternativ stoppnivå i procent. Sorteras på avståndet i procent" },
   { key: "pb-target", label: "Mål", type: "num", pb: true, title: "Föregående topp, 2R och 3R, övre Bollingerbandet (⚠ = kursen vid eller över) och närmaste motstånd i R (samma R som stoppet). Sorteras på avståndet till övre bandet i R" },
+  // Strategin Rekyl efter Bollingerutbrott: visas bara när den är vald.
+  { key: "bb-rank", label: "Rang", type: "num", bb: true, title: "Flest uppfyllda kriterier först (1–5 för de fem med flest, med antalet kriterier); vid lika antal mest utrymme till utbrottets högsta high i R. Ingen värdering eller rekommendation" },
+  { key: "bb-today", label: "Status i dag", type: "num", bb: true, title: "Dagens high, low och senaste kurs mot triggernivån (gårdagens high), stoppet och 50 MA, vid Bollingerkontrollerna 09:20 och 13:20. Kurserna är fördröjda ca 15 minuter. Ogiltiga kandidater sorteras sist" },
+  { key: "bb-entry", label: "Utbrott och rekyl", type: "num", bb: true, title: "Utbrottsdagen (rapportdag?), omsättningen i rekylen, vändsignal och nivån rekylen nådde; triggernivån vid vändsignal, annars gårdagens stängning som referens. Sorteras på dagar sedan utbrottet" },
+  { key: "bb-stop", label: "Stopp", type: "num", bb: true, title: "Rekylens lägsta low och avståndet dit (1 R) i procent och ATR(14). Sorteras på avståndet i procent" },
+  { key: "bb-target", label: "Mål", type: "num", bb: true, title: "Utbrottets högsta high i R, 2R och 3R, och övre Bollingerbandet (⚠ = kursen vid eller över). Sorteras på utrymmet till utbrottets high i R" },
 ] as const;
 const bbCheck = swing.bollingerCheck;
+const bbLabels = swing.strategies.bbrekyl?.labels ?? [];
+const bt = t.bbrekyl;
+const bbTop = bt?.ranking.top ?? 5;
+const bbHist = h?.bbrekyl ?? null;
 const rankTop = t.ranking?.top ?? 5;
 const rankHist = pbHist?.ranking ?? null;
 ---
@@ -257,6 +267,52 @@ const rankHist = pbHist?.ranking ?? null;
         </>
       )
     }
+    {
+      bt && (
+        <>
+          <p class="legend-head"><strong>Strategin Rekyl efter Bollingerutbrott</strong> (välj den i rullistan)</p>
+          <ul>
+            <li>
+              <strong>Utbrottsdag:</strong> en av de {bt.breakout_days} handelsdagarna före gårdagen där stängningen låg över
+              övre Bollingerbandet ({bt.bb_period} dagar, {num(bt.bb_width, 0)} standardavvikelser), omsättningen var minst
+              {" "}{num(bt.volume_ratio)} gånger snittet för de {bt.volume_days} dagarna före, och stängningen låg över 50
+              dagars MA. Finns flera gäller den senaste. "Rapportdag" när utbrottsdagen var reaktionsdag för en rapport, med
+              utfallet mot förväntan för vinst per aktie där det finns.
+            </li>
+            <li>
+              <strong>Rekyl:</strong> gårdagens low ligger högst {num(bt.touch_pct, 0)} % från mittbandet (20 dagars MA) eller
+              20 dagars EMA, eller mellan dem. Ingen stängning sedan utbrottet har legat under utbrottsdagens low eller under
+              mittbandet. Under utbrottet står om snittomsättningen i rekylen varit lägre än på utbrottsdagen.
+            </li>
+            <li>
+              <strong>Vändsignal</strong> som i Pullback i trend (hammer eller bullish engulfing). Triggernivån är gårdagens
+              high; utan vändsignal är gårdagens stängning referens.
+            </li>
+            <li>
+              <strong>Stopp:</strong> rekylens lägsta low, dagarna efter utbrottet till och med gårdagen. R är referensen
+              minus stoppet, samma R överallt. <strong>Mål:</strong> utbrottets högsta high (utbrottsdagen till och med
+              gårdagen) med avståndet i R, 2R och 3R, och övre Bollingerbandet.
+            </li>
+            {
+              Object.keys(swing.bbrekylCriteria).length > 0 && (
+                <li>
+                  <strong>Rang (flest kriterier):</strong> en poäng per uppfyllt kriterium, räknat på gårdagens stängning:
+                  <ol>
+                    {Object.values(swing.bbrekylCriteria).map((text) => <li>{text}</li>)}
+                  </ol>
+                  Vid lika antal mest utrymme till utbrottets high i R först. De {bbTop} med flest kriterier får rang
+                  1–{bbTop}. Rangen säger bara hur många kriterier som är uppfyllda, inte hur det går.
+                </li>
+              )
+            }
+            <li>
+              <strong>Status i dag</strong> räknas som för Pullback i trend vid Bollingerkontrollerna 09:20 och 13:20
+              (fördröjda ca 15 minuter), med triggernivån gårdagens high, rekylens stopp och gårdagens 50 MA.
+            </li>
+          </ul>
+        </>
+      )
+    }
   </details>
 
   <div class="controls">
@@ -328,7 +384,7 @@ const rankHist = pbHist?.ranking ?? null;
           <tr>
             {
               columns.map((c) => (
-                <th scope="col" class:list={[`col-${c.key}`, "pb" in c && "col-pb", "nopb" in c && "col-nopb"]} data-key={c.key} data-type={c.type} aria-sort="none">
+                <th scope="col" class:list={[`col-${c.key}`, "pb" in c && "col-pb", "bb" in c && "col-bb", "nopb" in c && "col-nopb"]} data-key={c.key} data-type={c.type} aria-sort="none">
                   <button type="button" title={"title" in c ? c.title : undefined}>{c.label}</button>
                 </th>
               ))
@@ -341,6 +397,7 @@ const rankHist = pbHist?.ranking ?? null;
               <tr
                 data-labels={r.labels.join(" ")}
                 data-pb-invalid={r.labels.some((l) => pbLabels.includes(l)) && todayInvalid(r.pullback?.today?.status) ? "1" : undefined}
+                data-bb-invalid={r.labels.some((l) => bbLabels.includes(l)) && todayInvalid(r.bbrekyl?.today?.status) ? "1" : undefined}
               >
                 <th scope="row" data-v={r.name}>
                   <span class="name">{r.name}</span> <span class="ticker">{r.ticker}</span>
@@ -468,6 +525,88 @@ const rankHist = pbHist?.ranking ?? null;
                     </>
                   );
                 })()}
+                {(() => {
+                  const lv = r.labels.some((l) => bbLabels.includes(l)) ? (r.bbrekyl?.levels ?? null) : null;
+                  const pos = lv ? (r.bbrekyl?.bollinger ?? null) : null;
+                  const rk = lv ? (r.bbrekyl?.rank ?? null) : null;
+                  const rt = rk ? rankText(rk.rank, rk.score, Object.keys(swing.bbrekylCriteria).length, bbTop) : null;
+                  const td = lv ? (r.bbrekyl?.today ?? null) : null;
+                  const tl = td ? todayLines(td) : null;
+                  const bo = lv ? breakoutLines(lv.breakout, lv.lower_volume, shortDate) : null;
+                  return (
+                    <>
+                      <td
+                        class:list={["num col-bb rank", rk && rk.rank <= bbTop && "top"]}
+                        data-v={v(rk ? -rk.rank : null)}
+                        title={rk ? rankTitle(rk.criteria, swing.bbrekylCriteria) : undefined}
+                      >
+                        {rt ? (
+                          <>
+                            <span class="line">{rt.main}</span>
+                            <span class="sub">{rt.sub}</span>
+                          </>
+                        ) : "–"}
+                      </td>
+                      <td
+                        class:list={["num col-bb pb today", td && `today-${td.status}`]}
+                        data-v={v(td ? todayOrder(td.status) : null)}
+                        title={lv && !td ? "Ingen kontroll i dag än (09:20 och 13:20)" : undefined}
+                      >
+                        {tl ? (
+                          <>
+                            <span class="line">{tl.main}</span>
+                            {tl.seen && <span class="sub">{tl.seen}</span>}
+                            <span class="sub">{tl.prices}</span>
+                          </>
+                        ) : "–"}
+                      </td>
+                      <td class="num col-bb pb" data-v={v(lv ? -lv.breakout.days_ago : null)}>
+                        {lv && bo ? (
+                          <>
+                            <span class="line">{bo.main}</span>
+                            {bo.report && <span class="sub">{bo.report}</span>}
+                            <span class="sub">{bo.volume}</span>
+                            <span class="line">{lv.signal ? signalText(lv.signal) : "Ingen vändsignal"}, vid {bbLevelText(lv.level)}</span>
+                            <span class="sub">{lv.trigger !== null ? "Trigger" : "Referens"} {priceText(lv.ref)}{lv.trigger === null ? " (gårdagens stängning)" : ""}</span>
+                          </>
+                        ) : "–"}
+                      </td>
+                      <td class="num col-bb pb" data-v={v(lv?.risk_pct ?? null)}>
+                        {lv ? (
+                          <>
+                            <span class="line">{priceText(lv.stop)}</span>
+                            <span class="sub">{riskText(lv.risk_pct, lv.risk_atr)}</span>
+                            <span class="sub">rekylens lägsta low</span>
+                          </>
+                        ) : "–"}
+                      </td>
+                      <td
+                        class:list={["num col-bb pb", pos?.at_upper && "bb-warn"]}
+                        data-v={v(lv?.target_r ?? null)}
+                        title={pos?.at_upper ? "Kursen är vid eller över övre Bollingerbandet" : undefined}
+                      >
+                        {lv ? (
+                          <>
+                            <span class="line">Utbrottets high {priceText(lv.target)}</span>
+                            <span class="sub">{rText(lv.target_r)} från referensen</span>
+                            <span class="sub">2R {priceText(lv.r2)} · 3R {priceText(lv.r3)}</span>
+                            {pos && (
+                              <span class="line">
+                                {pos.at_upper && <span class="warn-icon" aria-label="Vid eller över övre bandet">⚠ </span>}
+                                Övre band {priceText(pos.upper)}
+                              </span>
+                            )}
+                            {pos && (
+                              <span class="sub">
+                                {upperRText(pos.upper_r)} · {pctBText(pos.pct_b)} · {bollingerSourceText(pos.checked_at)}
+                              </span>
+                            )}
+                          </>
+                        ) : "–"}
+                      </td>
+                    </>
+                  );
+                })()}
               </tr>
             ))
           }
@@ -475,6 +614,54 @@ const rankHist = pbHist?.ranking ?? null;
       </table>
     </div>
   </div>
+
+  {
+    bbHist && h && (
+      <section class="history" aria-labelledby="swing-bbrekyl">
+        <h3 id="swing-bbrekyl">Rekyl efter Bollingerutbrott: 2R eller stoppet först</h3>
+        <p class="note">
+          Varje dag med etiketten {shortDate(h.period.start)} {h.period.start.slice(0, 4)} – {shortDate(h.period.end)}{" "}
+          {h.period.end.slice(0, 4)}, ett fall i taget per bolag, utan courtage, med rekylens lägsta low som stopp. Som för
+          Pullback i trend räknas öppna fall (inget avgörande inom {bbHist.thresholds.max_days} handelsdagar) och ej
+          utlösta (triggernivån nåddes inte inom {bbHist.thresholds.trigger_days} dagar) inte in i andelarna. Fallen
+          infaller ofta samma dagar och är inte oberoende. Historiken säger inget om hur det går nästa gång.
+        </p>
+        <div class="hist-wrap">
+          <table class="hist" data-hist="bbrekyl">
+            <thead>
+              <tr>
+                <th scope="col">Etikett</th>
+                <th scope="col" class="num">Fall</th>
+                <th scope="col" class="num">2R före stoppet</th>
+                <th scope="col" class="num">Stoppet först</th>
+                <th scope="col" class="num">Öppna</th>
+                <th scope="col" class="num">Ej utlösta</th>
+                <th scope="col" class="num">Snitt per avgjort fall</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                ...bbLabels.map((l) => ({ name: swing.labels[l], s: bbHist.labels[l], all: false })),
+                { name: "Båda", s: bbHist.all, all: true },
+              ].map(({ name, s, all }) =>
+                s && (
+                  <tr class:list={{ base: all }}>
+                    <th scope="row">{name}</th>
+                    <td class="num">{s.cases.toLocaleString("sv-SE")}</td>
+                    <td class="num">{decidedShareText(s.r2_first, s.decided)}</td>
+                    <td class="num">{decidedShareText(s.stop_first, s.decided)}</td>
+                    <td class="num">{s.open}</td>
+                    <td class="num">{s.not_triggered}</td>
+                    <td class="num">{netText(s.mean_net_pct, s.mean_net_r)}</td>
+                  </tr>
+                )
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    )
+  }
 
   {
     pbHist && h && (
@@ -516,7 +703,7 @@ const rankHist = pbHist?.ranking ?? null;
           )
         }
         <div class="hist-wrap">
-          <table class="hist">
+          <table class="hist" data-hist="pullback">
             <thead>
               <tr>
                 <th scope="col">Etikett</th>
@@ -651,7 +838,8 @@ const rankHist = pbHist?.ranking ?? null;
       else delete root.dataset.strategy;
       // Med strategin vald sorteras tabellen på rang (flest kriterier först) som standard. Cellerna har −rang,
       // så fallande ordning ger rang 1 först.
-      const rankTh = root.querySelector<HTMLElement>('thead th[data-key="pb-rank"]');
+      const rankKey = strategy === "bbrekyl" ? "bb-rank" : "pb-rank";
+      const rankTh = root.querySelector<HTMLElement>(`thead th[data-key="${rankKey}"]`);
       // Klicket görs alltid (två gånger om rangen redan var sorterad), så att ogiltiga kandidater hamnar sist.
       if (strategy && rankTh) {
         do rankTh.querySelector("button")?.click();
@@ -663,7 +851,9 @@ const rankHist = pbHist?.ranking ?? null;
     };
     select.addEventListener("change", applyFilter);
     // Med strategin vald sorteras ogiltiga kandidater (Status i dag) sist, oavsett kolumn.
-    setupSortable(root, undefined, (r) => !!root.dataset.strategy && r.dataset.pbInvalid === "1");
+    setupSortable(root, undefined, (r) =>
+      root.dataset.strategy === "pullback" ? r.dataset.pbInvalid === "1"
+        : root.dataset.strategy === "bbrekyl" ? r.dataset.bbInvalid === "1" : false);
     applyFilter();
     setupFullWidth(root);
     setupStickyHeader(root);
@@ -860,6 +1050,13 @@ const rankHist = pbHist?.ranking ?? null;
   .swing[data-strategy="pullback"] .col-pb {
     display: table-cell;
   }
+  /* Strategikolumnerna för Rekyl efter Bollingerutbrott. */
+  .col-bb {
+    display: none;
+  }
+  .swing[data-strategy="bbrekyl"] .col-bb {
+    display: table-cell;
+  }
   .warn-box {
     padding: 8px 12px;
     border-radius: var(--radius);
@@ -887,7 +1084,7 @@ const rankHist = pbHist?.ranking ?? null;
     font-size: 0.85rem;
     color: var(--muted);
   }
-  .swing[data-strategy="pullback"] .bb-note {
+  .swing[data-strategy] .bb-note {
     display: inline;
   }
   /* Kandidat vid eller över övre Bollingerbandet. */
@@ -896,7 +1093,7 @@ const rankHist = pbHist?.ranking ?? null;
     font-weight: 700;
   }
   /* Med strategin vald döljs måtten strategin inte använder, så att tabellen ryms. */
-  .swing[data-strategy="pullback"] .col-nopb {
+  .swing[data-strategy] .col-nopb {
     display: none;
   }
   .sub {

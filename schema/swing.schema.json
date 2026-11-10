@@ -227,8 +227,39 @@
             "ma50_days": {"type": "integer"},
             "top": {"type": "integer"}
           }
+        },
+        "bbrekyl": {
+          "type": "object",
+          "description": "Trösklar för Rekyl efter Bollingerutbrott (scripts/bbrekyl.py THRESHOLDS och RANK_THRESHOLDS); saknas i äldre filer.",
+          "additionalProperties": false,
+          "required": ["breakout_days", "volume_ratio", "touch_pct", "bb_period", "bb_width", "volume_days", "ranking"],
+          "properties": {
+            "breakout_days": {"type": "integer"},
+            "volume_ratio": {"type": "number"},
+            "touch_pct": {"type": "number"},
+            "bb_period": {"type": "integer"},
+            "bb_width": {"type": "number"},
+            "volume_days": {"type": "integer"},
+            "ranking": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["target_r", "bollinger_r", "stop_atr", "ma50_days", "top"],
+              "properties": {
+                "target_r": {"type": "number"},
+                "bollinger_r": {"type": "number"},
+                "stop_atr": {"type": "number"},
+                "ma50_days": {"type": "integer"},
+                "top": {"type": "integer"}
+              }
+            }
+          }
         }
       }
+    },
+    "bbrekyl_criteria": {
+      "type": "object",
+      "description": "Rangkriterierna för Rekyl efter Bollingerutbrott (scripts/bbrekyl.py CRITERIA); saknas i äldre filer.",
+      "additionalProperties": {"type": "string"}
     },
     "ranking_criteria": {
       "type": "object",
@@ -516,6 +547,122 @@
               },
               "bollinger": {
                 "description": "Gårdagens stängning mot Bollingerbanden (20 d, 2 std) för en kandidat (scripts/bollinger.py position): %B, avståndet till övre bandet i R och om stängningen är vid eller över. Bara när levels finns; saknas i äldre filer.",
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["price", "lower", "upper", "pct_b", "upper_r", "at_upper"],
+                "properties": {
+                  "price": {"type": "number"},
+                  "lower": {"type": "number"},
+                  "upper": {"type": "number"},
+                  "pct_b": {"$ref": "#/$defs/num"},
+                  "upper_r": {"$ref": "#/$defs/num"},
+                  "at_upper": {"type": "boolean"}
+                }
+              }
+            }
+          },
+          "bbrekyl": {
+            "type": "object",
+            "description": "Rekyl efter Bollingerutbrott (scripts/bbrekyl.py): fönstret (null utan 70 handelsdagar), och vid träff nivåerna, Bollingerläget och rangen. Saknas i äldre filer.",
+            "additionalProperties": false,
+            "required": ["state", "levels"],
+            "properties": {
+              "state": {
+                "type": ["object", "null"],
+                "additionalProperties": false,
+                "required": ["days", "ema20"],
+                "properties": {
+                  "ema20": {"type": "number"},
+                  "days": {
+                    "type": "array",
+                    "minItems": 3,
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": ["open", "high", "low", "close", "volume", "volume_avg", "mid", "upper", "ma50"],
+                      "properties": {
+                        "open": {"type": "number"},
+                        "high": {"type": "number"},
+                        "low": {"type": "number"},
+                        "close": {"type": "number"},
+                        "volume": {"type": "number"},
+                        "volume_avg": {"type": "number"},
+                        "mid": {"type": "number"},
+                        "upper": {"type": "number"},
+                        "ma50": {"type": "number"}
+                      }
+                    }
+                  }
+                }
+              },
+              "levels": {
+                "type": ["object", "null"],
+                "additionalProperties": false,
+                "required": ["level", "signal", "trigger", "ref", "stop", "risk_pct", "risk_atr", "target", "target_r",
+                             "r2", "r3", "breakout", "lower_volume"],
+                "properties": {
+                  "level": {"enum": ["mid", "ema20", "mellan"]},
+                  "signal": {"enum": ["hammer", "engulfing", null]},
+                  "trigger": {"$ref": "#/$defs/num"},
+                  "ref": {"type": "number"},
+                  "stop": {"type": "number"},
+                  "risk_pct": {"$ref": "#/$defs/num"},
+                  "risk_atr": {"$ref": "#/$defs/num"},
+                  "target": {"type": "number"},
+                  "target_r": {"type": "number"},
+                  "r2": {"type": "number"},
+                  "r3": {"type": "number"},
+                  "lower_volume": {"type": "boolean"},
+                  "breakout": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["day", "days_ago", "close", "upper", "low", "volume_ratio", "report"],
+                    "properties": {
+                      "day": {"type": "string", "format": "date"},
+                      "days_ago": {"type": "integer", "minimum": 1},
+                      "close": {"type": "number"},
+                      "upper": {"type": "number"},
+                      "low": {"type": "number"},
+                      "volume_ratio": {"type": "number"},
+                      "report": {
+                        "type": ["object", "null"],
+                        "description": "Utbrottsdagen var reaktionsdag för en rapport: publiceringstid och utfallet mot förväntan för vinst per aktie (null = okänt).",
+                        "additionalProperties": false,
+                        "required": ["published", "verdict"],
+                        "properties": {
+                          "published": {"type": "string"},
+                          "verdict": {"type": ["string", "null"]}
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "rank": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["rank", "score", "criteria", "measures"],
+                "properties": {
+                  "rank": {"type": "integer", "minimum": 1},
+                  "score": {"type": "integer", "minimum": 0},
+                  "criteria": {"type": "object", "additionalProperties": {"type": "boolean"}},
+                  "measures": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["signal", "lower_volume", "room_r", "has_resistance", "upper_r", "stop_atr", "ma50_change_pct"],
+                    "properties": {
+                      "signal": {"type": "boolean"},
+                      "lower_volume": {"type": "boolean"},
+                      "room_r": {"$ref": "#/$defs/num"},
+                      "has_resistance": {"type": "boolean"},
+                      "upper_r": {"$ref": "#/$defs/num"},
+                      "stop_atr": {"$ref": "#/$defs/num"},
+                      "ma50_change_pct": {"$ref": "#/$defs/num"}
+                    }
+                  }
+                }
+              },
+              "bollinger": {
                 "type": "object",
                 "additionalProperties": false,
                 "required": ["price", "lower", "upper", "pct_b", "upper_r", "at_upper"],

@@ -27,6 +27,9 @@ mot bandet och är ingen uppmaning.
   Dagens high och low gäller hela dagen fram till kontrollen, så "trigger bruten" och "under stopp" står kvar
   resten av dagen. Tiden då triggern först sågs (trigger_seen_at) är den kontroll där det syntes första gången;
   den exakta tiden är okänd. Kurserna är fördröjda ca 15 minuter.
+- Samma avsnitt ("bbrekyl") för strategin Rekyl efter Bollingerutbrott (scripts/bbrekyl.py): kandidaterna med en
+  etikett ur den strategin, läget mot banden med strategins referens och stopp, och status i dag med triggernivån
+  gårdagens high och gårdagens 50 MA ur strategins fönster.
 - Ändringar sedan föregående kontroll samma dag (data/bollinger/<datum>-<hhmm>.json): "changes" och texten
   "notice" till Windows-notisen. Vid dagens första kontroll räknas alla som väntande innan.
 
@@ -115,13 +118,30 @@ def position_errors(p: dict, where: str) -> list[str]:
     return errors
 
 
-def pullback_candidates(swing: dict | None) -> list[dict]:
-    """Bolagen med en etikett ur strategin Pullback i trend och nivåer i swingfilen."""
+# Strategierna med status i dag: nyckeln i swingfilen ("strategies" och per bolag) och avsnittet i kontrollfilen.
+STRATEGY_KEYS = ("pullback", "bbrekyl")
+
+
+def strategy_candidates(swing: dict | None, key: str) -> list[dict]:
+    """Bolagen med en etikett ur strategin key och nivåer i swingfilen."""
     if not swing:
         return []
-    labels = set((swing.get("strategies") or {}).get("pullback", {}).get("labels", []))
-    return [c for c in swing["companies"]
-            if labels & set(c["labels"]) and (c.get("pullback") or {}).get("levels")]
+    labels = set((swing.get("strategies") or {}).get(key, {}).get("labels", []))
+    return [c for c in swing["companies"] if labels & set(c["labels"]) and (c.get(key) or {}).get("levels")]
+
+
+def pullback_candidates(swing: dict | None) -> list[dict]:
+    """Bolagen med en etikett ur strategin Pullback i trend och nivåer i swingfilen."""
+    return strategy_candidates(swing, "pullback")
+
+
+def _trigger_ma50(c: dict, key: str) -> tuple[float | None, float | None]:
+    """Triggernivån (gårdagens high) och gårdagens 50 MA ur strategins sparade tillstånd."""
+    st = c[key].get("state") or {}
+    if key == "bbrekyl":
+        d = (st.get("days") or [{}])[-1]
+        return d.get("high"), d.get("ma50")
+    return st.get("high"), st.get("ma50")
 
 
 def load_previous(today: date, now: datetime, directory: Path | None = None) -> dict | None:
@@ -157,22 +177,23 @@ def day_status(high: float, low: float, price: float, trigger: float, ref: float
     return "waiting"
 
 
-def today_row(bar, c: dict, now: datetime, prev: dict | None) -> dict | None:
+def today_row(bar, c: dict, now: datetime, prev: dict | None, key: str = "pullback") -> dict | None:
     """Status i dag för en kandidat ur dagens dagsrad (high, low, senaste kurs) och swingfilens nivåer; None utan
     nivåer. prev: kandidatens "today" i föregående kontroll samma dag (för tiden då triggern först sågs)."""
-    st, lv = c["pullback"].get("state") or {}, c["pullback"]["levels"]
-    if st.get("high") is None or st.get("ma50") is None:
+    lv = c[key]["levels"]
+    high_y, ma50 = _trigger_ma50(c, key)
+    if high_y is None or ma50 is None:
         return None
     # Statusen räknas på de avrundade värdena som sparas, så att valideringen får samma utfall (ett high som bara
     # skiljer sig från triggernivån i femte decimalen räknas som på nivån).
     r = lambda x: round(x, 4)  # noqa: E731
-    high, low, price, trigger = r(bar.high), r(bar.low), r(bar.close), r(st["high"])
-    s = day_status(high, low, price, trigger, lv["ref"], lv["stop"], st["ma50"])
+    high, low, price, trigger = r(bar.high), r(bar.low), r(bar.close), r(high_y)
+    s = day_status(high, low, price, trigger, lv["ref"], lv["stop"], ma50)
     seen = None
     if high > trigger:
         seen = (prev or {}).get("trigger_seen_at") or now.isoformat(timespec="seconds")
     return {"high": high, "low": low, "price": price, "trigger": trigger, "ref": lv["ref"],
-            "stop": lv["stop"], "ma50": st["ma50"], "status": s, "trigger_seen_at": seen}
+            "stop": lv["stop"], "ma50": ma50, "status": s, "trigger_seen_at": seen}
 
 
 def status_changes(rows: list[dict], prev_rows: dict[str, dict] | None) -> list[dict]:
@@ -244,27 +265,8 @@ def check(today: date, now: datetime, instruments: dict[str, Instrument], fetch:
             (over if st == "over" else near).append(row)
     for rows in (over, near):
         rows.sort(key=lambda r: -r["vs_upper_pct"])
-    pb = None
-    if swing is not None:
-        prev_pb = (previous or {}).get("pullback")
-        if prev_pb and prev_pb.get("swing_date") != swing["date"]:
-            prev_pb = None  # en annan swingfil: andra kandidater och nivåer
-        prev_rows = {r["ticker"]: r for r in prev_pb["rows"]} if prev_pb else None
-        pb_rows = []
-        for c in pullback_candidates(swing):
-            if c["ticker"] not in today_bands:
-                continue  # ingen kurs i dag: kolumnen visar swingfilens läge
-            lv = c["pullback"]["levels"]
-            price, lower, upper = today_bands[c["ticker"]]
-            prev_today = ((prev_rows or {}).get(c["ticker"]) or {}).get("today")
-            pb_rows.append({"ticker": c["ticker"], "name": c["name"],
-                            **position(price, lower, upper, lv["ref"], lv["stop"]),
-                            "today": today_row(today_bars[c["ticker"]], c, now, prev_today)})
-        pb_rows.sort(key=lambda r: (not r["at_upper"], r["upper_r"] if r["upper_r"] is not None else 1e9))
-        since = previous["checked_at"] if prev_pb else None
-        changes = status_changes(pb_rows, prev_rows)
-        pb = {"swing_date": swing["date"], "candidates": len(pullback_candidates(swing)), "rows": pb_rows,
-              "status_since": since, "changes": changes, "notice": status_notice(changes, since)}
+    sections = {key: strategy_section(key, swing, previous, today_bands, today_bars, now) if swing is not None
+                else None for key in STRATEGY_KEYS}
     return {
         "date": today.isoformat(),
         "checked_at": now.isoformat(timespec="seconds"),
@@ -274,14 +276,39 @@ def check(today: date, now: datetime, instruments: dict[str, Instrument], fetch:
         "missing": len(missing),
         "over": over,
         "near": near,
-        "pullback": pb,
+        "pullback": sections["pullback"],
+        "bbrekyl": sections["bbrekyl"],
     }
+
+
+def strategy_section(key: str, swing: dict, previous: dict | None, today_bands: dict, today_bars: dict,
+                     now: datetime) -> dict:
+    """Avsnittet för en strategi: kandidaterna med dagens kurs, läget mot banden, status i dag och ändringarna sedan
+    föregående kontroll samma dag (samma swingfil)."""
+    prev = (previous or {}).get(key)
+    if prev and prev.get("swing_date") != swing["date"]:
+        prev = None  # en annan swingfil: andra kandidater och nivåer
+    prev_rows = {r["ticker"]: r for r in prev["rows"]} if prev else None
+    rows = []
+    for c in strategy_candidates(swing, key):
+        if c["ticker"] not in today_bands:
+            continue  # ingen kurs i dag: kolumnen visar swingfilens läge
+        lv = c[key]["levels"]
+        price, lower, upper = today_bands[c["ticker"]]
+        prev_today = ((prev_rows or {}).get(c["ticker"]) or {}).get("today")
+        rows.append({"ticker": c["ticker"], "name": c["name"], **position(price, lower, upper, lv["ref"], lv["stop"]),
+                     "today": today_row(today_bars[c["ticker"]], c, now, prev_today, key)})
+    rows.sort(key=lambda r: (not r["at_upper"], r["upper_r"] if r["upper_r"] is not None else 1e9))
+    since = previous["checked_at"] if prev else None
+    changes = status_changes(rows, prev_rows)
+    return {"swing_date": swing["date"], "candidates": len(strategy_candidates(swing, key)), "rows": rows,
+            "status_since": since, "changes": changes, "notice": status_notice(changes, since)}
 
 
 def validate(data: dict) -> list[str]:
     """Statusen räknas om ur pris och band; listorna får inte överlappa. Pullback-kandidaternas läge räknas om."""
     errors = []
-    for r in (data.get("pullback") or {}).get("rows", []):
+    for r in [r for key in STRATEGY_KEYS for r in (data.get(key) or {}).get("rows", [])]:
         errors += position_errors(r, r["name"])
         td = r.get("today")
         if td:
@@ -331,6 +358,8 @@ def main(argv: list[str] | None = None, fetch: BarFetcher = yahoo_bars, now: dat
           f"{len(data['over'])}, inom 1 % {len(data['near'])}{pb_text} -> {out}")
     if pb:
         print(pb["notice"])
+    if data.get("bbrekyl"):
+        print("Rekyl efter Bollingerutbrott: " + data["bbrekyl"]["notice"])
     return 0
 
 
