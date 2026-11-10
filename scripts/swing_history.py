@@ -124,6 +124,7 @@ def build(bars: dict, instruments: dict, today: date, results_dir: Path | None =
     bb_cases: dict[str, list[dict]] = {k: [] for k in bbrekyl.LABELS}
     # Volymvillkoren var för sig: variant -> villkor som krävs.
     bb_variants = {"base": (), **{r: (r,) for r in bbrekyl.RULES}, "all": bbrekyl.ALL_RULES}
+    # Strategins krav (REQUIRED_RULES) är en av varianterna ovan; "strategy" pekar ut den i filen.
     bb_rule_cases: dict[str, list[dict]] = {k: [] for k in bb_variants}
     # Marknadsfilter: bara fall när indexet vid rekyldagens stängning ligger över sitt 50- och 200-dagars MA.
     market_up = market_filter(bars.get(INDEX_TICKER, []))
@@ -262,9 +263,11 @@ def build(bars: dict, instruments: dict, today: date, results_dir: Path | None =
             "all": pullback.summarize([x for v in bb_cases.values() for x in v]),
             "rules": {
                 "description": "Volymvillkoren var för sig: grundregeln (utbrott med minst 1,5× omsättning, inga övriga "
-                               "volymvillkor), grundregeln plus ett villkor i taget, och alla tillsammans (strategins "
-                               "etiketter). Båda etiketterna, varje variant med sina egna fall.",
+                               "volymvillkor), grundregeln plus ett villkor i taget, och alla fyra tillsammans. Strategin "
+                               "är varianten i \"strategy\". Båda etiketterna, varje variant med sina egna fall.",
                 "texts": dict(bbrekyl.RULES),
+                "strategy": "+".join(bbrekyl.REQUIRED_RULES) if len(bbrekyl.REQUIRED_RULES) != 1
+                else bbrekyl.REQUIRED_RULES[0],
                 **{k: pullback.summarize(v) for k, v in bb_rule_cases.items()},
             },
         },

@@ -91,33 +91,35 @@ export function breakoutLines(
 }
 
 /** Volymvillkoren i Rekyl efter Bollingerutbrott (scripts/bbrekyl.volume_checks), ett per rad med ✓ (uppfyllt) eller
- *  ✗ (ej uppfyllt) och siffrorna. th: kraven ur swingfilen (utbrottet minst volumeRatio×, röda dagar högst redRatio×). */
+ *  ✗ (ej uppfyllt) och siffrorna. th: gränserna ur swingfilen (utbrottet minst volumeRatio×, röda dagar högst redRatio×)
+ *  och vilka villkor som är krav (required); övriga är rangkriterier. */
 export function volumeRuleLines(
   v: {
     breakout_ratio: number; r1: boolean; red_days: number; red_max_ratio: number | null; r2: boolean;
     rekyl_avg_ratio: number | null; r3: boolean; up_volume: number; down_volume: number; r4: boolean;
   },
-  th: { volumeRatio: number; redRatio: number },
+  th: { volumeRatio: number; redRatio: number; required: string[] },
 ): { ok: boolean; text: string }[] {
   const x = (n: number) => `${pctFmt.format(n)}×`;
+  const kind = (r: string) => (th.required.includes(r) ? "krav" : "rangkriterium");
   const total = v.up_volume + v.down_volume;
   return [
-    { ok: v.r1, text: `Utbrottet ${x(v.breakout_ratio)} 20-dagarssnittet (krav minst ${x(th.volumeRatio)})` },
+    { ok: v.r1, text: `Utbrottet ${x(v.breakout_ratio)} 20-dagarssnittet (${kind("r1")}: minst ${x(th.volumeRatio)})` },
     {
       ok: v.r2,
       text: v.red_days === 0 || v.red_max_ratio === null
-        ? "Inga röda dagar i rekylen"
-        : `Röda dagar i rekylen högst ${x(v.red_max_ratio)} snittet (krav högst ${x(th.redRatio)})`,
+        ? `Inga röda dagar i rekylen (${kind("r2")})`
+        : `Röda dagar i rekylen högst ${x(v.red_max_ratio)} snittet (${kind("r2")}: högst ${x(th.redRatio)})`,
     },
     {
       ok: v.r3,
       text: v.rekyl_avg_ratio === null ? "Snittomsättning i rekylen saknas"
-        : `Rekylen i snitt ${x(v.rekyl_avg_ratio)} 20-dagarssnittet (krav under 1,0×)`,
+        : `Rekylen i snitt ${x(v.rekyl_avg_ratio)} 20-dagarssnittet (${kind("r3")}: under 1,0×)`,
     },
     {
       ok: v.r4,
-      text: total === 0 ? "Inga upp- eller neddagar i rekylen"
-        : `Uppdagar ${Math.round((v.up_volume / total) * 100)} % av omsättningen på upp- och neddagar (krav minst 50 %)`,
+      text: total === 0 ? `Inga upp- eller neddagar i rekylen (${kind("r4")})`
+        : `Uppdagar ${Math.round((v.up_volume / total) * 100)} % av omsättningen på upp- och neddagar (${kind("r4")}: minst 50 %)`,
     },
   ];
 }

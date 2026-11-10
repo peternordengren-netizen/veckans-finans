@@ -64,10 +64,14 @@ def test_volymvillkoren_med_siffror():
                   "rekyl_avg_ratio": round(4000 / 6 / 1000, 2), "r3": True, "up_volume": 2000, "down_volume": 2000,
                   "r4": True}
     assert bbrekyl.levels(st, atr=2.0)["volume"] == vc
-    # r1: utbrottet med 1,8× räknas av grundregeln men inte av r1.
+    # Kraven: utbrott minst 1,5× och r2; r1, r3 och r4 är rangkriterier.
+    assert bbrekyl.REQUIRED_RULES == ("r2",) and bbrekyl.THRESHOLDS["required_rules"] == ["r2"]
+    # r1: utbrottet med 1,8× räknas (krav 1,5×), men r1 (2×) är inte uppfyllt.
     d = base_days()
     d[2] = {**d[2], "volume": 1800}
-    assert bbrekyl.labels(state(d)) == [] and bbrekyl.labels(state(d), rules=()) == ["bbrekyl"]
+    assert bbrekyl.labels(state(d)) == ["bbrekyl"] and bbrekyl.labels(state(d), rules=bbrekyl.ALL_RULES) == []
+    lv = bbrekyl.levels(state(d), atr=2.0)
+    assert lv["volume"]["r1"] is False and lv["volume"]["breakout_ratio"] == 1.8
     assert bbrekyl.labels(state(d), rules=("r2", "r3", "r4")) == ["bbrekyl"]
     # r2: en röd dag med 1,6× omsättning.
     d = base_days()
@@ -81,15 +85,16 @@ def test_volymvillkoren_med_siffror():
     # r3: snittet i rekylen på eller över 20-dagarssnittet.
     d = base_days()
     for j in (4, 6):
-        d[j] = {**d[j], "volume": 2600}
+        d[j] = {**d[j], "volume": 2600, "upper": 106}  # övre bandet över stängningen: ingen ny utbrottsdag
     vc = bbrekyl.volume_checks(state(d), 2)
-    assert not vc["r3"] and vc["r4"] and bbrekyl.labels(state(d)) == []
+    assert not vc["r3"] and vc["r4"] and bbrekyl.labels(state(d)) == ["bbrekyl"]  # rangkriterium, inget krav
+    assert bbrekyl.labels(state(d), rules=("r3",)) == []
     # r4: mer omsättning på neddagar än uppdagar.
     d = base_days()
     d[6] = {**d[6], "volume": 900}
     vc = bbrekyl.volume_checks(state(d), 2)
     assert (vc["up_volume"], vc["down_volume"], vc["r4"]) == (1900, 2000, False)
-    assert bbrekyl.labels(state(d)) == [] and bbrekyl.labels(state(d), rules=("r1", "r2", "r3")) == ["bbrekyl"]
+    assert bbrekyl.labels(state(d)) == ["bbrekyl"] and bbrekyl.labels(state(d), rules=bbrekyl.ALL_RULES) == []
 
 
 def test_villkor_som_inte_uppfylls():
@@ -134,10 +139,11 @@ def test_vandsignal_ger_trigger_och_annan_etikett():
 
 
 def test_rangkriterier():
-    m = {"signal": True, "lower_volume": True, "room_r": 2.0, "has_resistance": True, "upper_r": 1.0, "stop_atr": 1.5,
-         "ma50_change_pct": 0.1}
+    m = {"signal": True, "r1": True, "r3": True, "r4": True, "room_r": 2.0, "has_resistance": True, "upper_r": 1.0,
+         "stop_atr": 1.5, "ma50_change_pct": 0.1}
     assert all(bbrekyl.criteria(m).values())
-    none = bbrekyl.criteria({**m, "signal": False, "lower_volume": False, "room_r": 1.99, "upper_r": 0.99,
+    assert len(bbrekyl.CRITERIA) == 8 and "lagre_omsattning" not in bbrekyl.CRITERIA
+    none = bbrekyl.criteria({**m, "signal": False, "r1": False, "r3": False, "r4": False, "room_r": 1.99, "upper_r": 0.99,
                              "stop_atr": 1.51, "ma50_change_pct": 0.0})
     assert not any(none.values())
     assert set(bbrekyl.CRITERIA) == set(bbrekyl.criteria(m))

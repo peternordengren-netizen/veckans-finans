@@ -1057,7 +1057,7 @@ def _check_bbrekyl_ranking(data: dict, res: Result) -> None:
             res.errors.append(f"{where}: rang utan nivåer")
             continue
         if m["signal"] != (lv["signal"] is not None) or m["stop_atr"] != lv["risk_atr"] or \
-                m["lower_volume"] != lv["lower_volume"] or m["room_r"] != lv["target_r"] or \
+                any(m.get(r) != (lv.get("volume") or {}).get(r) for r in ("r1", "r3", "r4")) or m["room_r"] != lv["target_r"] or \
                 (pos is not None and m["upper_r"] != pos["upper_r"]):
             res.errors.append(f"{where}: mätvärdena stämmer inte med nivåerna eller Bollingerläget")
         expected = bbrekyl.criteria(m, th)
@@ -1078,8 +1078,10 @@ def _check_bbrekyl(c: dict, th: dict | None, where: str, expected: list[str], re
 
     bb = c["bbrekyl"]
     t = {k: v for k, v in (th or bbrekyl.THRESHOLDS).items() if k != "ranking"}
-    # Volymvillkoren finns sedan 2026-11-10; äldre filer räknas med grundregeln.
-    rules = bbrekyl.ALL_RULES if "red_volume_ratio" in t else ()
+    # Kraven står i trösklarna (required_rules); filer utan dem räknas med grundregeln (före volymvillkoren) eller,
+    # med red_volume_ratio, med alla fyra villkor (versionen 2026-11-10 15:26).
+    rules = tuple(t["required_rules"]) if "required_rules" in t else (bbrekyl.ALL_RULES if "red_volume_ratio" in t else ())
+    t = {k: v for k, v in t.items() if k != "required_rules"}
     labels = bbrekyl.labels(bb["state"], t, rules)
     expected += labels
     lv = bb["levels"]

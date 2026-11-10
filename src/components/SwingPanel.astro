@@ -275,25 +275,25 @@ const rankHist = pbHist?.ranking ?? null;
             <li>
               <strong>Utbrottsdag:</strong> en av de {bt.breakout_days} handelsdagarna före gårdagen där stängningen låg över
               övre Bollingerbandet ({bt.bb_period} dagar, {num(bt.bb_width, 0)} standardavvikelser), omsättningen var minst
-              {" "}{num(bt.volume_ratio)} gånger snittet för de {bt.volume_days} dagarna före, och stängningen låg över 50
+              {" "}{num(bt.base_volume_ratio ?? bt.volume_ratio)} gånger snittet för de {bt.volume_days} dagarna före, och stängningen låg över 50
               dagars MA. Finns flera gäller den senaste. "Rapportdag" när utbrottsdagen var reaktionsdag för en rapport, med
               utfallet mot förväntan för vinst per aktie där det finns.
             </li>
             {
               bt.red_volume_ratio !== undefined && (
                 <li>
-                  <strong>Volymvillkoren</strong>, alla krav, visas med ✓ (uppfyllt) eller ✗ och siffrorna i kolumnen
-                  "Utbrott och rekyl":
+                  <strong>Volymvillkoren</strong> visas med ✓ (uppfyllt) eller ✗ och siffrorna i kolumnen "Utbrott och
+                  rekyl". Ingen röd dag i rekylen med hög omsättning är ett krav; de tre andra är rangkriterier:
                   <ol>
-                    <li>utbrottsdagens omsättning minst {num(bt.volume_ratio)} gånger 20-dagarssnittet</li>
+                    <li>utbrottsdagens omsättning minst {num(bt.volume_ratio)} gånger 20-dagarssnittet (rangkriterium)</li>
                     <li>
                       ingen röd dag i rekylen (stängning under öppningen) med omsättning över {num(bt.red_volume_ratio)} gånger
-                      den dagens 20-dagarssnitt
+                      den dagens 20-dagarssnitt (krav)
                     </li>
-                    <li>snittomsättningen under rekyldagarna under 20-dagarssnittet före utbrottsdagen</li>
+                    <li>snittomsättningen under rekyldagarna under 20-dagarssnittet före utbrottsdagen (rangkriterium)</li>
                     <li>
                       summan av omsättningen på uppdagar i rekylen (stängning över föregående dags) minst lika stor som på
-                      neddagar; oförändrade dagar räknas inte
+                      neddagar; oförändrade dagar räknas inte (rangkriterium)
                     </li>
                   </ol>
                 </li>
@@ -556,7 +556,10 @@ const rankHist = pbHist?.ranking ?? null;
                   const tl = td ? todayLines(td) : null;
                   const bo = lv ? breakoutLines(lv.breakout, lv.lower_volume, shortDate) : null;
                   const vr = lv?.volume
-                    ? volumeRuleLines(lv.volume, { volumeRatio: bt?.volume_ratio ?? 2, redRatio: bt?.red_volume_ratio ?? 1.5 })
+                    ? volumeRuleLines(lv.volume, {
+                      volumeRatio: bt?.volume_ratio ?? 2, redRatio: bt?.red_volume_ratio ?? 1.5,
+                      required: bt?.required_rules ?? ["r1", "r2", "r3", "r4"],
+                    })
                     : null;
                   const tv = td ? todayVolumeText(td.volume) : null;
                   return (
@@ -661,8 +664,9 @@ const rankHist = pbHist?.ranking ?? null;
           bbHist.rules && (
             <p class="note">
               <strong>Volymvillkoren var för sig:</strong> grundregeln är strategin med utbrott vid minst 1,5× omsättning
-              och utan övriga volymvillkor. Raderna under den lägger till ett villkor i taget, och den sista kräver alla
-              (strategins etiketter). Varje rad har sina egna fall, ett i taget per bolag, och båda etiketterna.
+              och utan övriga volymvillkor. Raderna under den lägger till ett villkor i taget, och den sista kräver alla fyra.
+              Raden märkt "strategin" är kraven i dag. Varje rad har sina egna fall, ett i taget per bolag, och båda
+              etiketterna.
             </p>
           )
         }
@@ -687,9 +691,10 @@ const rankHist = pbHist?.ranking ?? null;
                   ? [
                       { name: "Grundregeln (utbrott 1,5×, inga övriga volymvillkor)", s: bbHist.rules.base as PullbackSummary, all: false },
                       ...Object.entries(bbHist.rules.texts).map(([k, text]) => ({
-                        name: `Grundregeln + ${text.charAt(0).toLowerCase()}${text.slice(1)}`, s: bbHist.rules![k] as PullbackSummary, all: false,
+                        name: `Grundregeln + ${text.charAt(0).toLowerCase()}${text.slice(1)}${bbHist.rules!.strategy === k ? " (strategin)" : ""}`,
+                        s: bbHist.rules![k] as PullbackSummary, all: bbHist.rules!.strategy === k,
                       })),
-                      { name: "Alla volymvillkor (strategin)", s: bbHist.rules.all as PullbackSummary, all: true },
+                      { name: "Alla fyra volymvillkoren", s: bbHist.rules.all as PullbackSummary, all: false },
                     ]
                   : []),
               ].map(({ name, s, all }) =>

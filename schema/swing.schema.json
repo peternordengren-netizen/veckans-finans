@@ -238,6 +238,7 @@
             "volume_ratio": {"type": "number"},
             "base_volume_ratio": {"type": "number"},
             "red_volume_ratio": {"type": "number"},
+            "required_rules": {"type": "array", "items": {"enum": ["r1", "r2", "r3", "r4"]}},
             "touch_pct": {"type": "number"},
             "bb_period": {"type": "integer"},
             "bb_width": {"type": "number"},
@@ -670,10 +671,13 @@
                   "measures": {
                     "type": "object",
                     "additionalProperties": false,
-                    "required": ["signal", "lower_volume", "room_r", "has_resistance", "upper_r", "stop_atr", "ma50_change_pct"],
+                    "required": ["signal", "room_r", "has_resistance", "upper_r", "stop_atr", "ma50_change_pct"],
                     "properties": {
                       "signal": {"type": "boolean"},
-                      "lower_volume": {"type": "boolean"},
+                      "lower_volume": {"type": "boolean", "description": "Bara i äldre filer (rangkriterium till 2026-11-10)."},
+                      "r1": {"type": "boolean"},
+                      "r3": {"type": "boolean"},
+                      "r4": {"type": "boolean"},
                       "room_r": {"$ref": "#/$defs/num"},
                       "has_resistance": {"type": "boolean"},
                       "upper_r": {"$ref": "#/$defs/num"},

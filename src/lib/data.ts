@@ -193,7 +193,10 @@ export interface BbrekylRank {
   rank: number;
   score: number;
   criteria: Record<string, boolean>;
-  measures: { signal: boolean; lower_volume: boolean; room_r: number | null; has_resistance: boolean; upper_r: number | null; stop_atr: number | null; ma50_change_pct: number | null };
+  measures: {
+    signal: boolean; r1?: boolean; r3?: boolean; r4?: boolean; room_r: number | null; has_resistance: boolean;
+    upper_r: number | null; stop_atr: number | null; ma50_change_pct: number | null;
+  };
 }
 /** Rangordningen bland kandidaterna (scripts/ranking.py): flest uppfyllda kriterier först. */
 export interface PullbackRank {
@@ -270,7 +273,7 @@ export interface SwingView {
     /** Rekyl efter Bollingerutbrott (saknas i äldre filer). */
     bbrekyl?: {
       breakout_days: number; volume_ratio: number; touch_pct: number; bb_period: number; bb_width: number; volume_days: number;
-      base_volume_ratio?: number; red_volume_ratio?: number;
+      base_volume_ratio?: number; red_volume_ratio?: number; required_rules?: string[];
       ranking: { target_r: number; bollinger_r: number; stop_atr: number; ma50_days: number; top: number };
     };
   };
@@ -294,7 +297,7 @@ export interface SwingView {
       labels: Record<string, PullbackSummary>;
       all: PullbackSummary;
       /** Volymvillkoren var för sig: grundregeln, ett villkor i taget och alla (saknas i äldre filer). */
-      rules?: { description: string; texts: Record<string, string> } & Record<string, PullbackSummary | string | Record<string, string>>;
+      rules?: { description: string; texts: Record<string, string>; strategy?: string } & Record<string, PullbackSummary | string | Record<string, string>>;
     };
     period: { start: string; end: string };
     method: string;
