@@ -126,7 +126,7 @@ test("Rekyl efter Bollingerutbrott: volymvillkoren och omsättningen i dag", () 
   assert.deepEqual(volumeRuleLines(v, th), [
     { ok: true, text: "Utbrottet 2,1× 20-dagarssnittet (rangkriterium: minst 2,0×)" },
     { ok: true, text: "Röda dagar i rekylen högst 0,7× snittet (krav: högst 1,5×)" },
-    { ok: true, text: "Rekylen i snitt 0,7× 20-dagarssnittet (rangkriterium: under 1,0×)" },
+    { ok: true, text: "Rekylen i snitt 0,67× 20-dagarssnittet (rangkriterium: under 1,00×)" },
     { ok: true, text: "Uppdagar 67 % av omsättningen på upp- och neddagar (rangkriterium: minst 50 %)" },
   ]);
   const no = volumeRuleLines({ ...v, r1: false, breakout_ratio: 1.6, red_days: 0, red_max_ratio: null, up_volume: 0, down_volume: 0 }, th);

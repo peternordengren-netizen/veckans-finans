@@ -101,6 +101,7 @@ export function volumeRuleLines(
   th: { volumeRatio: number; redRatio: number; required: string[] },
 ): { ok: boolean; text: string }[] {
   const x = (n: number) => `${pctFmt.format(n)}×`;
+  const x2 = (n: number) => `${priceFmt.format(n)}×`;
   const kind = (r: string) => (th.required.includes(r) ? "krav" : "rangkriterium");
   const total = v.up_volume + v.down_volume;
   return [
@@ -114,7 +115,8 @@ export function volumeRuleLines(
     {
       ok: v.r3,
       text: v.rekyl_avg_ratio === null ? "Snittomsättning i rekylen saknas"
-        : `Rekylen i snitt ${x(v.rekyl_avg_ratio)} 20-dagarssnittet (${kind("r3")}: under 1,0×)`,
+        // Två decimaler: en avrundning till 1,0× vore otydlig mot gränsen under 1,0×.
+        : `Rekylen i snitt ${x2(v.rekyl_avg_ratio)} 20-dagarssnittet (${kind("r3")}: under 1,00×)`,
     },
     {
       ok: v.r4,
