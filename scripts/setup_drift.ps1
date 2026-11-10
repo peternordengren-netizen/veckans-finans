@@ -4,6 +4,11 @@
 # - Katalogkopplingar (junctions) från driftkopian till arbetskopian för data som inte ligger i git, så att sidan
 #   och körningarna ser samma data: datamapparna nedan, logs, .venv och node_modules. Spårad data
 #   (instruments.csv, sectors.json m.fl.) kommer från main och ändras för körningarna först när den pushats.
+# - Omvänt för mapparna som Claude skriver i (data\results av rapportutfallen, data\weeks av veckosammanfattningen):
+#   de riktiga mapparna ligger i driftkopian och arbetskopian har kopplingar dit. Claude Code nekar skrivningar
+#   genom en katalogkoppling ut ur arbetsmappen, även med en tillåtande regel (2026-11-10: rapportutfallen
+#   underkändes med "Write nekades" i läget dontAsk), så de schemalagda körningarna måste skriva i riktiga mappar.
+#   En befintlig uppsättning med kopplingen åt andra hållet flyttas (mappen flyttas till driftkopian).
 # - dist\ är driftkopians egen: servern (VeckansFinansServer) serverar den, och byggen i arbetskopian påverkar
 #   inte sidan.
 # Går att köra om: befintliga kopplingar som pekar rätt lämnas.
@@ -18,10 +23,12 @@ if (-not (Test-Path (Join-Path $Main ".git") -PathType Container)) {
 }
 $Drift = "$Main-drift"
 $Shared = @(
-    "data\raw", "data\weeks", "data\prices", "data\analysis", "data\calendar", "data\signals", "data\morning",
-    "data\consensus", "data\results", "data\valuation", "data\afternoon", "data\status", "data\swing",
+    "data\raw", "data\prices", "data\analysis", "data\calendar", "data\signals", "data\morning",
+    "data\consensus", "data\valuation", "data\afternoon", "data\status", "data\swing",
     "data\bollinger", "logs", ".venv", "node_modules"
 )
+# Mappar som Claude skriver i: riktiga i driftkopian, kopplingar i arbetskopian (se ovan).
+$ClaudeWrites = @("data\results", "data\weeks")
 
 & git -C $Main fetch -q origin main
 if (-not (Test-Path $Drift)) {
@@ -33,13 +40,12 @@ if (-not (Test-Path $Drift)) {
     Write-Output "Driftkopian finns: $Drift (uppdaterad till origin/main)"
 }
 
-foreach ($rel in $Shared) {
-    $target = Join-Path $Main $rel
-    $link = Join-Path $Drift $rel
+function Link([string]$link, [string]$target, [string]$rel) {
+    # Koppling $link -> $target. En befintlig rätt koppling lämnas, en tom mapp ersätts, annat stoppar.
     if (-not (Test-Path $target)) { New-Item -ItemType Directory -Force $target | Out-Null }
     if (Test-Path $link) {
         $item = Get-Item $link -Force
-        if ($item.LinkType -eq "Junction" -and (@($item.Target)[0]).TrimEnd('\') -eq $target.TrimEnd('\')) { continue }
+        if ($item.LinkType -eq "Junction" -and (@($item.Target)[0]).TrimEnd('\') -eq $target.TrimEnd('\')) { return }
         if ($item.PSIsContainer -and -not $item.LinkType -and -not (Get-ChildItem $link -Force | Select-Object -First 1)) {
             Remove-Item $link -Force
         } else {
@@ -48,7 +54,26 @@ foreach ($rel in $Shared) {
     }
     New-Item -ItemType Directory -Force (Split-Path -Parent $link) | Out-Null
     New-Item -ItemType Junction -Path $link -Target $target | Out-Null
-    Write-Output "  koppling: $rel -> $target"
+    Write-Output "  koppling: $link -> $target"
+}
+
+foreach ($rel in $Shared) { Link (Join-Path $Drift $rel) (Join-Path $Main $rel) $rel }
+
+foreach ($rel in $ClaudeWrites) {
+    $inMain = Join-Path $Main $rel
+    $inDrift = Join-Path $Drift $rel
+    $d = if (Test-Path $inDrift) { Get-Item $inDrift -Force } else { $null }
+    $m = if (Test-Path $inMain) { Get-Item $inMain -Force } else { $null }
+    # Gammal uppsättning: riktig mapp i arbetskopian, koppling i driftkopian. Kopplingen tas bort (bara länken,
+    # Directory.Delete utan rekursion) och mappen flyttas till driftkopian.
+    if ($d -and $d.LinkType -eq "Junction" -and $m -and -not $m.LinkType) {
+        $n = @(Get-ChildItem $inMain -Recurse -File -Force).Count
+        [System.IO.Directory]::Delete($inDrift, $false)
+        if (@(Get-ChildItem $inMain -Recurse -File -Force).Count -ne $n) { throw "filer saknas i $inMain efter att kopplingen togs bort" }
+        Move-Item $inMain $inDrift
+        Write-Output "  flyttad: $rel till driftkopian"
+    }
+    Link $inMain $inDrift $rel
 }
 
 Write-Output "Bygger sidan i driftkopian (dist\)..."

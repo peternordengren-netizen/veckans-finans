@@ -674,8 +674,12 @@ av dem. Bakgrund: 6 och 9/11 2026 körde morgonen halvfärdig kod ur arbetskopia
   det som är committat och pushat körs. Ett lås hindrar att två uppgifter uppdaterar samtidigt. Går GitHub inte att
   nå körs befintlig version, med en varning i `logs\drift.log`. Loggen visar vilken commit varje körning använde.
 - **Delad data:** katalogkopplingar (junctions) från driftkopian till arbetskopian, så att sidan och körningarna ser
-  samma data. Det gäller datamapparna som inte ligger i git (`data\raw`, `weeks`, `morning`, `results`, `swing` med
-  flera) samt `logs`, `.venv` och `node_modules`.
+  samma data. Det gäller datamapparna som inte ligger i git (`data\raw`, `morning`, `swing` med flera) samt `logs`,
+  `.venv` och `node_modules`.
+- **Undantag, mapparna som Claude skriver i** (`data\results` och `data\weeks`): de riktiga mapparna ligger i
+  driftkopian och arbetskopian har kopplingar dit. Claude Code nekar skrivningar genom en katalogkoppling ut ur
+  arbetsmappen, även med en tillåtande regel. 2026-11-10 underkändes rapportutfallen därför med "Write nekades".
+  `setup_drift.ps1` flyttar en äldre uppsättning åt rätt håll.
 - **Spårad data** (`instruments.csv`, `sectors.json` med flera) kommer från main och gäller för körningarna först när
   den pushats.
 - **FI-filer** som laddas ner för hand sparas som förut i arbetskopians `data\fi_manual`. Driftkopian läser dem
