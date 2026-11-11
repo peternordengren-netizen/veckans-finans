@@ -120,7 +120,7 @@ def good_summary(meta):
             "companies": [{"ticker": "ALFA", "name": "Alfaverken Fastigheter", "direction": "positiv",
                            "reason": "Stark balans gör bolaget mindre känsligt för höga räntor."}],
         },
-        "our_data": [{"ticker": "ALFA", "name": "Alfaverken Fastigheter", "diverges": True,
+        "our_data": [{"ticker": "ALFA", "name": "Alfaverken Fastigheter", "diverges": False,
                       "note": "Kursen har gått 4,2 procentenheter sämre än index i år trots den positiva bilden, "
                               "och blankningen ökade 0,35 procentenheter. Nästa rapport 2099-11-20."}],
         "label": "manuellt tillagd", "source_url": hb_manual.SOURCE_URLS["fastighetsrapport"],
@@ -140,6 +140,16 @@ META = {"id": "0123456789abcdef", "file_name": "fastighet.pdf", "kind": "fastigh
 
 def test_kontrollen_godkanner_egna_ord():
     assert hb_manual.check(good_summary(META), META, SOURCE, INSTRUMENTS, date(2099, 11, 11), DATA, SECTORS) == []
+
+
+def test_gar_isar_regeln():
+    v = {"ytd_rel_index_pp": -4.21, "week_rel_index_pp": 0.8}
+    assert not hb_manual.diverges("positiv", v)
+    assert hb_manual.diverges("positiv", {**v, "ytd_rel_index_pp": -5.0})
+    assert hb_manual.diverges("positiv", {**v, "week_rel_index_pp": -3.1})
+    assert hb_manual.diverges("negativ", {"ytd_rel_index_pp": 6.0, "week_rel_index_pp": None})
+    assert not hb_manual.diverges("blandad", {"ytd_rel_index_pp": -30.0, "week_rel_index_pp": -9.0})
+    assert not hb_manual.diverges("positiv", {"ytd_rel_index_pp": None, "week_rel_index_pp": None})
 
 
 def test_tal_i_avsnitt_c_ska_finnas_i_sidans_data():
@@ -175,6 +185,8 @@ def test_tal_i_avsnitt_c_ska_finnas_i_sidans_data():
     ({"our_data": [{"ticker": "ALFA", "name": "Alfaverken Fastigheter", "diverges": False, "note": "Kursen steg 9 % i veckan."}]}, "finns inte i sidans data"),
     ({"our_data": [{"ticker": "ALFA", "name": "Alfaverken Fastigheter", "note": "x"}]}, "diverges"),
     ({"our_data": [{"ticker": "ALFA", "name": "Alfaverken Fastigheter", "diverges": False, "note": "Analytikerna säger sälj."}]}, "sälj"),
+    ({"our_data": [{"ticker": "ALFA", "name": "Alfaverken Fastigheter", "diverges": False, "note": "En insider köpte aktier."}]}, "köpte"),
+    ({"our_data": [{"ticker": "ALFA", "name": "Alfaverken Fastigheter", "diverges": True, "note": "Går isär."}]}, "diverges ska vara false"),
 ])
 def test_kontrollen_underkanner(change, fel):
     s = {**good_summary(META), **change}

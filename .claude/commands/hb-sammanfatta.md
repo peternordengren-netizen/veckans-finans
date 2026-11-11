@@ -8,7 +8,8 @@ Du ska sammanfatta en Handelsbanken-rapport som användaren laddat ner själv, f
 
 Handelsbankens villkor säger att rapporterna inte får mångfaldigas eller spridas. Därför skriver du **bara med egna
 ord**: inga citat, inga citattecken, och ingen följd om åtta ord eller fler som står likadant i rapporten. Det
-kontrolleras. Sammanfattningen är beskrivande och ingen uppmaning: använd inte orden köp, sälj eller kursmål.
+kontrolleras. Sammanfattningen är beskrivande och ingen uppmaning: använd inte orden köp, sälj eller kursmål i
+någon böjning (köpte, köpare, sålde, säljare med flera).
 
 ## Schemalagd körning
 
@@ -34,6 +35,10 @@ Sammanfattningen har tre avsnitt:
 - c) **Vad vår data visar** (`our_data`): en rad per bolag i b) (fler får tas med). `note` beskriver kort vad sidans
   värden visar för bolaget (kurs mot index senaste veckan och i år, blankningsändring, insyn, P/E-förändring i år,
   kommande rapport) och pekar ut om rapportens bild och marknadens rörelse går isär (`diverges`: true/false).
+  Regeln för `diverges` (kontrolleras): riktningen i b) är `positiv` men kursen ligger minst 5 procentenheter under
+  index i år (`ytd_rel_index_pp` ≤ −5) eller minst 3 under senaste veckan (`week_rel_index_pp` ≤ −3), eller
+  `negativ` och lika mycket över index. `blandad` och bolag som inte står i b) är false. Går den isär ska note säga
+  det. Insyn beskrivs som förvärv eller avyttring.
   **Varje tal i note ska finnas i bolagets värden i data.json** (avrundat till högst två decimaler, med decimalkomma,
   utan tecken; kronbelopp får skrivas i miljoner). Skriv datum som ÅÅÅÅ-MM-DD. Hitta inte på tal och räkna inte om.
   Saknas ett värde (null) säger du att det saknas. Du skriver inte värdena själva; skriptet lägger på dem.

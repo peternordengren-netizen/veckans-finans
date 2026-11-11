@@ -80,7 +80,13 @@ DATA_FIELDS = {
 QUOTE_WORDS = 8
 MAX_ATTEMPTS = 3  # körningar (à två Claude-försök) per fil innan den hoppas över
 SUFFIXES = {".pptx", ".pdf"}
-FORBIDDEN = re.compile(r"\b(köp|köpa|sälj|sälja|kursmål|köprekommendation|säljrekommendation)\b", re.IGNORECASE)
+# Inga ord som köp eller sälj, i någon böjning (insyn beskrivs som förvärv och avyttring).
+FORBIDDEN = re.compile(r"\b(köp|köpa|köper|köpte|köpt|köpts|köpare|köparna|sälj|sälja|säljer|sålde|sålt|sålts|säljare|"
+                       r"säljarna|kursmål|köprekommendation|säljrekommendation)\b", re.IGNORECASE)
+# "Går isär" (avsnitt c): riktningen i b) mot kursen mot index. Positiv men minst DIVERGE_YTD_PP sämre än index i år
+# eller DIVERGE_WEEK_PP senaste veckan, eller negativ men lika mycket bättre. Blandad går aldrig isär.
+DIVERGE_YTD_PP = 5.0
+DIVERGE_WEEK_PP = 3.0
 
 
 # --- Filer och text -------------------------------------------------------------------
@@ -273,6 +279,16 @@ def _date_numbers(iso: str) -> set[str]:
     return parts
 
 
+def diverges(direction: str | None, values: dict) -> bool:
+    """Går rapportens bild (riktningen i avsnitt b) och marknadens rörelse isär? Se DIVERGE_YTD_PP."""
+    ytd, week = values.get("ytd_rel_index_pp"), values.get("week_rel_index_pp")
+    if direction == "positiv":
+        return (ytd is not None and ytd <= -DIVERGE_YTD_PP) or (week is not None and week <= -DIVERGE_WEEK_PP)
+    if direction == "negativ":
+        return (ytd is not None and ytd >= DIVERGE_YTD_PP) or (week is not None and week >= DIVERGE_WEEK_PP)
+    return False
+
+
 def numbers_in_data(note: str, values: dict, sources: dict) -> list[str]:
     """Tal i kommentaren som inte finns i bolagets värden (tom lista = alla finns). Datum i ISO-form räknas mot
     kommande rapportdatum och datakällornas veckor."""
@@ -418,6 +434,12 @@ def _check_impact_and_data(s: dict, instruments: dict[str, Instrument], data: di
             errors.append(f"{x['ticker']} i avsnitt c) ska ha diverges (true/false) och note")
             continue
         values = (data.get("companies") or {}).get(x["ticker"]) or {}
+        direction = next((c.get("direction") for c in comps if isinstance(c, dict) and c.get("ticker") == x["ticker"]), None)
+        expected = diverges(direction, values)
+        if x["diverges"] != expected:
+            errors.append(f"{x['ticker']} i avsnitt c): diverges ska vara {str(expected).lower()} (riktning {direction}, "
+                          f"mot index i år {values.get('ytd_rel_index_pp')}, senaste veckan {values.get('week_rel_index_pp')}; "
+                          f"gränser {DIVERGE_YTD_PP:g} och {DIVERGE_WEEK_PP:g} procentenheter)")
         bad = numbers_in_data(x["note"], values, data.get("sources") or {})
         if bad:
             errors.append(f"{x['ticker']} i avsnitt c): talen {bad} finns inte i sidans data för bolaget")
