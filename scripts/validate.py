@@ -977,6 +977,8 @@ def validate_swing(data: dict, instruments: dict[str, Instrument]) -> Result:
             _check_pullback(c, data["thresholds"].get("pullback"), where, expected, res)
         if "bbrekyl" in c:
             _check_bbrekyl(c, data["thresholds"].get("bbrekyl"), where, expected, res)
+        if "vcp" in c:
+            _check_vcp(c, data["thresholds"].get("vcp"), where, expected, res)
         if c.get("momentum"):
             from bollinger import momentum_errors
 
@@ -1002,6 +1004,7 @@ def validate_swing(data: dict, instruments: dict[str, Instrument]) -> Result:
         seen.add(m["ticker"])
     _check_ranking(data, res)
     _check_bbrekyl_ranking(data, res)
+    _check_vcp_ranking(data, res)
     return res
 
 
@@ -1075,6 +1078,57 @@ def _check_bbrekyl_ranking(data: dict, res: Result) -> None:
     wrong = [e["name"] for e in entries if e["rank"] != e["given"]]
     if wrong:
         res.errors.append(f"rangordningen (Rekyl efter Bollingerutbrott) stämmer inte: {wrong[:5]}")
+
+
+def _check_vcp(c: dict, th: dict | None, where: str, expected: list[str], res: Result) -> None:
+    """Momentum-utbrott (VCP): etiketten, nivåerna och rangkriterierna räknas om ur de sparade måtten (scripts/vcp.py).
+    RS-percentilen och måtten själva räknas inte om (de kräver hela listans dagsdata)."""
+    import vcp
+
+    v = c["vcp"]
+    t = {k: x for k, x in (th or vcp.THRESHOLDS).items() if k != "ranking"}
+    labels = vcp.labels(v["state"], t)
+    expected += labels
+    lv = v["levels"]
+    if bool(labels) != (lv is not None):
+        res.errors.append(f"{where}: nivåerna för Momentum-utbrott ska finnas om och endast om etiketten finns")
+        return
+    if lv is None:
+        if v.get("rank") is not None or v.get("bollinger") is not None:
+            res.errors.append(f"{where}: rang eller Bollingerläge utan nivåer (Momentum-utbrott)")
+        return
+    again = vcp.levels(v["state"], labels[0], None, t)
+    for key in ("ref", "trigger", "pivot", "stop", "stop_under_pivot_pct", "target", "depths", "pivot_dist_pct"):
+        if again[key] != lv[key]:
+            res.errors.append(f"{where}: {key} {lv[key]!r} stämmer inte med måtten (väntat {again[key]!r})")
+    s = v["state"]
+    if any(b["depth_pct"] != round((b["peak"] - b["trough"]) / b["peak"] * 100, 2) for b in s["contractions"]):
+        res.errors.append(f"{where}: ett rekyldjup stämmer inte med topp och botten")
+    if v.get("bollinger") is not None:
+        from bollinger import position_errors
+
+        res.errors += position_errors(v["bollinger"], f"{where} Bollinger")
+    rt = (th or {}).get("ranking") or vcp.RANK_THRESHOLDS
+    if v.get("rank") and v["rank"]["criteria"] != vcp.criteria(s, rt):
+        res.errors.append(f"{where}: rangkriterierna (Momentum-utbrott) stämmer inte med måtten")
+    if v.get("rank") and v["rank"]["score"] != sum(v["rank"]["criteria"].values()):
+        res.errors.append(f"{where}: poängen (Momentum-utbrott) ≠ antalet uppfyllda kriterier")
+
+
+def _check_vcp_ranking(data: dict, res: Result) -> None:
+    """Rangordningen i Momentum-utbrott (VCP): 1..n efter poäng, RS-percentil och namn; kriteriernas texter utan
+    värdering eller uppmaning."""
+    import vcp
+
+    for k, text in (data.get("vcp_criteria") or {}).items():
+        if re.search(r"\b(köp|sälj|kursmål|rekommend|bäst)", text, re.IGNORECASE):
+            res.errors.append(f"rangkriteriet {k!r} innehåller en värdering eller uppmaning: {text!r}")
+    entries = [{"score": c["vcp"]["rank"]["score"], "rs_pct": c["vcp"]["state"]["rs_pct"], "name": c["name"],
+                "given": c["vcp"]["rank"]["rank"]} for c in data["companies"] if (c.get("vcp") or {}).get("rank")]
+    vcp.rank(entries)
+    wrong = [e["name"] for e in entries if e["rank"] != e["given"]]
+    if wrong:
+        res.errors.append(f"rangordningen (Momentum-utbrott) stämmer inte: {wrong[:5]}")
 
 
 def _check_bbrekyl(c: dict, th: dict | None, where: str, expected: list[str], res: Result) -> None:

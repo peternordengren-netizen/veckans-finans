@@ -227,6 +227,10 @@
             "top": {"type": "integer"}
           }
         },
+        "vcp": {
+          "type": "object",
+          "description": "Trösklar för Momentum-utbrott (VCP) (scripts/vcp.py THRESHOLDS och RANK_THRESHOLDS); saknas i äldre filer."
+        },
         "momentum": {
           "type": "object",
           "description": "RSI och Stoch RSI (scripts/momentum.py THRESHOLDS); saknas i äldre filer.",
@@ -271,6 +275,11 @@
           }
         }
       }
+    },
+    "vcp_criteria": {
+      "type": "object",
+      "description": "Rangkriterierna för Momentum-utbrott (VCP) (scripts/vcp.py CRITERIA); saknas i äldre filer.",
+      "additionalProperties": {"type": "string"}
     },
     "bbrekyl_criteria": {
       "type": "object",
@@ -572,6 +581,74 @@
                   "pct_b": {"$ref": "#/$defs/num"},
                   "upper_r": {"$ref": "#/$defs/num"},
                   "at_upper": {"type": "boolean"}
+                }
+              }
+            }
+          },
+          "vcp": {
+            "type": "object",
+            "description": "Momentum-utbrott (VCP, scripts/vcp.py): måtten (null utan 253 handelsdagar), och vid träff nivåerna, Bollingerläget och rangen. Saknas i äldre filer.",
+            "additionalProperties": false,
+            "required": ["state", "levels"],
+            "properties": {
+              "state": {
+                "type": ["object", "null"],
+                "additionalProperties": false,
+                "required": ["close", "high", "low", "rs_pct", "ma50", "ma150", "ma200", "ma200_prev", "low52", "high52",
+                             "base_days", "pivot", "contractions", "volume", "volume_avg50", "vol_dry", "vol_avg",
+                             "atr_dry", "atr_avg"],
+                "properties": {
+                  "close": {"type": "number"}, "high": {"type": "number"}, "low": {"type": "number"},
+                  "rs_pct": {"type": "integer", "minimum": 0, "maximum": 99},
+                  "ma50": {"type": "number"}, "ma150": {"type": "number"}, "ma200": {"type": "number"},
+                  "ma200_prev": {"type": "number"}, "low52": {"type": "number"}, "high52": {"type": "number"},
+                  "base_days": {"type": "integer", "minimum": 1}, "pivot": {"type": "number"},
+                  "contractions": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": ["peak", "trough", "depth_pct", "peak_ago", "trough_ago"],
+                      "properties": {
+                        "peak": {"type": "number"}, "trough": {"type": "number"}, "depth_pct": {"type": "number"},
+                        "peak_ago": {"type": "integer"}, "trough_ago": {"type": "integer"}
+                      }
+                    }
+                  },
+                  "volume": {"type": "number"}, "volume_avg50": {"type": "number"}, "vol_dry": {"type": "number"},
+                  "vol_avg": {"type": "number"}, "atr_dry": {"type": "number"}, "atr_avg": {"type": "number"}
+                }
+              },
+              "levels": {
+                "type": ["object", "null"],
+                "additionalProperties": false,
+                "required": ["ref", "trigger", "pivot", "stop", "stop_under_pivot_pct", "risk_pct", "risk_atr", "target",
+                             "pivot_dist_pct", "volume_ratio", "depths", "base_weeks"],
+                "properties": {
+                  "ref": {"type": "number"}, "trigger": {"$ref": "#/$defs/num"}, "pivot": {"type": "number"},
+                  "stop": {"type": "number"}, "stop_under_pivot_pct": {"type": "number"},
+                  "risk_pct": {"$ref": "#/$defs/num"}, "risk_atr": {"$ref": "#/$defs/num"}, "target": {"type": "number"},
+                  "pivot_dist_pct": {"type": "number"}, "volume_ratio": {"$ref": "#/$defs/num"},
+                  "depths": {"type": "array", "items": {"type": "number"}}, "base_weeks": {"type": "number"}
+                }
+              },
+              "rank": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["rank", "score", "criteria"],
+                "properties": {
+                  "rank": {"type": "integer", "minimum": 1},
+                  "score": {"type": "integer", "minimum": 0},
+                  "criteria": {"type": "object", "additionalProperties": {"type": "boolean"}}
+                }
+              },
+              "bollinger": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["price", "lower", "upper", "pct_b", "upper_r", "at_upper"],
+                "properties": {
+                  "price": {"type": "number"}, "lower": {"type": "number"}, "upper": {"type": "number"},
+                  "pct_b": {"$ref": "#/$defs/num"}, "upper_r": {"$ref": "#/$defs/num"}, "at_upper": {"type": "boolean"}
                 }
               }
             }

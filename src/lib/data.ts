@@ -101,6 +101,12 @@ export interface SwingRow {
   bbrekyl?: {
     levels: BbrekylLevels | null; bollinger?: PullbackBollinger; rank?: BbrekylRank; today?: PullbackToday;
   };
+  /** Momentum-utbrott (VCP, scripts/vcp.py): måtten, och vid träff nivåerna, Bollingerläget, rangen och status i dag;
+   *  saknas i äldre filer. */
+  vcp?: {
+    state: VcpState | null; levels: VcpLevels | null; bollinger?: PullbackBollinger;
+    rank?: { rank: number; score: number; criteria: Record<string, boolean> }; today?: PullbackToday;
+  };
   /** RSI(14) och Stoch RSI (3, 3, 14, 14) med varning för kandidaterna i strategierna (scripts/momentum.py); gårdagens
    *  stängning eller (checked_at satt) senaste kontrollen i dag. Null/saknas för övriga och i äldre filer. */
   momentum?: SwingMomentum | null;
@@ -167,6 +173,26 @@ export interface PullbackLevels {
   top: number;
   r2: number;
   r3: number;
+}
+/** Måtten i Momentum-utbrott (VCP) (scripts/vcp.state). */
+export interface VcpState {
+  close: number; high: number; low: number;
+  /** RS-percentil 0–99 mot listans bolag. */
+  rs_pct: number;
+  ma50: number; ma150: number; ma200: number; ma200_prev: number; low52: number; high52: number;
+  base_days: number; pivot: number;
+  contractions: { peak: number; trough: number; depth_pct: number; peak_ago: number; trough_ago: number }[];
+  volume: number; volume_avg50: number; vol_dry: number; vol_avg: number; atr_dry: number; atr_avg: number;
+}
+/** Nivåerna i Momentum-utbrott (VCP) (scripts/vcp.levels). */
+export interface VcpLevels {
+  ref: number;
+  /** Pivoten vid "Nära pivot", annars null (utbrottet har redan skett). */
+  trigger: number | null;
+  pivot: number; stop: number; stop_under_pivot_pct: number; risk_pct: number | null; risk_atr: number | null;
+  /** 3R. */
+  target: number;
+  pivot_dist_pct: number; volume_ratio: number | null; depths: number[]; base_weeks: number;
 }
 export interface SwingMomentum {
   rsi14: number | null;
@@ -264,6 +290,10 @@ export interface PullbackSummary {
   mean_net_pct: number | null;
   mean_net_r: number | null;
 }
+export interface VcpSummary {
+  cases: number; decided: number; r3_first: number; stop_first: number; open: number; not_triggered: number;
+  r3_share: number | null; mean_net_pct: number | null; mean_net_r: number | null;
+}
 export interface SwingStat {
   n: number;
   better: number | null;
@@ -286,6 +316,13 @@ export interface SwingView {
     levels?: { lookback: number; pivot: number; merge_atr: number; stop_buffer_atr: number };
     /** Rangordningen av Pullback-kandidaterna (saknas i äldre filer). */
     ranking?: { resistance_r: number; support_atr: number; bollinger_r: number; stop_atr: number; ma50_days: number; top: number };
+    /** Momentum-utbrott (VCP) (saknas i äldre filer). */
+    vcp?: {
+      rs_min: number; ma200_days: number; above_low_pct: number; below_high_pct: number; base_min_days: number;
+      base_max_days: number; swing: number; min_contractions: number; dry_days: number; avg_days: number;
+      breakout_volume: number; near_pct: number; max_stop_pct: number; target_r: number; trigger_days: number; max_days: number;
+      ranking: { last_contraction_pct: number; rs_strong: number; at_pivot_pct: number; top: number };
+    };
     /** Rekyl efter Bollingerutbrott (saknas i äldre filer). */
     bbrekyl?: {
       breakout_days: number; volume_ratio: number; touch_pct: number; bb_period: number; bb_width: number; volume_days: number;
@@ -297,6 +334,8 @@ export interface SwingView {
   rankingCriteria: Record<string, string>;
   /** Rangkriterierna för Rekyl efter Bollingerutbrott (tom i äldre filer). */
   bbrekylCriteria: Record<string, string>;
+  /** Rangkriterierna för Momentum-utbrott (VCP) (tom i äldre filer). */
+  vcpCriteria: Record<string, string>;
   labels: Record<string, string>;
   /** Strategier i rullistan: namn och etiketterna som räknas som träff (saknas i äldre filer). */
   strategies: Record<string, { name: string; labels: string[] }>;
@@ -307,6 +346,15 @@ export interface SwingView {
   /** Senaste Bollingerkontrollen i dag för swingfilens kandidater (scripts/bollinger.py), eller null. */
   bollingerCheck: { checked_at: string; delay_note: string; candidates: number; rows: number } | null;
   history: {
+    /** Momentum-utbrott (VCP): 3R före stoppet och utvecklingen mot index (saknas i äldre filer). */
+    vcp?: {
+      period: { start: string; end: string };
+      thresholds: { max_days: number; trigger_days: number; target_r: number };
+      labels: Record<string, VcpSummary>;
+      all: VcpSummary;
+      forward: Record<string, Record<string, SwingStat>>;
+      note: string;
+    };
     /** Rekyl efter Bollingerutbrott: 2R före stoppet och tvärtom (saknas i äldre filer). */
     bbrekyl?: {
       thresholds: { max_days: number; trigger_days: number };
@@ -367,6 +415,7 @@ export function loadLatestSwing(): SwingView | null {
       labels: Record<string, string>;
       ranking_criteria?: Record<string, string>;
       bbrekyl_criteria?: Record<string, string>;
+      vcp_criteria?: Record<string, string>;
       strategies?: SwingView["strategies"];
       companies: SwingRow[];
       missing?: SwingMissing[];
@@ -378,6 +427,7 @@ export function loadLatestSwing(): SwingView | null {
     const check = IS_MOCK ? null : loadLatestBollinger();
     const pb = check?.pullback && check.pullback.swing_date === raw.date ? check.pullback : null;
     const bbs = check?.bbrekyl && check.bbrekyl.swing_date === raw.date ? check.bbrekyl : null;
+    const vcs = check?.vcp && check.vcp.swing_date === raw.date ? check.vcp : null;
     // Kontrollens rad för en strategi: läget mot banden och status i dag ersätter gårdagens läge.
     const merge = <T extends { levels: unknown | null }>(part: T | undefined, r: BollingerCheckRow | undefined): T | undefined => {
       if (!part?.levels || !r || !check) return part;
@@ -390,13 +440,15 @@ export function loadLatestSwing(): SwingView | null {
     };
     const live = new Map((pb?.rows ?? []).map((r) => [r.ticker, r]));
     const liveBb = new Map((bbs?.rows ?? []).map((r) => [r.ticker, r]));
+    const liveVcp = new Map((vcs?.rows ?? []).map((r) => [r.ticker, r]));
     const rows = raw.companies.map((c) => {
       // RSI och Stoch RSI med dagens kurs (samma för båda strategierna).
-      const mom = (live.get(c.ticker) ?? liveBb.get(c.ticker))?.momentum;
+      const mom = (live.get(c.ticker) ?? liveBb.get(c.ticker) ?? liveVcp.get(c.ticker))?.momentum;
       return {
         ...c,
         pullback: merge(c.pullback, live.get(c.ticker)),
         bbrekyl: merge(c.bbrekyl, liveBb.get(c.ticker)),
+        vcp: merge(c.vcp, liveVcp.get(c.ticker)),
         ...(mom && check ? { momentum: { ...mom, checked_at: check.checked_at } } : {}),
       };
     });
@@ -409,15 +461,17 @@ export function loadLatestSwing(): SwingView | null {
       thresholds: raw.thresholds,
       rankingCriteria: raw.ranking_criteria ?? {},
       bbrekylCriteria: raw.bbrekyl_criteria ?? {},
+      vcpCriteria: raw.vcp_criteria ?? {},
       labels: raw.labels,
       strategies: raw.strategies ?? {},
       rows,
       missing: raw.missing ?? [],
       delisted: raw.delisted ?? [],
-      bollingerCheck: (pb || bbs) && check
+      bollingerCheck: (pb || bbs || vcs) && check
         ? {
           checked_at: check.checked_at, delay_note: check.delay_note,
-          candidates: (pb?.candidates ?? 0) + (bbs?.candidates ?? 0), rows: (pb?.rows.length ?? 0) + (bbs?.rows.length ?? 0),
+          candidates: (pb?.candidates ?? 0) + (bbs?.candidates ?? 0) + (vcs?.candidates ?? 0),
+          rows: (pb?.rows.length ?? 0) + (bbs?.rows.length ?? 0) + (vcs?.rows.length ?? 0),
         }
         : null,
       history,
@@ -1044,6 +1098,8 @@ export interface BollingerCheck {
   pullback?: BollingerStrategySection | null;
   /** Samma avsnitt för Rekyl efter Bollingerutbrott (saknas i äldre filer, null utan swingfil). */
   bbrekyl?: BollingerStrategySection | null;
+  /** Samma avsnitt för Momentum-utbrott (VCP) (saknas i äldre filer). */
+  vcp?: BollingerStrategySection | null;
 }
 
 /** En kandidats rad i Bollingerkontrollen: läget mot banden och status i dag. */

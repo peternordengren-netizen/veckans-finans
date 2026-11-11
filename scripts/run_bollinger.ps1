@@ -76,7 +76,8 @@ $title = "Swing kl. $time - strategikandidaterna"
 # Bara kandidaterna i de två strategierna: status i dag (ändringar sedan föregående kontroll) och övre bandet.
 $strategies = @(
     @{ Name = "Pullback i trend"; Section = $data.pullback },
-    @{ Name = "Rekyl efter Bollingerutbrott"; Section = $data.bbrekyl }
+    @{ Name = "Rekyl efter Bollingerutbrott"; Section = $data.bbrekyl },
+    @{ Name = "Momentum-utbrott (VCP)"; Section = $data.vcp }
 )
 $statusParts = @()
 $upperParts = @()

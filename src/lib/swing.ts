@@ -11,7 +11,7 @@ export function labelClass(label: string): string {
   if (label.startsWith("utbrott") || label.startsWith("bollinger")) return "breakout";
   if (label.startsWith("rsi2")) return "rsi";
   if (label.startsWith("trend") || label.endsWith("-cross")) return "trend";
-  if (label.startsWith("rekyl") || label.startsWith("bbrekyl")) return "pullback";
+  if (label.startsWith("rekyl") || label.startsWith("bbrekyl") || label.startsWith("vcp")) return "pullback";
   return "report";
 }
 
@@ -140,6 +140,16 @@ export function momentumText(m: { rsi14: number | null; stoch_k: number | null; 
   const n = (v: number | null) => (v === null ? "–" : String(Math.round(v)));
   const stoch = m.stoch_k === null ? "–" : `${n(m.stoch_k)}/${n(m.stoch_d)}`;
   return { text: `RSI(14) ${n(m.rsi14)} · Stoch RSI ${stoch}`, warn: m.warn };
+}
+
+/** Rekyldjupen i basen, i tidsordning: "15 % → 8 % → 4 %". */
+export function depthsText(depths: readonly number[]): string {
+  return depths.map((d) => `${new Intl.NumberFormat("sv-SE", { maximumFractionDigits: d < 10 ? 1 : 0 }).format(d)} %`).join(" → ");
+}
+
+/** Kriterierna med ✓ (uppfyllt) eller ✗, i kriteriernas ordning. */
+export function criteriaLines(criteria: Record<string, boolean>, texts: Record<string, string>): { ok: boolean; text: string }[] {
+  return Object.keys(texts).map((k) => ({ ok: !!criteria[k], text: texts[k] }));
 }
 
 /** Avstånd till stoppet: "2,8 % · 1,4 ATR". */

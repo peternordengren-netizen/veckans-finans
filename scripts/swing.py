@@ -62,6 +62,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import bbrekyl  # noqa: E402
 import levels  # noqa: E402
 import momentum  # noqa: E402
+import vcp  # noqa: E402
 import pullback  # noqa: E402
 import ranking  # noqa: E402
 from bollinger import bands, position, upper_band  # noqa: E402
@@ -101,11 +102,13 @@ LABELS = {
     "death-cross": "Death cross",
     **pullback.LABELS,
     **bbrekyl.LABELS,
+    **vcp.LABELS,
 }
 # Strategier i rullistan: namn och etiketterna som räknas som träff (scripts/pullback.py).
 STRATEGIES = {
     "pullback": {"name": "Pullback i trend", "labels": list(pullback.LABELS)},
     "bbrekyl": {"name": "Rekyl efter Bollingerutbrott", "labels": list(bbrekyl.LABELS)},
+    "vcp": {"name": "Momentum-utbrott (VCP)", "labels": list(vcp.LABELS)},
 }
 
 
@@ -272,6 +275,7 @@ def build(today: date, now: datetime, instruments: dict[str, Instrument], bars: 
     expected = previous_business_day(today)
     with_expected = sum(1 for i in instruments.values() if any(x.day == expected for x in bars.get(i.yahoo_ticker, [])))
     companies, missing = [], []
+    vcp_input: dict[str, tuple] = {}
     for t, inst in instruments.items():
         b = [x for x in bars.get(inst.yahoo_ticker, []) if as_of is not None and x.day <= as_of]
         if len(b) < MIN_BARS:
@@ -320,6 +324,8 @@ def build(today: date, now: datetime, instruments: dict[str, Instrument], bars: 
             crit = ranking.criteria(meas)
             pb["rank"] = {"rank": None, "score": sum(crit.values()), "criteria": crit, "measures": meas}
         bb = bb_strategy(b, o, h, lo, c, i, atr, rep)
+        # Momentum-utbrott (VCP): RS-percentilen jämförs mot alla bolag, så måtten räknas efter loopen.
+        vcp_input[t] = (o, h, lo, c, [x.volume for x in b], i, atr)
         # RSI(14) och Stoch RSI för strategivyerna (scripts/momentum.py), bara för kandidaterna; ingen påverkan på
         # rang eller krav.
         mom = momentum.snapshot(c[:i + 1]) if pb_levels is not None or bb.get("levels") else None
@@ -337,6 +343,7 @@ def build(today: date, now: datetime, instruments: dict[str, Instrument], bars: 
             "labels": labels + bbrekyl.labels(bb["state"]),
         })
     companies.sort(key=lambda c: c["name"])
+    vcp_strategy(companies, vcp_input)
     ranked = [{**c["pullback"]["rank"], "name": c["name"], "_c": c} for c in companies if c["pullback"].get("rank")]
     ranking.rank(ranked)
     for e in ranked:
@@ -356,15 +363,46 @@ def build(today: date, now: datetime, instruments: dict[str, Instrument], bars: 
         "thresholds": {**THRESHOLDS, "pullback": pullback.THRESHOLDS, "levels": levels.THRESHOLDS,
                        "ranking": dict(ranking.THRESHOLDS),
                        "bbrekyl": {**bbrekyl.THRESHOLDS, "ranking": dict(bbrekyl.RANK_THRESHOLDS)},
-                       "momentum": dict(momentum.THRESHOLDS)},
+                       "momentum": dict(momentum.THRESHOLDS),
+                       "vcp": {**vcp.THRESHOLDS, "ranking": dict(vcp.RANK_THRESHOLDS)}},
         "ranking_criteria": dict(ranking.CRITERIA),
         "bbrekyl_criteria": dict(bbrekyl.CRITERIA),
+        "vcp_criteria": dict(vcp.CRITERIA),
         "labels": dict(LABELS),  # en kopia: filen får inte dela modulens dict
         "strategies": {k: {**v, "labels": list(v["labels"])} for k, v in STRATEGIES.items()},  # kopia, som labels
         "companies": companies,
         "missing": sorted(missing, key=lambda m: m["name"]),
         "delisted": delisted,
     }
+
+
+def vcp_strategy(companies: list[dict], vcp_input: dict[str, tuple]) -> None:
+    """Momentum-utbrott (VCP, scripts/vcp.py) för alla bolag: RS-percentil mot listan, måtten, etiketter, nivåer,
+    Bollingerläge, rangkriterier och rang. Sätter "vcp" per bolag och lägger till etiketten."""
+    scores = {t: vcp.rs_score(a[3], a[5]) for t, a in vcp_input.items()}
+    ranked_scores = sorted(s for s in scores.values() if s is not None)
+    entries = []
+    for comp in companies:
+        a = vcp_input.get(comp["ticker"])
+        sc = scores.get(comp["ticker"])
+        st = vcp.state(*a[:5], a[5], vcp.percentile(sc, ranked_scores) if sc is not None else None) if a else None
+        out: dict = {"state": st, "levels": None}
+        lbls = vcp.labels(st)
+        if lbls:
+            o, h, lo, c, v, i, atr = a
+            lv = vcp.levels(st, lbls[0], atr)
+            out["levels"] = lv
+            out["bollinger"] = position(c[i], *bands(c[:i + 1]), lv["ref"], lv["stop"])
+            crit = vcp.criteria(st)
+            out["rank"] = {"rank": None, "score": sum(crit.values()), "criteria": crit}
+            entries.append({"score": sum(crit.values()), "rs_pct": st["rs_pct"], "name": comp["name"], "_c": comp})
+            comp["labels"] = comp["labels"] + lbls
+            if comp.get("momentum") is None:
+                comp["momentum"] = momentum.snapshot(c[:i + 1])
+        comp["vcp"] = out
+    vcp.rank(entries)
+    for e in entries:
+        e["_c"]["vcp"]["rank"]["rank"] = e["rank"]
 
 
 def bb_strategy(b: list[Bar], o: list[float], h: list[float], lo: list[float], c: list[float], i: int,

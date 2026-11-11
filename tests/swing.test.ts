@@ -4,7 +4,7 @@ import { test } from "node:test";
 
 import {
   decidedShareText, isPullbackLabel, labelClass, labelCounts, levelText, netText, priceText, reportText, riskText, shareText,
-  altStopText, bbLevelText, breakoutLines, momentumText, todayVolumeText, volumeRuleLines, missingText, resistanceRText, todayInvalid, todayLines, todayOrder, TODAY_STATUS,
+  altStopText, bbLevelText, breakoutLines, criteriaLines, depthsText, momentumText, todayVolumeText, volumeRuleLines, missingText, resistanceRText, todayInvalid, todayLines, todayOrder, TODAY_STATUS,
   bollingerSourceText, chipText, pctBText, rankText, rankTitle, rText, signalText, srDistText, srInsideText, srLevelText, upperRText, vsBaseText,
 } from "../src/lib/swing.ts";
 
@@ -146,6 +146,16 @@ test("RSI och Stoch RSI i kolumnen Ingång", () => {
   });
   assert.equal(momentumText(null), null);
   assert.equal(momentumText({ rsi14: null, stoch_k: null, stoch_d: null, warn: false }), null);
+});
+
+test("Momentum-utbrott (VCP): rekyldjup och kriterier", () => {
+  assert.equal(depthsText([15.2, 8.04, 4.4]), "15 % → 8 % → 4,4 %");
+  assert.equal(depthsText([10.71, 5.45, 2.2]), "11 % → 5,5 % → 2,2 %");
+  assert.deepEqual(criteriaLines({ a: true, b: false }, { a: "Volymen avtar", b: "RS minst 80" }), [
+    { ok: true, text: "Volymen avtar" },
+    { ok: false, text: "RS minst 80" },
+  ]);
+  assert.equal(labelClass("vcp-utbrott"), "pullback");
 });
 
 test("bolag som saknas i Swing", () => {

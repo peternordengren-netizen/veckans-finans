@@ -585,7 +585,8 @@ Uppgiften **VeckansFinansBollinger** kör vardagar 09:20 och 13:20, utan Claude.
   det står i notisen och på sidan.
 - Övre bandet: snittet av de 20 senaste stängningskurserna plus 2 standardavvikelser (populationens), med den
   aktuella kursen som den tjugonde.
-- Windows-notisen gäller bara kandidaterna i strategierna Pullback i trend och Rekyl efter Bollingerutbrott:
+- Windows-notisen gäller bara kandidaterna i strategierna Pullback i trend, Rekyl efter Bollingerutbrott och
+  Momentum-utbrott (VCP):
   ändringarna i "Status i dag" sedan föregående kontroll, och de som ligger vid eller över övre bandet med
   avståndet i R ("3,4 R över", "vid bandet"). Ett klick öppnar sidan.
 - **Pullback-kandidaterna** är bolagen med en etikett ur strategin Pullback i trend i dagens swingfil. För dem räknas
@@ -729,6 +730,46 @@ vändsignal 33 fall, 33,3 %, +0,06 R.
 Med 2R som mål är jämviktsnivån utan courtage en tredjedel. Ingen variant låg tydligt över den: r2 och r4 låg något
 högre än grundregeln, r1 och r3 lägre, och med alla fyra villkor återstår bara 20 avgjorda fall, för få för att säga
 något. Fallen är dessutom inte oberoende.
+
+#### Strategin "Momentum-utbrott (VCP)" (`scripts/vcp.py`)
+
+Det tredje valet under "Strategi" i flikens rullista, på samma dagsdata och med samma justerade kurser. Måtten gäller
+gårdagens stängning. Krav (alla måste vara uppfyllda för en etikett):
+1. **Relativ styrka (RS):** viktad utveckling, 40 % de senaste 63 handelsdagarna (3 mån) och 20 % vardera 126, 189
+   och 252 dagar, rangordnad som percentil 0–99 mot alla bolag i bevakningslistan samma dag (andelen bolag med lägre
+   värde). Jämförelsen gäller listan, inte hela börsen. Minst 70. Kräver 253 handelsdagar.
+2. **Trendmall:** stängning > 50 MA > 150 MA > 200 MA, 200 MA högre än för 21 handelsdagar sedan, stängningen minst
+   30 % över 52-veckorslägsta (low) och högst 25 % under 52-veckorshögsta (high).
+3. **Bas:** den tidigare toppen är det högsta high de 60 handelsdagarna före gårdagen; basen är dagarna sedan dess
+   och ska vara 15–60 handelsdagar (3–12 veckor). **Pivot** = basens högsta high, alltså toppen.
+4. **Rekyler i basen:** från toppen följs varje lokal topp (högst bland 2 dagar på var sida) till lägsta low före
+   nästa topp. Djupet = (topp − botten) / topp. Minst två rekyler, och varje rekyl grundare än den förra
+   ("15 % → 8 % → 4 %" i kolumnen).
+5. **Stopp** under sista rekylens lägsta low, och det får ligga högst 8 % under pivoten.
+
+Etiketter:
+- **Nära pivot:** stängningen högst 5 % under pivoten. Triggernivån och referensen är pivoten.
+- **Utbrott:** stängning över pivoten på minst 1,5× 50-dagarssnittets omsättning. Referensen är stängningen.
+
+Mål 3R, R = referens − stopp. Avtagande volym och ATR visas och ingår i rangen: snittet de senaste 10 dagarna mot
+50-dagarssnittet.
+
+**Rang** efter antal uppfyllda kriterier (6), visade med ✓/✗: volymen avtar, ATR avtar, minst tre krympande
+rekyler, sista rekylen högst 10 %, RS-percentil minst 80, stängningen inom 2 % från pivoten eller över den. Vid lika
+poäng högre RS-percentil.
+
+**Status i dag** vid Bollingerkontrollerna 09:20 och 13:20 (`vcp` i kontrollfilen) som i de andra strategierna, med
+pivoten som triggernivå och dagens omsättning hittills mot normalt vid samma tid.
+
+Swingfilen sparar måtten per bolag (`vcp.state`) och valideringen räknar om etiketten, nivåerna, rekyldjupen och
+rangkriterierna ur dem. RS-percentilen räknas inte om (den kräver hela listans dagsdata).
+
+**Historik** (`vcp` i `history.json`; hämtningen är därför cirka fyra år): de senaste tre åren, varje dag med en
+etikett, ett fall i taget per bolag. Hur ofta 3R nåddes före stoppet: vid Nära pivot startar fallet när kursen når
+pivoten inom 3 handelsdagar (vid pivoten eller öppningen om den är högre), vid Utbrott vid nästa dags öppning; högst
+60 dagar, och når en dag både stoppet och målet räknas stoppet. Dessutom utvecklingen mot index (^OMXSPI) efter 5, 20
+och 60 handelsdagar från signaldagens stängning. Dagens bevakningslista används, så bolag som avnoterats saknas
+(överlevnadsbias), och RS jämförs bara mot listan. Utan courtage, spread och glidning.
 
 ## Sidan (Astro)
 

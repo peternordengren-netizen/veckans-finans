@@ -19,7 +19,11 @@ Andelen 2R först och stopp först räknas på de avgjorda fallen, med snittresu
 Dagsdatan hämtas med öppningskurser i samma batchanrop.
 
 Rekyl efter Bollingerutbrott (scripts/bbrekyl.py): samma uppföljning av varje dag med strategins etiketter, med
-rekylens lägsta low som stopp ("bbrekyl" i filen). Volymvillkoren prövas också var för sig ("bbrekyl.rules"):
+rekylens lägsta low som stopp ("bbrekyl" i filen).
+
+Momentum-utbrott (VCP, scripts/vcp.py): de senaste vcp.HISTORY_YEARS åren (längre än övriga), varje dag med
+etiketten, ett fall i taget per bolag: hur ofta 3R nåddes före stoppet, och utvecklingen mot index efter 5, 20 och 60
+handelsdagar från signaldagens stängning ("vcp" i filen). RS-percentilen räknas mot listans bolag samma dag. Volymvillkoren prövas också var för sig ("bbrekyl.rules"):
 grundregeln (utbrott med 1,5× omsättning, inga övriga volymvillkor), grundregeln plus ett villkor i taget, och alla
 tillsammans (= strategins etiketter), varje variant med sina egna fall (ett i taget per bolag).
 
@@ -44,6 +48,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import bbrekyl  # noqa: E402
+import vcp  # noqa: E402
 import levels  # noqa: E402
 import pullback  # noqa: E402
 import ranking  # noqa: E402
@@ -55,8 +60,10 @@ from validate import listed, load_instruments  # noqa: E402
 
 STOCKHOLM = ZoneInfo("Europe/Stockholm")
 TEST_DAYS = 252
-# 200 dagars MA (Pullback i trend) ska finnas redan vid årets början: cirka 200 + 252 handelsdagar.
-FETCH_DAYS = 760
+# 200 dagars MA (Pullback i trend) ska finnas redan vid årets början: cirka 200 + 252 handelsdagar. Momentum-utbrott
+# (VCP) testas på vcp.HISTORY_YEARS (3) år och behöver 12 månaders utveckling före första dagen: cirka 4 år.
+FETCH_DAYS = 1500
+VCP_HORIZONS = (5, 20, 60)
 HORIZONS = (2, 5)
 
 
@@ -111,6 +118,77 @@ def market_filter(index_bars: list) -> dict[date, bool]:
         ma50, ma200 = sum(closes[i - 49:i + 1]) / 50, sum(closes[i - 199:i + 1]) / 200
         out[index_bars[i].day] = closes[i] > ma50 and closes[i] > ma200
     return out
+
+
+def vcp_history(bars: dict, instruments: dict) -> dict:
+    """Momentum-utbrott (VCP) de senaste vcp.HISTORY_YEARS åren: fall (3R eller stoppet först) och utvecklingen mot
+    index efter VCP_HORIZONS dagar, per etikett och totalt (se modulbeskrivningen)."""
+    idx = {b.day: b.adj_close for b in bars.get(INDEX_TICKER, [])}
+    days = sorted(idx)
+    if len(days) < 2:
+        return {}
+    start_day = days[max(0, len(days) - 252 * vcp.HISTORY_YEARS)]
+    data = {}
+    for t, inst in instruments.items():
+        b = bars.get(inst.yahoo_ticker)
+        if not inst.yahoo_ticker.endswith(".ST") or not b or len(b) < vcp.MIN_BARS:
+            continue
+        o, h, lo, c = pullback.adjusted(b)
+        data[t] = (b, o, h, lo, c, [x.volume for x in b])
+    # RS: viktad utveckling per bolag och dag, sedan percentilen mot alla bolag samma dag.
+    by_day: dict[date, list[float]] = defaultdict(list)
+    scores: dict[str, dict[int, float]] = {}
+    for t, (b, o, h, lo, c, v) in data.items():
+        sc = {}
+        for i in range(252, len(c)):
+            if b[i].day >= start_day:
+                s = vcp.rs_score(c, i)
+                if s is not None:
+                    sc[i] = s
+                    by_day[b[i].day].append(s)
+        scores[t] = sc
+    for lst in by_day.values():
+        lst.sort()
+    cases: dict[str, list[dict]] = {k: [] for k in vcp.LABELS}
+    fwd: dict[str, dict[int, list[float]]] = {k: defaultdict(list) for k in vcp.LABELS}
+    for t, (b, o, h, lo, c, v) in data.items():
+        pre = [0.0]
+        for x in c:
+            pre.append(pre[-1] + x)
+        ma = lambda i, n: (pre[i + 1] - pre[i + 1 - n]) / n  # noqa: E731
+        busy = -1
+        for i, s in scores[t].items():
+            if i <= busy:
+                continue
+            pct = vcp.percentile(s, by_day[b[i].day])
+            # Snabbt förfilter (samma villkor som vcp.labels): RS och MA-ordningen, innan måtten räknas.
+            if pct < vcp.THRESHOLDS["rs_min"] or not c[i] > ma(i, 50) > ma(i, 150) > ma(i, 200):
+                continue
+            st = vcp.state(o, h, lo, c, v, i, pct)
+            lbls = vcp.labels(st)
+            if not lbls:
+                continue
+            lv = vcp.levels(st, lbls[0], None)
+            case = vcp.simulate(o, h, lo, i, lbls[0], lv)
+            cases[lbls[0]].append(case)
+            busy = case["end"]
+            d0 = b[i].day
+            for k in VCP_HORIZONS:
+                if i + k < len(b) and d0 in idx and b[i + k].day in idx:
+                    fwd[lbls[0]][k].append((c[i + k] / c[i] - 1) - (idx[b[i + k].day] / idx[d0] - 1))
+    both = {k: [x for lab in fwd.values() for x in lab.get(k, [])] for k in VCP_HORIZONS}
+    return {
+        "period": {"start": start_day.isoformat(), "end": days[-1].isoformat()},
+        "thresholds": dict(vcp.THRESHOLDS),
+        "labels": {k: vcp.summarize(v) for k, v in cases.items()},
+        "all": vcp.summarize([x for v in cases.values() for x in v]),
+        "forward": {
+            **{lab: {str(k): _stats(fwd[lab].get(k, [])) for k in VCP_HORIZONS} for lab in vcp.LABELS},
+            "all": {str(k): _stats(both[k]) for k in VCP_HORIZONS},
+        },
+        "note": "Dagens bevakningslista: bolag som avnoterats under perioden saknas (överlevnadsbias). RS-percentilen "
+                "jämförs mot listans bolag samma dag. Utan courtage, spread och glidning.",
+    }
 
 
 def build(bars: dict, instruments: dict, today: date, results_dir: Path | None = None) -> dict:
@@ -256,6 +334,8 @@ def build(bars: dict, instruments: dict, today: date, results_dir: Path | None =
                 "all": pullback.summarize([x for v in pb_filtered.values() for x in v]),
             },
         },
+        # Momentum-utbrott (VCP): 3R före stoppet och utvecklingen mot index, de senaste tre åren.
+        "vcp": vcp_history(bars, instruments),
         # Rekyl efter Bollingerutbrott: hur ofta 2R nåddes före stoppet (rekylens lägsta low) och tvärtom.
         "bbrekyl": {
             "thresholds": {**pullback.THRESHOLDS, **bbrekyl.THRESHOLDS},

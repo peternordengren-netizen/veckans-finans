@@ -32,7 +32,8 @@ mot bandet och är ingen uppmaning.
 - Samma avsnitt ("bbrekyl") för strategin Rekyl efter Bollingerutbrott (scripts/bbrekyl.py): kandidaterna med en
   etikett ur den strategin, läget mot banden med strategins referens och stopp, och status i dag med triggernivån
   gårdagens high och gårdagens 50 MA ur strategins fönster.
-- Dagens omsättning hittills mot normalt vid samma tid ("today.volume", bara för Rekyl efter Bollingerutbrott):
+- Samma avsnitt ("vcp") för Momentum-utbrott (VCP, scripts/vcp.py), med pivoten som triggernivå.
+- Dagens omsättning hittills mot normalt vid samma tid ("today.volume", för Rekyl efter Bollingerutbrott och VCP):
   ett batchanrop till Yahoo med 15-minutersstaplar för strategins kandidater (de senaste INTRADAY_DAYS kalender-
   dagarna). Hittills = summan av dagens staplar; normalt = snittet för de VOLUME_PROFILE_DAYS senaste handelsdagarna
   av summan av staplarna som börjar senast vid samma klockslag som dagens sista stapel ("until"). Dagens sista stapel
@@ -133,7 +134,7 @@ def position_errors(p: dict, where: str) -> list[str]:
 
 
 # Strategierna med status i dag: nyckeln i swingfilen ("strategies" och per bolag) och avsnittet i kontrollfilen.
-STRATEGY_KEYS = ("pullback", "bbrekyl")
+STRATEGY_KEYS = ("pullback", "bbrekyl", "vcp")
 
 
 def strategy_candidates(swing: dict | None, key: str) -> list[dict]:
@@ -155,6 +156,8 @@ def _trigger_ma50(c: dict, key: str) -> tuple[float | None, float | None]:
     if key == "bbrekyl":
         d = (st.get("days") or [{}])[-1]
         return d.get("high"), d.get("ma50")
+    if key == "vcp":
+        return st.get("pivot"), st.get("ma50")  # Momentum-utbrott: triggernivån är pivoten
     return st.get("high"), st.get("ma50")
 
 
@@ -324,8 +327,9 @@ def check(today: date, now: datetime, instruments: dict[str, Instrument], fetch:
     sections = {key: strategy_section(key, swing, previous, today_bands, today_bars, now, today_closes)
                 if swing is not None
                 else None for key in STRATEGY_KEYS}
-    # Omsättningen hittills mot normalt, för Rekyl efter Bollingerutbrott (ett extra batchanrop, bara med kandidater).
-    bb_rows = [r for r in (sections.get("bbrekyl") or {}).get("rows", []) if r.get("today")]
+    # Omsättningen hittills mot normalt, för Rekyl efter Bollingerutbrott och Momentum-utbrott (VCP) (ett extra
+    # batchanrop, bara med deras kandidater).
+    bb_rows = [r for key in ("bbrekyl", "vcp") for r in (sections.get(key) or {}).get("rows", []) if r.get("today")]
     if bb_rows:
         yt = {r["ticker"]: instruments[r["ticker"]].yahoo_ticker for r in bb_rows if r["ticker"] in instruments}
         df = intraday(sorted(set(yt.values())), today) if yt else None
@@ -343,6 +347,7 @@ def check(today: date, now: datetime, instruments: dict[str, Instrument], fetch:
         "near": near,
         "pullback": sections["pullback"],
         "bbrekyl": sections["bbrekyl"],
+        "vcp": sections["vcp"],
     }
 
 
