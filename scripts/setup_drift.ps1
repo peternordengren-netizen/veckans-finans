@@ -4,7 +4,8 @@
 # - Katalogkopplingar (junctions) från driftkopian till arbetskopian för data som inte ligger i git, så att sidan
 #   och körningarna ser samma data: datamapparna nedan, logs, .venv och node_modules. Spårad data
 #   (instruments.csv, sectors.json m.fl.) kommer från main och ändras för körningarna först när den pushats.
-# - Omvänt för mapparna som Claude skriver i (data\results av rapportutfallen, data\weeks av veckosammanfattningen):
+# - Omvänt för mapparna som Claude skriver i (data\results av rapportutfallen, data\weeks av veckosammanfattningen,
+#   data\hb av Handelsbanken-sammanfattningarna):
 #   de riktiga mapparna ligger i driftkopian och arbetskopian har kopplingar dit. Claude Code nekar skrivningar
 #   genom en katalogkoppling ut ur arbetsmappen, även med en tillåtande regel (2026-11-10: rapportutfallen
 #   underkändes med "Write nekades" i läget dontAsk), så de schemalagda körningarna måste skriva i riktiga mappar.
@@ -28,7 +29,7 @@ $Shared = @(
     "data\bollinger", "logs", ".venv", "node_modules"
 )
 # Mappar som Claude skriver i: riktiga i driftkopian, kopplingar i arbetskopian (se ovan).
-$ClaudeWrites = @("data\results", "data\weeks")
+$ClaudeWrites = @("data\results", "data\weeks", "data\hb")
 
 & git -C $Main fetch -q origin main
 if (-not (Test-Path $Drift)) {

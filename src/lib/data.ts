@@ -3,8 +3,10 @@
  *
  * Läge "mock" (astro dev/build --mode mock) läser data/mock/, annars data/weeks/
  * och data/prices/. Rådata och evidence-fältet läses aldrig in i sidan:
- * toWeekView plockar bara ut de fält som visas.
+ * toWeekView plockar bara ut de fält som visas. Undantag: Handelsbanken-sammanfattningarna i data/raw/hb/, som är
+ * egna sammanfattningar (inga källtexter), loadHbSummaries.
  */
+import type { HbSummary } from "./hb";
 import type { PolicyDecision } from "./policyRate";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -29,9 +31,18 @@ export interface MorningChange {
   end_pct: number;
   change_pp: number;
 }
+/** Dagens avsnitt av Handelsbankens podd Morgonrapporten (scripts/podcast.py). */
+export interface MorningPodcast {
+  show: string;
+  feed: string;
+  episode: { title: string; url: string; published: string } | null;
+  error: string | null;
+}
 export interface MorningReport {
   date: string;
   generated_at: string;
+  /** Poddens avsnitt i dag (saknas i äldre filer, null utan hämtning). */
+  podcast?: MorningPodcast | null;
   /** Riksbankens senaste räntebeslut (saknas i äldre filer). */
   policy_decision?: PolicyDecision | null;
   news_since: string;
@@ -772,6 +783,22 @@ export function loadCalendar(week: string): CalendarView | null {
     console.warn(`[veckans-finans] kunde inte läsa ${path}, visar sidan utan kalender:`, err);
     return null;
   }
+}
+
+/** Handelsbanken-sammanfattningarna i rådatarepot (data/raw/hb/<id>.json, scripts/hb_manual.py); tom lista i mockläget
+ *  eller utan mapp. En trasig fil hoppas över. */
+export function loadHbSummaries(): HbSummary[] {
+  const dir = join(DATA, "raw", "hb");
+  if (IS_MOCK || !existsSync(dir)) return [];
+  const out: HbSummary[] = [];
+  for (const f of readdirSync(dir).filter((f) => /^[0-9a-f]{16}\.json$/.test(f))) {
+    try {
+      out.push(readJson<HbSummary>(join(dir, f)));
+    } catch (err) {
+      console.warn(`[veckans-finans] kunde inte läsa ${f}, hoppar över:`, err);
+    }
+  }
+  return out;
 }
 
 function readJson<T>(path: string): T {

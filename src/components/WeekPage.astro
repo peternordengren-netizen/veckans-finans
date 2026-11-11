@@ -8,6 +8,8 @@ import AnalysisPanel from "./AnalysisPanel.astro";
 import CalendarPanel from "./CalendarPanel.astro";
 import SignalsPanel from "./SignalsPanel.astro";
 import SwingPanel from "./SwingPanel.astro";
+import HbSummaryView from "./HbSummary.astro";
+import type { HbSummary as HbSummaryData } from "../lib/hb";
 import ResultsPanel from "./ResultsPanel.astro";
 import ValuationPanel from "./ValuationPanel.astro";
 import CompanyCard from "./CompanyCard.astro";
@@ -37,8 +39,10 @@ interface Props {
   morning?: MorningReport | null;
   /** Startsidan: eftermiddagsuppdateringen, ovanför morgonrapporten. */
   afternoon?: AfternoonReport | null;
+  /** Startsidan: Handelsbanken-sammanfattningar (manuellt tillagda), överst. */
+  hb?: HbSummaryData[];
 }
-const { view, weeks, morning = null, afternoon = null } = Astro.props;
+const { view, weeks, morning = null, afternoon = null, hb = [] } = Astro.props;
 // Swing gäller i dag (uppdateras varje morgon): bara på den senaste veckans sida.
 const swing = view.week === weeks[0] && !view.mock ? loadLatestSwing() : null;
 const afternoonTime = afternoon
@@ -74,12 +78,31 @@ const morningTime = morning
     }
 
     {
-      afternoon && (
-        <section class="morning-top afternoon-top" aria-labelledby="eftermiddag-rubrik">
+      hb.length > 0 && (
+        <section class="morning-top" aria-labelledby="hb-rubrik">
           <div class="wrap">
             <p class="brand">
               <a href={`${base}/`}>Veckans finans</a>
             </p>
+            <h2 id="hb-rubrik" class="morning-title">
+              Handelsbanken
+              <span class="morning-time">sammanfattat med egna ord, manuellt tillagt</span>
+            </h2>
+            {hb.map((s) => <HbSummaryView s={s} />)}
+          </div>
+        </section>
+      )
+    }
+
+    {
+      afternoon && (
+        <section class="morning-top afternoon-top" aria-labelledby="eftermiddag-rubrik">
+          <div class="wrap">
+            {hb.length === 0 && (
+              <p class="brand">
+                <a href={`${base}/`}>Veckans finans</a>
+              </p>
+            )}
             <h2 id="eftermiddag-rubrik" class="morning-title">
               Eftermiddag {weekdayDate(afternoon.date).toLowerCase()}
               <span class="morning-time">uppdaterad kl. {afternoonTime}</span>
@@ -94,7 +117,7 @@ const morningTime = morning
       morning && (
         <section class="morning-top" aria-labelledby="morgon-rubrik">
           <div class="wrap">
-            {!afternoon && (
+            {!afternoon && hb.length === 0 && (
               <p class="brand">
                 <a href={`${base}/`}>Veckans finans</a>
               </p>

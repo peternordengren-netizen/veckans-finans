@@ -8,6 +8,7 @@
 #      uppdatering) slutade, så att ingen rapport räknas två gånger; Claude bara om fönstret har
 #      rapporter. Fel här får aldrig stoppa resten.
 #   3. scripts/afternoon.py: dagens kursreaktion -> data/afternoon/<datum>.json
+#   3b. Handelsbanken-rapporter i data\hb_manual\ (run_hb.ps1), en ny fil sammanfattas en gång
 #   4. npm run build
 # - -Scheduled: gör ingenting på börsens stängda dagar, och inte heller före 17:45 (en körning
 #   som tas igen nästa morgon efter att datorn varit avstängd – morgonflödet tar då hand om det).
@@ -89,6 +90,9 @@ try {
 & cmd.exe /c "$Py scripts\afternoon.py 2>&1" | ForEach-Object { Log "  $_" }
 $code = $LASTEXITCODE
 Log ("afternoon.py: exit $code" + $(if ($code -eq 2) { " - FEL: kurser saknas, nytt försök vid nästa inloggning eller upplåsning" } else { "" }))
+
+# 3b. Handelsbanken-rapporter som laddats ner för hand (run_hb.ps1): en ny fil sammanfattas, bygget nedan visar den.
+& powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "run_hb.ps1") | ForEach-Object { Log "  $_" }
 
 # 4. Bygget.
 $BuildLog = Join-Path $LogDir "$Today-build.log"

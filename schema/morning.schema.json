@@ -407,6 +407,27 @@
         ]
       }
     },
+    "podcast": {
+      "description": "Dagens avsnitt av Handelsbankens podd Morgonrapporten (scripts/podcast.py): titel, länk och tid ur poddens RSS, eller null utan avsnitt i dag. null när ingen hämtning gjordes; saknas i äldre filer.",
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["show", "feed", "episode", "error"],
+      "properties": {
+        "show": {"type": "string"},
+        "feed": {"type": "string"},
+        "error": {"type": ["string", "null"]},
+        "episode": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "required": ["title", "url", "published"],
+          "properties": {
+            "title": {"type": "string"},
+            "url": {"type": "string", "pattern": "^https://"},
+            "published": {"type": "string"}
+          }
+        }
+      }
+    },
     "policy_decision": {
       "description": "Riksbankens senaste räntebeslut (scripts/fetch.py via rådatan); visas bredvid gällande ränta tills det börjar gälla. Saknas i äldre filer.",
       "type": [

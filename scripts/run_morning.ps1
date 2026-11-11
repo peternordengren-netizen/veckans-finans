@@ -12,6 +12,8 @@
 #   3. data/results/morning/<datum>.json run_results.ps1 <datum>; fallerar Claude byggs sidan ändå.
 #      Saknar filen en omgång (underkänd två gånger i run_results.ps1) görs steget om vid nästa
 #      utlösare, inom gränsen för försök nedan.
+#   3b. Handelsbanken-rapporter i data\hb_manual\ (run_hb.ps1): en ny fil sammanfattas en gång; körs vid varje
+#      utlösare, också när morgonkörningen redan är klar
 #   4. npm run build                    om något steg kördes
 # - Saknas förra handelsdagens kurser eller nätverket skrivs morgonrapporten ändå, men med "retry"
 #   (morning.py exit 2), felet loggas och nästa utlösare gör om den. Samma för förra dagens
@@ -79,6 +81,16 @@ function ResultsComplete {
     }
     catch { return $false }
 }
+# Bygget (används av steg 3b och 4).
+$BuildLog = Join-Path $LogDir "$Today-build.log"
+function Build {
+    & cmd.exe /c "npm run build > `"$BuildLog`" 2>&1"
+    Log "npm run build: exit $LASTEXITCODE (logg: $BuildLog)"
+}
+# 3b. Handelsbanken-rapporter som laddats ner för hand: körs vid varje utlösare (inget händer utan nya filer).
+& powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "run_hb.ps1") | ForEach-Object { Log "  $_" }
+$hbAdded = $LASTEXITCODE -eq 10
+
 $reportIncomplete = -not (Test-Path $Report) -or @(Retry $Report).Count -gt 0
 $needReport = $reportIncomplete -and (Attempts "Startar morning.py") -lt $MaxFetchAttempts
 # Ett stopp på grund av Claudes användningsgräns räknas inte (run_results.ps1 schemalägger då själv
@@ -89,14 +101,15 @@ $needResults = -not (ResultsComplete) -and
 & cmd.exe /c ".venv\Scripts\python.exe scripts\afternoon.py --forra-om-saknas --klar > nul 2>&1"
 $needReaction = $LASTEXITCODE -eq 4 -and (Attempts "Startar kursreaktion") -lt $MaxFetchAttempts
 if (-not $needReport -and (Test-Path $Report) -and (Test-Path $Consensus) -and -not $needResults -and -not $needReaction) {
-    Write-Output "Dagens morgonkörning är klar (eller har gjort sina försök) - inget att göra."
+    if ($hbAdded) { Build }
+    Write-Output "Dagens morgonkörning är klar (eller har gjort sina försök) - inget att göra$(if ($hbAdded) { ' utöver Handelsbanken' })."
     exit 0
 }
 if (-not (Test-Path $Report) -and -not $needReport) {
     Write-Output "Redan $MaxFetchAttempts försök med morgonrapporten i dag - avbryter. Se $RunLog."
     exit 0
 }
-$ran = $false
+$ran = $hbAdded
 
 # 1. Morgonrapporten. Via cmd så att stderr (t.ex. yfinance-varningar) inte blir PowerShell-fel.
 #    Exit 2: skriven men ofullständig (kurser eller nätverket saknades) - görs om vid nästa utlösare.
@@ -153,11 +166,6 @@ if ($needResults) {
 }
 
 # 4. Bygget.
-$BuildLog = Join-Path $LogDir "$Today-build.log"
-function Build {
-    & cmd.exe /c "npm run build > `"$BuildLog`" 2>&1"
-    Log "npm run build: exit $LASTEXITCODE (logg: $BuildLog)"
-}
 if ($ran) { Build }
 
 # 5. Gårdagens kurser saknas: hämta bara kurserna igen var tionde minut till 09:10 (räknas inte som

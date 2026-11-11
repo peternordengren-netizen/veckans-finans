@@ -398,6 +398,42 @@ Hög omsättning räknas på veckans snitt, inte på största dagen. I W42 gav s
 veckosnittet 20. Trösklarna sparas i filen, och valideringen räknar om signalerna från värdena. Jämförelsen mot index
 görs bara för `.ST`-tickers, som antas vara i kronor.
 
+### Handelsbanken: rapporter som laddas ner för hand (`scripts/hb_manual.py`, `scripts/run_hb.ps1`)
+
+Handelsbankens Morgonrapport (PowerPoint) och Fastighetsrapport (PDF) har ingen dokumenterad väg för automatisk
+hämtning. Villkoren säger att rapporterna inte får mångfaldigas eller spridas utan skriftligt tillstånd
+(Handelsbanken Research, Disclaimers, Macro). Därför gäller följande:
+1. **Du laddar ner rapporten** och lägger filen i arbetskopians `data\hb_manual\` (`.pptx` eller `.pdf`).
+   - Morgonrapporten finns på `handelsbanken.researchonline.se/macro/publications/mgmote`.
+   - Fastighetsrapporten finns på `handelsbanken.se/sv/foretag/placera/fastighetsrapporten`.
+2. **Var mappen läses:** vid morgonkörningen (varje utlösare, också när morgonen redan är klar), vid
+   Bollingerkontrollerna 09:20 och 13:20 och vid "Uppdatera nu".
+3. **Sammanfattningen:** en ny fil (känd på innehållets SHA-256) sammanfattas en gång.
+   - Texten tas ut med `python-pptx` respektive `pypdf` till `data\hb\work\` och tas bort efteråt.
+   - Claude Code (Sonnet, `/hb-sammanfatta`, läget `dontAsk`, skriver bara i `data/hb/`) skriver sammanfattningen
+     med egna ord.
+   - Fastighetsrapporten ska ha huvudbudskap, synen på räntor och på värderingar, delsegment och bolag ur
+     `instruments.csv`.
+4. **Kontrollen** (`hb_manual.check`) innan något sparas:
+   - inga citattecken och ingen följd om 8 ord ur rapporten
+   - märkningen "manuellt tillagd" och länken till källsidan
+   - rapporttyp och datum, för Morgonrapporten datumet i filnamnet ("261111 Final.pptx")
+   - bolagen finns i `instruments.csv`
+   - inga ord som köp, sälj eller kursmål
+
+   Högst två Claude-försök per körning och tre körningar per fil.
+5. **Bara sammanfattningen sparas**, i rådatarepot (`data/raw/hb/<id>.json`). Filen, den utdragna texten och citat
+   hamnar aldrig i något repo. `data/hb_manual/` och `data/hb/` är git-ignorerade, och `data\hb` är en riktig mapp i
+   driftkopian eftersom Claude skriver där.
+6. **Startsidan** visar sammanfattningarna överst med rapportens datum (`src/lib/hb.ts`): Morgonrapporten i 3
+   dagar, Fastighetsrapporten i 200. Under varje sammanfattning finns märkningen och länken.
+
+Loggar i `logs\hb\`.
+
+**Podden** Morgonrapporten: morgonkörningen hämtar poddens RSS en gång (`scripts/podcast.py`). Flödet är
+`spreaker.com/show/2904244/episodes/feed`, som Apples podd-katalog anger för podden. Dagens avsnitt, med titel, länk
+och tid, visas överst i morgonrapporten. Flödet har inga beskrivningar, och ljudet hämtas aldrig.
+
 ### Morgonrapport (`scripts/morning.py`)
 
 `morning.py` skriver `data/morning/<datum>.json` (git-ignorerad) varje handelsdag, utan Claude. Startsidan visar den

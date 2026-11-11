@@ -1,12 +1,13 @@
 ---
 /**
- * Startsidan: eftermiddagsuppdateringen överst (om den är minst lika ny som morgonrapporten),
+ * Startsidan: Handelsbanken-sammanfattningar överst (manuellt tillagda), därefter eftermiddagsuppdateringen (om den är minst lika ny som morgonrapporten),
  * därefter senaste morgonrapporten (dagens, eller den senaste med datum),
  * därefter senaste veckan med flikarna. Tomt läge innan något publicerats.
  */
 import Base from "../layouts/Base.astro";
 import WeekPage from "../components/WeekPage.astro";
-import { listMorningDates, listWeeks, loadLatestAfternoon, loadMorning, loadWeek } from "../lib/data";
+import { listMorningDates, listWeeks, loadHbSummaries, loadLatestAfternoon, loadMorning, loadWeek } from "../lib/data";
+import { hbToShow } from "../lib/hb";
 
 const weeks = listWeeks();
 const view = weeks.length > 0 ? loadWeek(weeks[0]) : null;
@@ -15,12 +16,15 @@ const morning = mornings.length > 0 ? loadMorning(mornings[0]) : null;
 // Eftermiddagen visas bara så länge den inte är äldre än morgonrapporten (nästa morgon tar över).
 const latestAfternoon = loadLatestAfternoon();
 const afternoon = latestAfternoon && latestAfternoon.date >= (morning?.date ?? "") ? latestAfternoon : null;
+// Handelsbanken-sammanfattningar (manuellt nedladdade rapporter) överst, med rapportens datum (scripts/hb_manual.py).
+const todayIso = new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Stockholm" });
+const hb = hbToShow(loadHbSummaries(), todayIso);
 // Bollingerkontrollerna under dagen visas inte som eget avsnitt (borttaget 2026-11-11): de uppdaterar fliken Swing.
 ---
 
 {
   view ? (
-    <WeekPage view={view} weeks={weeks} morning={morning} afternoon={afternoon} />
+    <WeekPage view={view} weeks={weeks} morning={morning} afternoon={afternoon} hb={hb} />
   ) : (
     <Base title="Veckans finans">
       <main class="wrap empty-state">

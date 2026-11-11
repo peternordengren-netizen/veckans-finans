@@ -10,7 +10,8 @@
 # - Går GitHub inte att nå körs den befintliga versionen, med en varning i loggen.
 # - En körning som pågår när en annan uppdaterar kopian (t.ex. morgonens kursförsök till 09:10 och Bollinger
 #   09:20) kan få den nya koden för sina återstående steg. Det händer bara efter en push.
-# - FI-filer som laddas ner för hand sparas som förut i arbetskopians data\fi_manual (VF_FI_MANUAL_DIR).
+# - FI-filer som laddas ner för hand sparas som förut i arbetskopians data\fi_manual (VF_FI_MANUAL_DIR), och
+#   Handelsbanken-rapporter i arbetskopians data\hb_manual (VF_HB_MANUAL_DIR).
 # - Logg i logs\drift.log: tid, skript och vilken commit som kördes.
 #
 # Användning (av Schemaläggaren och genvägarna, se install_tasks.ps1):
@@ -63,6 +64,8 @@ if ($Week) { $argList += @("-Week", $Week) }
 if ($Build) { $argList += "-Build" }
 Log "$Script $($argList -join ' ') från $head"
 $env:VF_FI_MANUAL_DIR = Join-Path $Main "data\fi_manual"
+# Handelsbanken-rapporter som laddas ner för hand: också i arbetskopian (scripts/hb_manual.py).
+$env:VF_HB_MANUAL_DIR = Join-Path $Main "data\hb_manual"
 & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $ScriptPath @argList
 $code = $LASTEXITCODE
 Log "$Script klar (exit $code)"

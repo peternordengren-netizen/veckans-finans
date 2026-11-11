@@ -49,6 +49,7 @@ from zoneinfo import ZoneInfo
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
+import podcast  # noqa: E402
 import report_calendar  # noqa: E402
 from registers import _aggregate_by_ticker, insyn_summary, snapshot_at  # noqa: E402
 from signals import THRESHOLDS, BarFetcher, data_day, price_stats, week_change, yahoo_bars  # noqa: E402
@@ -416,6 +417,8 @@ def main(argv: list[str] | None = None, fetch_bars: BarFetcher = yahoo_bars,
         return cache[key]
 
     data = build(today, now, instruments, raw_dirs, calendar, fetch_once)
+    # Dagens avsnitt av Handelsbankens podd (en hämtning av RSS:en; fel påverkar inte resten, scripts/podcast.py).
+    data["podcast"] = None if args.no_fetch else podcast.for_morning(today)
     data["errors"] = errors + calendar_errors(calendar)
     if data["short"]["error"]:
         data["errors"].append(f"blankning: {data['short']['note']}")

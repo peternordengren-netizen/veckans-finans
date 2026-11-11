@@ -1,3 +1,5 @@
 jsonschema>=4.23
 tzdata>=2025.2  # zoneinfo på Windows saknar annars Europe/Stockholm
 pytest>=8
+python-pptx>=1.0  # Handelsbankens Morgonrapport (PowerPoint), scripts/hb_manual.py
+pypdf>=5.0  # Handelsbankens Fastighetsrapport (PDF), scripts/hb_manual.py

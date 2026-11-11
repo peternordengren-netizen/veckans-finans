@@ -46,6 +46,17 @@ const priceStale = !!report.price.expected_day && report.price.day !== report.pr
 ---
 
 <div class:list={["morning", `level-${level}`]}>
+  {
+    report.podcast?.episode && (
+      <p class="podcast">
+        Dagens podd, {report.podcast.show}:{" "}
+        <a href={report.podcast.episode.url} rel="noopener">{report.podcast.episode.title}</a>
+        <span class="podcast-time">
+          {" "}kl. {new Date(report.podcast.episode.published).toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Stockholm" })}
+        </span>
+      </p>
+    )
+  }
   <nav class="toc" aria-label="Morgonrapportens innehåll">
     {results && <a href="#utfall">Utfall <span class="n">{results.reports.length}</span></a>}
     {reaction && <a href="#kursreaktion">Kursreaktion <span class="n">{reaction.companies.length}</span></a>}
@@ -516,5 +527,14 @@ const priceStale = !!report.price.expected_day && report.price.day !== report.pr
     border-left: 3px solid var(--border);
     font-size: 0.875rem;
     max-width: 75ch;
+  }
+  /* Dagens avsnitt av Handelsbankens podd, överst i morgonrapporten. */
+  .podcast {
+    margin: 0 0 8px;
+    font-size: 0.9rem;
+  }
+  .podcast-time {
+    color: var(--muted);
+    font-size: 0.8rem;
   }
 </style>

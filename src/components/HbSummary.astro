@@ -1,0 +1,90 @@
+---
+/**
+ * En Handelsbanken-sammanfattning överst på startsidan (scripts/hb_manual.py): rapportens datum, huvudbudskapet,
+ * punkterna, synen på räntor och värderingar, delsegment och bolag ur bevakningslistan. Skriven med egna ord,
+ * märkt "manuellt tillagd", med länk till källsidan. Inga citat.
+ */
+import { shortDate } from "../lib/format";
+import { KIND_NAMES, type HbSummary } from "../lib/hb";
+
+interface Props {
+  s: HbSummary;
+}
+const { s } = Astro.props;
+---
+
+<article class="hb">
+  <h3 class="hb-title">
+    {KIND_NAMES[s.kind]} {shortDate(s.report_date)} {s.report_date.slice(0, 4)}
+    <span class="hb-label">{s.label}</span>
+  </h3>
+  <p class="hb-head">{s.headline}</p>
+  <ul class="hb-points">
+    {s.points.map((p) => <li>{p}</li>)}
+  </ul>
+  {s.rates && <p><strong>Räntor:</strong> {s.rates}</p>}
+  {s.valuations && <p><strong>Värderingar:</strong> {s.valuations}</p>}
+  {
+    s.segments.length > 0 && (
+      <p>
+        <strong>Delsegment:</strong>{" "}
+        {s.segments.map((g, i) => (
+          <>
+            {i > 0 && "; "}
+            <em>{g.name}</em>: {g.view}
+          </>
+        ))}
+      </p>
+    )
+  }
+  {
+    s.companies.length > 0 && (
+      <p>
+        <strong>Bolag i bevakningslistan:</strong>{" "}
+        {s.companies.map((c, i) => (
+          <>
+            {i > 0 && "; "}
+            {c.name} ({c.ticker}): {c.note}
+          </>
+        ))}
+      </p>
+    )
+  }
+  <p class="hb-source">
+    Sammanfattad med egna ord ur en rapport som laddats ner för hand ({s.file_name}).{" "}
+    <a href={s.source_url} rel="noopener">Handelsbankens sida för rapporten</a>
+  </p>
+</article>
+
+<style>
+  .hb + .hb {
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+  }
+  .hb-title {
+    margin: 0 0 6px;
+    font-size: 1.05rem;
+  }
+  .hb-label {
+    margin-left: 8px;
+    font-size: 0.75rem;
+    font-weight: 400;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1px 6px;
+  }
+  .hb-head {
+    font-weight: 600;
+  }
+  .hb p,
+  .hb ul {
+    margin: 4px 0;
+    max-width: 80ch;
+  }
+  .hb-source {
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+</style>

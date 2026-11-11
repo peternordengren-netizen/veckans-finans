@@ -117,6 +117,9 @@ try {
     Log "FEL: notisen kunde inte visas: $_"
 }
 
+# Handelsbanken-rapporter som laddats ner för hand (run_hb.ps1): en ny fil sammanfattas, bygget nedan visar den.
+& powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "run_hb.ps1") | ForEach-Object { Log "  $_" }
+
 $BuildLog = Join-Path $LogDir ("{0:yyyy-MM-dd}-build.log" -f (Get-Date))
 & cmd.exe /c "npm run build > `"$BuildLog`" 2>&1"
 Log "npm run build: exit $LASTEXITCODE (logg: $BuildLog)"
