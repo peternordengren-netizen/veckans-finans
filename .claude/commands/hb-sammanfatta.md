@@ -18,7 +18,7 @@ Kommandot körs utan att någon tittar på, med behörighetsläget `dontAsk`. Ba
 ## Arbetsgång
 
 1. Läs `data/hb/work/<id>.meta.json`: filnamnet, rapporttypen (`kind`), datumet ur filnamnet (`file_date`, kan vara
-   null), länken (`source_url`) och utfilen (`out`).
+   null), filens skapandedatum ur metadatan (`file_created`, kan vara null), länken (`source_url`) och utfilen (`out`).
 2. Läs rapportens text i `data/hb/work/<id>.txt` (bild för bild eller sida för sida). Läs inget annat om rapporten.
 3. Läs `data/instruments.csv` (kolumnerna namn, ticker) för att koppla bolag som nämns till bevakningslistan.
 4. Skriv utfilen `data/hb/<id>.json` med Write:
@@ -29,7 +29,7 @@ Kommandot körs utan att någon tittar på, med behörighetsläget `dontAsk`. Ba
   "file_name": "<filnamnet ur meta>",
   "kind": "<kind ur meta>",
   "title": "<kort rubrik med egna ord, t.ex. Morgonrapporten 11 november>",
-  "report_date": "<rapportens datum ÅÅÅÅ-MM-DD; file_date om den finns, annars datumet i rapporten>",
+  "report_date": "<ÅÅÅÅ-MM-DD: file_date om den finns; annars ett exakt datum i rapporten; annars file_created; annars dagens datum>",
   "headline": "<huvudbudskapet i en till två meningar>",
   "points": ["<2–8 korta punkter med det viktigaste>"],
   "rates": "<synen på räntor och penningpolitik, eller null om rapporten inte tar upp det>",

@@ -90,6 +90,23 @@ def extract_text(path: Path) -> str:
     raise ValueError(f"okänt filformat: {path.name}")
 
 
+def file_created(path: Path) -> str | None:
+    """Filens eget skapandedatum (ÅÅÅÅ-MM-DD) ur metadatan: PDF:ens CreationDate (pypdf) eller PowerPointens
+    core_properties.created. Används som rapportdatum när rapporten inte anger något exakt datum."""
+    try:
+        if path.suffix.lower() == ".pdf":
+            from pypdf import PdfReader
+
+            d = (PdfReader(str(path)).metadata or {}).creation_date
+        else:
+            from pptx import Presentation
+
+            d = Presentation(str(path)).core_properties.created
+        return d.date().isoformat() if d else None
+    except Exception:  # noqa: BLE001 - metadatan är valfri
+        return None
+
+
 def guess_kind(path: Path, text: str) -> tuple[str, str | None]:
     """(rapporttyp, datum ur filnamnet eller None). Morgonrapporten heter "ÅÅMMDD ….pptx" (t.ex. "261111 Final.pptx")."""
     m = re.match(r"(\d{2})(\d{2})(\d{2})\b", path.name)
@@ -129,6 +146,7 @@ def prepare(fid: str, path: Path, work_dir: Path = WORK_DIR) -> dict:
     work_dir.mkdir(parents=True, exist_ok=True)
     (work_dir / f"{fid}.txt").write_text(text, encoding="utf-8")
     meta = {"id": fid, "file_name": path.name, "kind": kind, "kind_name": KINDS[kind], "file_date": file_date,
+            "file_created": file_created(path),
             "source_url": SOURCE_URLS[kind], "label": LABEL, "out": f"data/hb/{fid}.json"}
     (work_dir / f"{fid}.meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return meta

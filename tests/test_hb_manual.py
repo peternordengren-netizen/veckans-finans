@@ -66,6 +66,7 @@ def test_text_ur_powerpoint_och_pdf_och_rapporttyp(tmp_path):
     text = hb_manual.extract_text(pptx)
     assert "--- Bild 1 ---" in text and "Kalendern i dag" in text and "Börserna steg" in text
     assert hb_manual.guess_kind(pptx, text) == ("morgonrapport", "2099-11-11")
+    assert hb_manual.file_created(pptx) is not None  # PowerPointens core_properties.created
     pdf = tmp_path / "rapport.pdf"
     make_pdf(pdf, "Fastighetsrapporten hosten 2099")
     text = hb_manual.extract_text(pdf)
@@ -89,6 +90,7 @@ def test_nya_filer_en_gang_per_innehall(tmp_path):
     meta = json.loads((work / f"{fid}.meta.json").read_text(encoding="utf-8"))
     assert meta["kind"] == "fastighetsrapport" and meta["source_url"] == hb_manual.SOURCE_URLS["fastighetsrapport"]
     assert meta["label"] == "manuellt tillagd" and (work / f"{fid}.txt").exists()
+    assert "file_created" in meta  # PDF:en utan metadata: null
     # Redan sammanfattad (finns i rådatarepot): ingen ny körning.
     (raw / "hb").mkdir(parents=True)
     (raw / "hb" / f"{fid}.json").write_text("{}")
