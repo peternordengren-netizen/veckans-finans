@@ -19,7 +19,7 @@ TZ = ZoneInfo("Europe/Stockholm")
 
 def state(**over):
     """Mått som uppfyller alla krav (Nära pivot): pivot 112, rekyler 10,7 % → 5,4 % → 2,2 %."""
-    s = {"open": 108.5, "close": 109.0, "high": 109.5, "low": 108.0, "rs_pct": 85, "ma50": 106.0, "ma150": 95.0, "ma200": 88.0,
+    s = {"open": 108.5, "close": 109.0, "high": 109.5, "low": 108.0, "prev_stop": 106.6, "rs_pct": 85, "ma50": 106.0, "ma150": 95.0, "ma200": 88.0,
          "ma200_prev": 85.0, "low52": 60.0, "high52": 112.0, "base_days": 40, "pivot": 112.0,
          "contractions": [{"peak": 112.0, "trough": 100.0, "depth_pct": 10.71, "peak_ago": 40, "trough_ago": 30},
                           {"peak": 110.0, "trough": 104.0, "depth_pct": 5.45, "peak_ago": 20, "trough_ago": 14},
@@ -60,6 +60,13 @@ def test_krav_och_etiketter():
     # Utan volymkravet: stängning över pivoten ger ingen etikett, high över men stängning under ger Nära pivot.
     assert vcp.labels(state(high=113.0, close=113.0, volume=1400.0)) == []
     assert vcp.labels(state(high=112.5, close=110.0, volume=1400.0)) == ["vcp-nara-pivot"]
+    # Basen bruten nedåt: dagens low under gårdagens stopp utan att pivoten brutits ger ingen Nära pivot.
+    assert vcp.labels(state(low=106.0, prev_stop=106.6)) == []
+    assert vcp.labels(state(low=106.6, prev_stop=106.6)) == ["vcp-nara-pivot"]  # på stoppet: inte under
+    assert vcp.labels(state(low=106.0, prev_stop=None)) == ["vcp-nara-pivot"]  # äldre filer saknar prev_stop
+    no_break = {k: v for k, v in vcp.THRESHOLDS.items() if k != "base_break"}
+    assert vcp.labels(state(low=106.0, prev_stop=106.6), no_break) == ["vcp-nara-pivot"]
+    assert vcp.base_broken(state(low=106.0, high=112.5)) is False  # pivoten bruten samma dag
     # Äldre filer (utan breakout_on): stängningen över pivoten krävs.
     old = {k: v for k, v in vcp.THRESHOLDS.items() if k != "breakout_on"}
     assert vcp.labels(state(high=112.5, close=110.0, volume=1500.0), old) == ["vcp-nara-pivot"]
@@ -182,6 +189,11 @@ def test_swing_bygger_och_validerar_strategin():
     assert bollinger.validate(check) == []
     rows[0]["today"]["status"] = "pivot_broken"
     assert bollinger.validate(check)
+    low_bar = Bar(today, lv["stop"] + 1, lv["stop"] + 1, lv["stop"] + 2, lv["stop"] - 0.5, 500.0, lv["stop"] + 1)
+    check2 = bollinger.check(today, now, inst, lambda tk, s_, e_: {**bars, "ALFA.ST": bars["ALFA.ST"] + [low_bar]}, data,
+                             intraday=lambda t, d: None)
+    td2 = check2["vcp"]["rows"][0]["today"]
+    assert td2["status"] == "base_broken" and td2["label"] == "vcp-nara-pivot" and bollinger.validate(check2) == []
 
 
 def test_historiken_har_strategin():
@@ -216,6 +228,16 @@ def test_utbrott_spärras_inte_av_nära_pivot():
             [("ALFA", "Alfaverken"), ("BETA", "Betabolaget"), ("GAMMA", "Gammagruppen"), ("DELTA", "Deltahem")]}
     h = swing_history.vcp_history(bars, inst)
     assert h["labels"]["vcp-nara-pivot"]["cases"] >= 1 and h["labels"]["vcp-utbrott"]["cases"] == 1
+
+
+def test_status_basen_bruten_nedat():
+    # Under stoppet innan pivoten brutits (Nära pivot): Basen bruten nedåt; efter brott (Utbrott eller high över
+    # pivoten i dag): Ogiltig: under stopp.
+    assert bollinger.vcp_day_status("below_stop", None, 1.5, "vcp-nara-pivot", False) == "base_broken"
+    assert bollinger.vcp_day_status("below_stop", None, 1.5, "vcp-nara-pivot", True) == "below_stop"
+    assert bollinger.vcp_day_status("below_stop", None, 1.5, "vcp-utbrott", False) == "below_stop"
+    assert bollinger.vcp_day_status("below_stop", None, 1.5) == "below_stop"  # äldre kontrollfiler utan etikett
+    assert "base_broken" in bollinger.INVALID
 
 
 def test_status_pivot_bruten_med_och_utan_volym():

@@ -263,16 +263,17 @@ export const TODAY_STATUS: Record<string, string> = {
   pivot_broken_no_vol: "Pivot bruten, volym saknas",
   late: "Sen: mer än 1R över trigger",
   below_ma50: "Ogiltig: under 50 MA",
+  base_broken: "Basen bruten nedåt",
   below_stop: "Ogiltig: under stopp",
 };
 
-/** Ogiltig i dag (under stoppet eller 50 MA): sorteras sist i strategin. */
+/** Ogiltig i dag (under stoppet, under 50 MA eller basen bruten nedåt): sorteras sist i strategin. */
 export function todayInvalid(status: string | null | undefined): boolean {
-  return status === "below_stop" || status === "below_ma50";
+  return status === "below_stop" || status === "below_ma50" || status === "base_broken";
 }
 
 /** Sorteringsvärde för kolumnen Status i dag, i TODAY_STATUS ordning: väntar 0, trigger bruten 1, pivot bruten 2–4,
- *  sen 5, under 50 MA 6, under stopp 7. */
+ *  sen 5, under 50 MA 6, basen bruten nedåt 7, under stopp 8. */
 export function todayOrder(status: string | null | undefined): number | null {
   const i = status ? Object.keys(TODAY_STATUS).indexOf(status) : -1;
   return i < 0 ? null : i;
@@ -284,7 +285,7 @@ export function todayLines(t: { status: string; trigger_seen_at: string | null; 
 } {
   return {
     main: TODAY_STATUS[t.status] ?? t.status,
-    seen: t.trigger_seen_at && t.status !== "below_stop" && t.status !== "below_ma50"
+    seen: t.trigger_seen_at && !todayInvalid(t.status)
       ? `trigger sedd ${bollingerSourceText(t.trigger_seen_at)}` : null,
     prices: `high ${priceText(t.high)} · low ${priceText(t.low)} · senast ${priceText(t.price)} · ${bollingerSourceText(t.checked_at)}`,
   };

@@ -753,6 +753,9 @@ Etiketter:
   pivoten bröts: pivoten, eller öppningen om dagen öppnade över den.
 - **Nära pivot:** stängningen högst 5 % under pivoten, och inget utbrott. Triggernivån och referensen är pivoten.
 - En stängning över pivoten utan volymkravet ger ingen etikett.
+- **Basen bruten nedåt:** gick dagens low under sista rekylens low enligt föregående dags bas (`prev_stop`, gårdagens
+  stopp) utan att pivoten brutits, blir det ingen "Nära pivot" nästa morgon (`base_break` i trösklarna, sedan
+  2026-11-11). En ny etikett kräver att basen på nytt uppfyller kraven, med den nya botten som sista rekyl.
 
 Mål 3R, R = referens − stopp. Avtagande volym och ATR visas och ingår i rangen: snittet de senaste 10 dagarna mot
 50-dagarssnittet.
@@ -765,7 +768,9 @@ poäng högre RS-percentil.
 pivoten som triggernivå. När dagens high passerat pivoten jämförs dagens omsättning hittills med det normala vid samma
 tid på dagen (snittet för de 20 senaste handelsdagarna fram till samma klockslag): "Pivot bruten" vid minst 1,5×,
 "Pivot bruten, låg volym" under det och "Pivot bruten, volym saknas" utan 15-minutersdata. Under stoppet, under 50 MA
-och mer än 1R över pivoten har företräde.
+och mer än 1R över pivoten har företräde. Under stoppet innan pivoten brutits (etiketten Nära pivot och dagens high
+högst pivoten) står "Basen bruten nedåt"; "Ogiltig: under stopp" gäller bara efter att pivoten brutits (Utbrott, eller
+dagens high över pivoten). Båda sorteras sist.
 
 Swingfilen sparar måtten per bolag (`vcp.state`) och valideringen räknar om etiketten, nivåerna, rekyldjupen och
 rangkriterierna ur dem. RS-percentilen räknas inte om (den kräver hela listans dagsdata).

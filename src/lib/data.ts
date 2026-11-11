@@ -179,6 +179,8 @@ export interface VcpState {
   /** Dagens öppning (referensen vid Utbrott); saknas i filer före 2026-11-11. */
   open?: number;
   close: number; high: number; low: number;
+  /** Stoppet enligt föregående dags bas (Basen bruten nedåt); saknas i filer före 2026-11-11. */
+  prev_stop?: number | null;
   /** RS-percentil 0–99 mot listans bolag. */
   rs_pct: number;
   ma50: number; ma150: number; ma200: number; ma200_prev: number; low52: number; high52: number;
@@ -261,7 +263,9 @@ export interface PullbackToday {
   stop: number;
   ma50: number;
   /** pivot_broken*: Momentum-utbrott (VCP), pivoten bruten med eller utan volymkravet (scripts/bollinger.py). */
-  status: "waiting" | "triggered" | "pivot_broken" | "pivot_broken_low_vol" | "pivot_broken_no_vol" | "late" | "below_stop" | "below_ma50";
+  status: "waiting" | "triggered" | "pivot_broken" | "pivot_broken_low_vol" | "pivot_broken_no_vol" | "base_broken" | "late" | "below_stop" | "below_ma50";
+  /** Momentum-utbrott (VCP): kandidatens etikett (för Basen bruten nedåt); saknas i äldre kontrollfiler. */
+  label?: string | null;
   /** Kontrollen där dagens high först låg över triggernivån, eller null. */
   trigger_seen_at: string | null;
   /** Dagens omsättning hittills mot normalt vid samma tid (bara Rekyl efter Bollingerutbrott; null utan timdata). */
@@ -328,6 +332,8 @@ export interface SwingView {
       breakout_volume: number; near_pct: number; max_stop_pct: number;
       /** "high": utbrott när dagens high passerar pivoten (sedan 2026-11-11); saknas = stängningen. */
       breakout_on?: string; target_r: number; trigger_days: number; max_days: number;
+      /** Ingen Nära pivot när basen brutits nedåt (sedan 2026-11-11); saknas i äldre filer. */
+      base_break?: boolean;
       ranking: { last_contraction_pct: number; rs_strong: number; at_pivot_pct: number; top: number };
     };
     /** Rekyl efter Bollingerutbrott (saknas i äldre filer). */

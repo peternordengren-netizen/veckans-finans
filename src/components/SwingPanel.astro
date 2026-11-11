@@ -381,7 +381,11 @@ const rankHist = pbHist?.ranking ?? null;
               <strong>Etiketter:</strong> <em>Utbrott</em> när {vt.breakout_on === "high" ? "dagens high passerar pivoten" : "stängningen ligger över pivoten"}
               {" "}och omsättningen är minst {num(vt.breakout_volume)} gånger snittet för de {vt.avg_days} dagarna före;
               <em> Nära pivot</em> när stängningen ligger högst {num(vt.near_pct, 0)} % under pivoten (och inget utbrott). En
-              stängning över pivoten utan volymkravet ger ingen etikett.
+              stängning över pivoten utan volymkravet ger ingen etikett.{vt.base_break && (
+                <> Gick dagens low under sista rekylens low (gårdagens stopp) innan pivoten brutits är <em>basen bruten
+                nedåt</em>, och då blir det ingen Nära pivot nästa morgon. En ny etikett kräver att basen på nytt
+                uppfyller kraven, med den nya botten som sista rekyl.</>
+              )}
             </li>
             <li>
               <strong>Stopp och mål:</strong> stoppet är sista rekylens lägsta low och får ligga högst {num(vt.max_stop_pct, 0)} %
@@ -406,7 +410,9 @@ const rankHist = pbHist?.ranking ?? null;
               med det normala vid samma tid på dagen (snittet för de 20 senaste handelsdagarna fram till samma klockslag):
               <em> Pivot bruten</em> vid minst {num(vt.breakout_volume)} gånger det normala, <em>Pivot bruten, låg volym</em>
               {" "}under det, och <em>Pivot bruten, volym saknas</em> när 15-minutersdatan saknas. Under stoppet, under 50 MA
-              och mer än 1R över pivoten har företräde som i de andra strategierna.
+              och mer än 1R över pivoten har företräde som i de andra strategierna. Under stoppet innan pivoten brutits
+              (Nära pivot och dagens high högst pivoten) står <em>Basen bruten nedåt</em>; <em>Ogiltig: under stopp</em>
+              {" "}gäller bara efter att pivoten brutits. Båda sorteras sist.
             </li>
             <li>
               <strong>Historiken</strong> under tabellen: de senaste tre åren, ett fall i taget per bolag och etikett, så att ett
@@ -1374,6 +1380,7 @@ const rankHist = pbHist?.ranking ?? null;
   }
   /* Status i dag: ogiltiga dämpade, bruten trigger markerad. */
   td.today.today-below_stop .line,
+  td.today.today-base_broken .line,
   td.today.today-below_ma50 .line {
     color: var(--muted);
   }

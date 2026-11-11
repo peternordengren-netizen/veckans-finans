@@ -600,6 +600,7 @@
                 "properties": {
                   "open": {"type": "number", "description": "Dagens öppning (för referensen vid Utbrott); saknas i filer före 2026-11-11."},
                   "close": {"type": "number"}, "high": {"type": "number"}, "low": {"type": "number"},
+                  "prev_stop": {"type": ["number", "null"], "description": "Sista rekylens low enligt föregående dags bas (Basen bruten nedåt); saknas i filer före 2026-11-11."},
                   "rs_pct": {"type": "integer", "minimum": 0, "maximum": 99},
                   "ma50": {"type": "number"}, "ma150": {"type": "number"}, "ma200": {"type": "number"},
                   "ma200_prev": {"type": "number"}, "low52": {"type": "number"}, "high52": {"type": "number"},

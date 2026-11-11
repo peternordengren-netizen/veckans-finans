@@ -96,7 +96,9 @@ test("status i dag för pullback-kandidaterna", () => {
   assert.equal(todayLines({ ...base, status: "below_ma50" }).main, "Ogiltig: under 50 MA");
   assert.ok(todayInvalid("below_stop") && todayInvalid("below_ma50"));
   assert.ok(!todayInvalid("late") && !todayInvalid(undefined));
-  assert.deepEqual(["waiting", "triggered", "late", "below_ma50", "below_stop"].map(todayOrder), [0, 1, 5, 6, 7]);
+  assert.deepEqual(["waiting", "triggered", "late", "below_ma50", "base_broken", "below_stop"].map(todayOrder), [0, 1, 5, 6, 7, 8]);
+  assert.equal(TODAY_STATUS.base_broken, "Basen bruten nedåt");
+  assert.equal(todayInvalid("base_broken"), true);
   assert.deepEqual(["pivot_broken", "pivot_broken_low_vol", "pivot_broken_no_vol"].map(todayOrder), [2, 3, 4]);
   assert.equal(TODAY_STATUS.pivot_broken_low_vol, "Pivot bruten, låg volym");
   assert.equal(todayOrder(null), null);

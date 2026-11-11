@@ -149,7 +149,7 @@ def test_status_i_dag_i_prioritetsordning():
     bm = bollinger.day_status(100.5, 98.5, 96.9, 100.0, 100.0, 95.0, 97.0)
     assert bm == "below_ma50"
     assert set(bollinger.TODAY_STATUS) == {"waiting", "triggered", "late", "below_stop", "below_ma50",
-                                            "pivot_broken", "pivot_broken_low_vol", "pivot_broken_no_vol"}
+                                            "pivot_broken", "pivot_broken_low_vol", "pivot_broken_no_vol", "base_broken"}
     for text in bollinger.TODAY_STATUS.values():  # beskrivande, inga uppmaningar
         assert not any(w in text.lower() for w in ("köp", "sälj", "kursmål"))
 

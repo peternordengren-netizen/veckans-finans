@@ -37,6 +37,9 @@ mot bandet och är ingen uppmaning.
   hittills mot normalt vid samma tid (vcp_day_status): "pivot_broken" (Pivot bruten) vid minst breakout_volume (1,5)
   gånger, "pivot_broken_low_vol" (Pivot bruten, låg volym) under det, "pivot_broken_no_vol" (Pivot bruten, volym
   saknas) utan 15-minutersdata. Avsnittet har då "breakout_volume" (saknas i kontrollfiler före 2026-11-11).
+  Under stoppet ("below_stop") för en kandidat med etiketten Nära pivot ("label" i today) och dagens high högst
+  pivoten blir "base_broken" (Basen bruten nedåt); "Ogiltig: under stopp" gäller bara när pivoten brutits (Utbrott,
+  eller dagens high över pivoten).
 - Dagens omsättning hittills mot normalt vid samma tid ("today.volume", för Rekyl efter Bollingerutbrott och VCP):
   ett batchanrop till Yahoo med 15-minutersstaplar för strategins kandidater (de senaste INTRADAY_DAYS kalender-
   dagarna). Hittills = summan av dagens staplar; normalt = snittet för de VOLUME_PROFILE_DAYS senaste handelsdagarna
@@ -93,9 +96,11 @@ TODAY_STATUS = {
     "pivot_broken": "Pivot bruten",
     "pivot_broken_low_vol": "Pivot bruten, låg volym",
     "pivot_broken_no_vol": "Pivot bruten, volym saknas",
+    # Momentum-utbrott (VCP): under sista rekylens low innan pivoten brutits.
+    "base_broken": "Basen bruten nedåt",
     "waiting": "Väntar på trigger",
 }
-INVALID = {"below_stop", "below_ma50"}
+INVALID = {"below_stop", "below_ma50", "base_broken"}
 
 
 def bands(values: list[float], n: int = PERIOD, k: float = WIDTH) -> tuple[float, float] | None:
@@ -202,9 +207,13 @@ def day_status(high: float, low: float, price: float, trigger: float, ref: float
     return "waiting"
 
 
-def vcp_day_status(base: str, volume: dict | None, min_ratio: float) -> str:
+def vcp_day_status(base: str, volume: dict | None, min_ratio: float, label: str | None = None,
+                   pivot_broken: bool = False) -> str:
     """Status i dag för Momentum-utbrott (VCP): "triggered" (pivoten bruten) delas upp efter omsättningen hittills mot
-    normalt vid samma tid; övriga statusar oförändrade."""
+    normalt vid samma tid; under stoppet innan pivoten brutits (etiketten Nära pivot, dagens high högst pivoten) blir
+    "base_broken"; övriga statusar oförändrade."""
+    if base == "below_stop" and label == "vcp-nara-pivot" and not pivot_broken:
+        return "base_broken"
     if base != "triggered":
         return base
     if not volume:
@@ -360,10 +369,14 @@ def check(today: date, now: datetime, instruments: dict[str, Instrument], fetch:
         import vcp
 
         vs["breakout_volume"] = vcp.THRESHOLDS["breakout_volume"]
+        vlabel = {c["ticker"]: next((x for x in c["labels"] if x in vcp.LABELS), None)
+                  for c in (swing or {}).get("companies", [])}
         for r in vs["rows"]:
-            if r.get("today"):
-                r["today"]["status"] = vcp_day_status(r["today"]["status"], r["today"].get("volume"),
-                                                      vs["breakout_volume"])
+            td = r.get("today")
+            if td:
+                td["label"] = vlabel.get(r["ticker"])
+                td["status"] = vcp_day_status(td["status"], td.get("volume"), vs["breakout_volume"], td["label"],
+                                              td["high"] > td["trigger"])
         prev = (previous or {}).get("vcp")
         prev_rows = {r["ticker"]: r for r in prev["rows"]} if prev and prev.get("swing_date") == vs["swing_date"] else None
         vs["changes"] = status_changes(vs["rows"], prev_rows)
@@ -431,7 +444,8 @@ def validate(data: dict) -> list[str]:
         if td:
             expected = day_status(td["high"], td["low"], td["price"], td["trigger"], td["ref"], td["stop"], td["ma50"])
             if key == "vcp" and "breakout_volume" in sec:
-                expected = vcp_day_status(expected, td.get("volume"), sec["breakout_volume"])
+                expected = vcp_day_status(expected, td.get("volume"), sec["breakout_volume"], td.get("label"),
+                                          td["high"] > td["trigger"])
             if td["status"] != expected:
                 errors.append(f"{r['name']}: status {td['status']!r} stämmer inte med dagens kurser (väntat {expected!r})")
             if (td["trigger_seen_at"] is not None) != (td["high"] > td["trigger"]):

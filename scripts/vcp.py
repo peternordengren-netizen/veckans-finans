@@ -21,7 +21,10 @@ morgonens fil). Trösklarna står i THRESHOLDS och sparas i swingfilen.
    Avtagande volym och ATR: snittet de senaste dry_days (10) dagarna mot snittet de senaste 50 (rangkriterier).
 4. Etiketter: "vcp-utbrott" (dagens high över pivoten och omsättningen minst breakout_volume (1,5) gånger snittet för
    de 50 dagarna före), "vcp-nara-pivot" (stängningen högst near_pct (5 %) under pivoten, och inget utbrott). En
-   stängning över pivoten utan volymkravet ger ingen etikett. Krav 1–3 och 5 gäller båda. Swingfiler före 2026-11-11
+   stängning över pivoten utan volymkravet ger ingen etikett. Krav 1–3 och 5 gäller båda. "Basen bruten nedåt": gick
+   dagens low under sista rekylens low enligt föregående dags bas (prev_stop) utan att pivoten brutits, blir det
+   ingen "Nära pivot" (base_break; saknas i filer före 2026-11-11). En ny etikett kräver att basen på nytt uppfyller
+   kraven, med den nya botten som sista rekyl. Swingfiler före 2026-11-11
    saknar breakout_on i trösklarna och använde stängningen över pivoten (valideringen följer filens egna trösklar).
 5. Nivåer: stopp = sista rekylens lägsta low, högst max_stop_pct (8 %) under pivoten (annars ingen etikett).
    Referens = pivoten vid "Nära pivot" (triggernivån); vid "Utbrott" priset där pivoten bröts: pivoten, eller
@@ -47,6 +50,8 @@ THRESHOLDS = {
     "max_stop_pct": 8.0, "target_r": 3.0, "trigger_days": 3, "max_days": 60,
     # Utbrott när dagens high passerar pivoten (sedan 2026-11-11; tidigare stängningen, "close").
     "breakout_on": "high",
+    # Ingen "Nära pivot" när dagens low gått under föregående dags stopp (basen bruten nedåt; sedan 2026-11-11).
+    "base_break": True,
 }
 LABELS = {"vcp-nara-pivot": "Nära pivot", "vcp-utbrott": "Utbrott"}
 CRITERIA = {
@@ -121,10 +126,26 @@ def state(o: list[float], h: list[float], lo: list[float], c: list[float], v: li
         "low52": r(low52), "high52": r(high52),
         "base_days": i - k, "pivot": r(h[k]),
         "contractions": contractions(h, lo, k, i, th["swing"]),
+        # Sista rekylens low enligt föregående dags bas (stoppet i går), för "Basen bruten nedåt".
+        "prev_stop": prev_stop(h, lo, i, th),
         "volume": v[i], "volume_avg50": round(sum(base_v) / len(base_v), 1),
         "vol_dry": round(sum(v[i - dry + 1:i + 1]) / dry, 1), "vol_avg": round(sum(v[i - avg + 1:i + 1]) / avg, 1),
         "atr_dry": r(sum(tr[-dry:]) / dry), "atr_avg": r(sum(tr[-avg:]) / avg),
     }
+
+
+def prev_stop(h: list[float], lo: list[float], i: int, th: dict = THRESHOLDS) -> float | None:
+    """Stoppet enligt föregående dags bas (sista rekylens lägsta low för dag i − 1), eller None utan rekyler."""
+    kp = max(range(i - 1 - th["base_max_days"], i - 1), key=lambda j: (h[j], j))
+    prev = contractions(h, lo, kp, i - 1, th["swing"])
+    return round(prev[-1]["trough"], 4) if prev else None
+
+
+def base_broken(s: dict, th: dict = THRESHOLDS) -> bool:
+    """Basen bruten nedåt: dagens low under föregående dags stopp utan att pivoten brutits (dagens high högst
+    pivoten). Bara med base_break i trösklarna och prev_stop i måtten (filer från 2026-11-11)."""
+    ps = s.get("prev_stop")
+    return bool(th.get("base_break")) and ps is not None and s["low"] < ps and s["high"] <= s["pivot"]
 
 
 def trend(s: dict, th: dict = THRESHOLDS) -> dict[str, bool]:
@@ -163,6 +184,8 @@ def labels(s: dict | None, th: dict = THRESHOLDS) -> list[str]:
         return ["vcp-utbrott"]
     if s["close"] > s["pivot"]:
         return []  # stängning över pivoten utan volymkravet
+    if base_broken(s, th):
+        return []  # basen bruten nedåt: ingen Nära pivot
     if s["close"] >= s["pivot"] * (1 - th["near_pct"] / 100):
         return ["vcp-nara-pivot"]
     return []
