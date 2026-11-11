@@ -273,10 +273,10 @@ const LIB_MAX = 300;
   <section class="eval-lib" aria-labelledby="eval-lib">
     <h3 id="eval-lib">Lyckade fall</h3>
     <p class="note">
-      Fall som inom {th.success_days} handelsdagar nådde minst {num(th.success_r)} R (högsta high mot signaldagens
-      stängning, i strategins R) eller stängde minst {num(th.success_pp)} procentenheter över index, med kännetecken och
-      marknadsläge. Alla fall sparas, så andelen lyckade kan jämföras med alla avgjorda fall (femte dagen uppföljd eller
-      redan lyckade). Ett litet R (stoppet nära) gör 2R lättare att nå. Det säger inget om hur det går nästa gång.
+      Fall som vid någon stängning inom {th.success_days} handelsdagar låg minst {num(th.success_pp)} procentenheter
+      över index, oavsett R, med kännetecken och marknadsläge. Högsta high i strategins R visas som information men
+      avgör inte. Alla fall sparas, så andelen lyckade kan jämföras med alla avgjorda fall (femte dagen uppföljd eller
+      redan lyckade). Det säger inget om hur det går nästa gång.
     </p>
     <p class="rates">
       Senaste {Math.round(th.similar_days / 7)} veckorna: {rate(ev.success_recent.all)} lyckades.
@@ -319,8 +319,9 @@ const LIB_MAX = 300;
           <tr>
             <th scope="col">Signaldag</th>
             <th scope="col">Bolag</th>
-            <th scope="col">Lyckades</th>
+            <th scope="col" class="num">Högst mot index</th>
             <th scope="col" class="num">Mot index 5 d</th>
+            <th scope="col" class="num">Högsta high</th>
             <th scope="col">Urval och etiketter</th>
             <th scope="col">Kännetecken</th>
             <th scope="col">Marknadsläge</th>
@@ -334,8 +335,9 @@ const LIB_MAX = 300;
                 data-sector={c.sector ?? ""} data-regime={c.regime ?? ""}>
                 <td>{day(c.day)}</td>
                 <th scope="row"><span class="name">{c.name}</span> <span class="ticker">{c.ticker}</span></th>
-                <td>{c.reasons.join(" och ")}</td>
-                <td class="num">{last ? ppText(last.vs_index_pp) : "–"}</td>
+                <td class="num">{ppText(c.max_vs_index_pp)}</td>
+                <td class="num">{last && last === c.follow[String(th.success_days)] ? ppText(last.vs_index_pp) : "–"}</td>
+                <td class="num">{rText(c.max_high_r)}</td>
                 <td class="wrap">
                   {[...c.strategies.map(strategyName), ...(c.strong ? ["Starka signaler"] : [])].join(", ")}
                   {c.labels.length > 0 && <span class="sub">{c.labels.map((l) => evalName(`etikett:${l}`, texts)).join(", ")}</span>}

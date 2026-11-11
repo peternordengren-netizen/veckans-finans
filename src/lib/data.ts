@@ -902,7 +902,7 @@ export interface SwingEval {
   period: { start: string | null; end: string | null };
   snapshots: number; entries: number;
   thresholds: { top_share: number; top_n: number; hold_weeks: number; min_feature_cases: number; horizons: number[];
-    success_r: number; success_pp: number; success_days: number; similar_days: number; similar_min: number;
+    success_pp: number; success_days: number; similar_days: number; similar_min: number;
     similar_jaccard: number; breadth_alert_pp: number; sector_volume_alert: number; vol_calm_max: number;
     volume_high: number; volume_low: number; rsi_high: number; rsi_low: number; stoch_high: number; stoch_low: number;
     support_r: number; resistance_r: number };
@@ -915,7 +915,8 @@ export interface SwingEval {
   /** Mönstren per fönster ("2v", "6v", "lage", "alla") och horisont ("3", "5"). */
   patterns: Record<string, { text: string; regime: string | null; days: string[] } & Record<string, SwingEvalPatterns>>;
   /** Lyckade fall, nyast först. */
-  successes: (SwingEvalCase & { day: string; reasons: string[]; follow: Record<string, SwingEvalFollow> })[];
+  successes: (SwingEvalCase & { day: string; max_vs_index_pp: number | null; max_high_r: number | null;
+    follow: Record<string, SwingEvalFollow> })[];
   success_recent: { since: string; all: SwingEvalRate; by_regime: Record<string, SwingEvalRate>;
     by_strategy: Record<string, SwingEvalRate> };
   /** Alla avgjorda fall: [signaldag, strategier, starka signaler, sektor, läge, "lyckad" | "ej"]. */
@@ -936,7 +937,7 @@ export function loadSwingEval(): SwingEval | null {
   if (IS_MOCK || !existsSync(path)) return null;
   try {
     const out = readJson<SwingEval>(path);
-    if ((out.schema_version ?? 1) < 2) return null; // äldre format: byggs om vid nästa morgonkörning
+    if ((out.schema_version ?? 1) < 3) return null; // äldre format: byggs om vid nästa morgonkörning
     const notes = join(dir, "notes");
     const latest = existsSync(notes)
       ? readdirSync(notes).filter((f) => /^\d{4}-W\d{2}\.json$/.test(f)).sort().pop()

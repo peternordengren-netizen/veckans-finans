@@ -238,11 +238,12 @@ def test_marknadslaget():
 
 def test_lyckat_fall():
     f = lambda k, pp, r=None: {str(k): {"vs_index_pp": pp, "max_high_r": r}}  # noqa: E731
-    assert se.success_status({"follow": {**f(1, 1.0, 2.1)}}) == "lyckad"  # 2R redan dag 1
+    assert se.success_status({"follow": {**f(1, 1.0, 2.1)}}) is None  # 2R avgör inte; dag 1 under 5 pe, öppet
+    assert se.success_status({"follow": {**f(1, 1.0, 3.0), **f(5, 4.9, 3.0)}}) == "ej"  # högt R men under 5 pe
     assert se.success_status({"follow": {**f(1, 1.0), **f(3, 5.2)}}) == "lyckad"  # 5 pe över index
     assert se.success_status({"follow": {**f(1, 1.0, 1.0), **f(5, 4.9, 1.9)}}) == "ej"
     assert se.success_status({"follow": {**f(1, 1.0, 1.0)}}) is None  # inte avgjort än
-    assert se.success_reasons({"follow": {**f(2, 6.0, 2.5)}}) == ["2R", "5 pe"]
+    assert se.success_info({"follow": {**f(2, 6.0, 2.5), **f(3, 4.0, 2.8)}}) == {"max_vs_index_pp": 6.0, "max_high_r": 2.8}
 
 
 def case(name, day, feats, status_ok, strategies=("pullback",)):
@@ -272,7 +273,7 @@ def test_larm_liknar_lyckade_fall_och_notis():
     sim = s["alerts"]["similar"]
     assert [x["name"] for x in sim] == ["Zetaverken"] and sim[0]["matches"] == 3
     assert sim[0]["similar_cases"] == 4 and sim[0]["similar_successes"] == 3  # Deltahem liknar men lyckades inte
-    assert len(s["successes"]) == 4 and s["successes"][0]["reasons"] == ["5 pe"]
+    assert len(s["successes"]) == 4 and s["successes"][0]["max_vs_index_pp"] == 6.0
     assert s["success_recent"]["all"]["cases"] == 4  # september-fallet ligger utanför 28 dagar
     assert s["cases_index"][0][-1] in ("lyckad", "ej")
     n = se.alerts_notice(s, "2026-11-11")

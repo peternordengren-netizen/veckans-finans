@@ -24,8 +24,9 @@ uppmaning och säger inget säkert om hur det går nästa gång.
 2. Uppföljning efter 1–5 handelsdagar (HORIZONS) med samma hämtning som morgonens swingfil: rörelse
    (justerad stängning), rörelse mot index (OMX Stockholm PI) i procentenheter, högsta high under dagarna i R
    (från signaldagens stängning) och snittomsättningen under dagarna mot snittet för de 20 dagarna före signaldagen.
-   Lyckat fall (success_status): högsta high minst SUCCESS_R (2) R eller minst SUCCESS_PP (5) procentenheter över index
-   vid någon stängning inom SUCCESS_DAYS (5) handelsdagar; "ej" när femte dagen följts upp utan det, annars öppet.
+   Lyckat fall (success_status): minst SUCCESS_PP (5) procentenheter över index vid någon stängning inom SUCCESS_DAYS
+   (5) handelsdagar, oavsett R (sedan 2026-11-11; R påverkade tidigare, men ett litet R gjorde 2R för lätt att nå);
+   "ej" när femte dagen följts upp utan det, annars öppet. Högsta high i R visas som information.
 3. Sammanställningen (summary.json): "Gårdagens bästa rörelser" (topp 10 mot index efter 1 dag i den senaste
    ögonblicksbilden med 1-dagsuppföljning), dagens marknadsläge, "Mönster" per fönster (WINDOWS: senaste 2 och 6
    veckorna, dagar med samma läge som det senaste, och hela perioden som bakgrund), biblioteket med lyckade fall
@@ -84,7 +85,7 @@ MIN_FEATURE_CASES = 10
 VOLUME_AVG_DAYS = 20
 REPORT_DAYS = 5
 KEEP_OPEN_DAYS = 14  # ögonblicksbilder äldre än så (kalenderdagar) följs inte upp längre
-SUCCESS_R, SUCCESS_PP, SUCCESS_DAYS = 2.0, 5.0, 5
+SUCCESS_PP, SUCCESS_DAYS = 5.0, 5
 SIMILAR_DAYS, SIMILAR_MIN, SIMILAR_JACCARD = 28, 3, 0.6
 BREADTH_ALERT_PP = 10.0
 SECTOR_VOLUME_ALERT = 2.0
@@ -467,27 +468,20 @@ def patterns(rows: list[dict], h: str, texts: dict[str, str]) -> dict:
 
 
 def success_status(e: dict) -> str | None:
-    """"lyckad" (minst SUCCESS_R R eller SUCCESS_PP pe över index inom SUCCESS_DAYS dagar), "ej" (femte dagen
-    uppföljd utan det) eller None (öppet)."""
+    """"lyckad" (minst SUCCESS_PP pe över index vid någon stängning inom SUCCESS_DAYS dagar, oavsett R), "ej" (femte
+    dagen uppföljd utan det) eller None (öppet)."""
     f = e.get("follow") or {}
-    for k in range(1, SUCCESS_DAYS + 1):
-        x = f.get(str(k))
-        if not x:
-            continue
-        if (x.get("max_high_r") is not None and x["max_high_r"] >= SUCCESS_R) or x["vs_index_pp"] >= SUCCESS_PP:
-            return "lyckad"
+    if any(f[str(k)]["vs_index_pp"] >= SUCCESS_PP for k in range(1, SUCCESS_DAYS + 1) if str(k) in f):
+        return "lyckad"
     return "ej" if str(SUCCESS_DAYS) in f else None
 
 
-def success_reasons(e: dict) -> list[str]:
-    """Vad som gjorde fallet lyckat: "2R" och/eller "5 pe" (inom 5 dagar)."""
+def success_info(e: dict) -> dict:
+    """Det högsta mot index (procentenheter, vid stängning) och högsta high i R (information, avgör inte) inom
+    SUCCESS_DAYS dagar."""
     f = [e["follow"][str(k)] for k in range(1, SUCCESS_DAYS + 1) if str(k) in e["follow"]]
-    out = []
-    if any(x.get("max_high_r") is not None and x["max_high_r"] >= SUCCESS_R for x in f):
-        out.append("2R")
-    if any(x["vs_index_pp"] >= SUCCESS_PP for x in f):
-        out.append("5 pe")
-    return out
+    rs = [x["max_high_r"] for x in f if x.get("max_high_r") is not None]
+    return {"max_vs_index_pp": max((x["vs_index_pp"] for x in f), default=None), "max_high_r": max(rs, default=None)}
 
 
 def jaccard(a: list[str], b: list[str]) -> float:
@@ -575,7 +569,7 @@ def summary(snaps: list[dict], now: datetime) -> dict:
                                                     "signals", "labels", "criteria", "volume_ratio", "rsi14", "stoch_k",
                                                     "r", "support_r", "resistance_r", "report_5d", "features",
                                                     "regime")}
-                             | {"reasons": success_reasons(r),
+                             | {**success_info(r),
                                 "follow": {k: r["follow"][k] for k in sorted(r["follow"]) if int(k) <= SUCCESS_DAYS}})
     successes.sort(key=lambda x: (x["day"], x["name"]), reverse=True)
     recent_first = (date.fromisoformat(last_day) - timedelta(days=SIMILAR_DAYS)).isoformat() if last_day else ""
@@ -600,12 +594,12 @@ def summary(snaps: list[dict], now: datetime) -> dict:
                                 "examples": companies[:3]})
     similar.sort(key=lambda x: (-x["matches"], x["name"]))
     return {
-        "schema_version": 2, "generated_at": now.isoformat(timespec="seconds"),
+        "schema_version": 3, "generated_at": now.isoformat(timespec="seconds"),
         "period": {"start": snaps[0]["day"] if snaps else None, "end": last_day},
         "snapshots": len(snaps), "entries": len(rows),
         "thresholds": {"top_share": TOP_SHARE, "top_n": TOP_N, "hold_weeks": HOLD_WEEKS,
                        "min_feature_cases": MIN_FEATURE_CASES, "horizons": list(HORIZONS),
-                       "success_r": SUCCESS_R, "success_pp": SUCCESS_PP, "success_days": SUCCESS_DAYS,
+                       "success_pp": SUCCESS_PP, "success_days": SUCCESS_DAYS,
                        "similar_days": SIMILAR_DAYS, "similar_min": SIMILAR_MIN, "similar_jaccard": SIMILAR_JACCARD,
                        "breadth_alert_pp": BREADTH_ALERT_PP, "sector_volume_alert": SECTOR_VOLUME_ALERT,
                        "vol_calm_max": VOL_CALM_MAX, **FEATURE_THRESHOLDS},

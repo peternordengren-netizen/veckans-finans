@@ -806,9 +806,10 @@ och 60 handelsdagar från signaldagens stängning. Dagens bevakningslista använ
    med övriga, efter 3 och 5 dagar, med antal och 95 % konfidensintervall (Wilson). Först de senaste 2 och 6 veckorna
    och dagar med samma läge som nu; hela perioden som bakgrund (väljs i rullistan). ✓ när mönstret hållit 4 veckor i
    rad (andelen bland de 20 % högre än bland övriga i varje veckas fall).
-6. **Lyckade fall**: fall som inom 5 handelsdagar nådde minst 2R (högsta high) eller stängde minst 5 procentenheter
-   över index, med kännetecken och marknadsläge, filtrerbara på strategi, sektor och läge. Alla avgjorda fall sparas
-   (`cases_index`), så filtret visar också andelen lyckade av alla. Ett litet R gör 2R lättare att nå.
+6. **Lyckade fall**: fall som vid någon stängning inom 5 handelsdagar låg minst 5 procentenheter över index, oavsett
+   R (sedan 2026-11-11; tidigare räckte också 2R, men ett litet R gjorde det för lätt). Högsta high i R visas som
+   information. Med kännetecken och marknadsläge, filtrerbara på strategi, sektor och läge. Alla avgjorda fall sparas
+   (`cases_index`), så filtret visar också andelen lyckade av alla.
 7. **Larm i notisen 09:20 och 13:20** (`bollinger.py` `eval_alerts`, ur morgonens sammanställning, alltså gårdagens
    stängning; samma larm vid båda kontrollerna):
    - *Liknar nyligen lyckade fall*: dagens kandidater som delar strategi och har kännetecken med Jaccardlikhet minst
