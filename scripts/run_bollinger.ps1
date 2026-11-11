@@ -73,7 +73,7 @@ function UpperList($section) {
 
 $time = ([datetime]$data.checked_at).ToString("HH:mm")
 $title = "Swing kl. $time - strategikandidaterna"
-# Bara kandidaterna i de två strategierna: status i dag (ändringar sedan föregående kontroll) och övre bandet.
+# Bara kandidaterna i de tre strategierna: status i dag (ändringar sedan föregående kontroll) och övre bandet.
 $strategies = @(
     @{ Name = "Pullback i trend"; Section = $data.pullback },
     @{ Name = "Rekyl efter Bollingerutbrott"; Section = $data.bbrekyl },

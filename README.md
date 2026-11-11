@@ -748,8 +748,11 @@ gårdagens stängning. Krav (alla måste vara uppfyllda för en etikett):
 5. **Stopp** under sista rekylens lägsta low, och det får ligga högst 8 % under pivoten.
 
 Etiketter:
-- **Nära pivot:** stängningen högst 5 % under pivoten. Triggernivån och referensen är pivoten.
-- **Utbrott:** stängning över pivoten på minst 1,5× 50-dagarssnittets omsättning. Referensen är stängningen.
+- **Utbrott:** dagens high passerar pivoten och omsättningen är minst 1,5× 50-dagarssnittet (sedan 2026-11-11;
+  tidigare krävdes stängning över pivoten, och äldre swingfiler valideras med den regeln). Referensen är priset där
+  pivoten bröts: pivoten, eller öppningen om dagen öppnade över den.
+- **Nära pivot:** stängningen högst 5 % under pivoten, och inget utbrott. Triggernivån och referensen är pivoten.
+- En stängning över pivoten utan volymkravet ger ingen etikett.
 
 Mål 3R, R = referens − stopp. Avtagande volym och ATR visas och ingår i rangen: snittet de senaste 10 dagarna mot
 50-dagarssnittet.
@@ -759,15 +762,20 @@ rekyler, sista rekylen högst 10 %, RS-percentil minst 80, stängningen inom 2 %
 poäng högre RS-percentil.
 
 **Status i dag** vid Bollingerkontrollerna 09:20 och 13:20 (`vcp` i kontrollfilen) som i de andra strategierna, med
-pivoten som triggernivå och dagens omsättning hittills mot normalt vid samma tid.
+pivoten som triggernivå. När dagens high passerat pivoten jämförs dagens omsättning hittills med det normala vid samma
+tid på dagen (snittet för de 20 senaste handelsdagarna fram till samma klockslag): "Pivot bruten" vid minst 1,5×,
+"Pivot bruten, låg volym" under det och "Pivot bruten, volym saknas" utan 15-minutersdata. Under stoppet, under 50 MA
+och mer än 1R över pivoten har företräde.
 
 Swingfilen sparar måtten per bolag (`vcp.state`) och valideringen räknar om etiketten, nivåerna, rekyldjupen och
 rangkriterierna ur dem. RS-percentilen räknas inte om (den kräver hela listans dagsdata).
 
 **Historik** (`vcp` i `history.json`; hämtningen är därför cirka fyra år): de senaste tre åren, varje dag med en
-etikett, ett fall i taget per bolag. Hur ofta 3R nåddes före stoppet: vid Nära pivot startar fallet när kursen når
-pivoten inom 3 handelsdagar (vid pivoten eller öppningen om den är högre), vid Utbrott vid nästa dags öppning; högst
-60 dagar, och når en dag både stoppet och målet räknas stoppet. Dessutom utvecklingen mot index (^OMXSPI) efter 5, 20
+etikett, ett fall i taget per bolag och etikett, så att ett pågående Nära pivot-fall inte spärrar ett utbrott i samma
+bolag. Hur ofta 3R nåddes före stoppet, med 95 % konfidensintervall (Wilson): vid Nära pivot startar fallet när
+kursen når pivoten inom 3 handelsdagar (vid pivoten eller öppningen om den är högre), vid Utbrott vid referensen på
+signaldagen med stopp och mål från nästa dag (resten av signaldagen prövas inte); högst 60 dagar, och når en dag
+både stoppet och målet räknas stoppet. Dessutom utvecklingen mot index (^OMXSPI) efter 5, 20
 och 60 handelsdagar från signaldagens stängning. Dagens bevakningslista används, så bolag som avnoterats saknas
 (överlevnadsbias), och RS jämförs bara mot listan. Utan courtage, spread och glidning.
 

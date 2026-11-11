@@ -4,7 +4,7 @@ import { test } from "node:test";
 
 import {
   decidedShareText, isPullbackLabel, labelClass, labelCounts, levelText, netText, priceText, reportText, riskText, shareText,
-  altStopText, bbLevelText, breakoutLines, criteriaLines, depthsText, momentumText, todayVolumeText, volumeRuleLines, missingText, resistanceRText, todayInvalid, todayLines, todayOrder, TODAY_STATUS,
+  altStopText, bbLevelText, ciShareText, breakoutLines, criteriaLines, depthsText, momentumText, todayVolumeText, volumeRuleLines, missingText, resistanceRText, todayInvalid, todayLines, todayOrder, TODAY_STATUS,
   bollingerSourceText, chipText, pctBText, rankText, rankTitle, rText, signalText, srDistText, srInsideText, srLevelText, upperRText, vsBaseText,
 } from "../src/lib/swing.ts";
 
@@ -96,7 +96,9 @@ test("status i dag för pullback-kandidaterna", () => {
   assert.equal(todayLines({ ...base, status: "below_ma50" }).main, "Ogiltig: under 50 MA");
   assert.ok(todayInvalid("below_stop") && todayInvalid("below_ma50"));
   assert.ok(!todayInvalid("late") && !todayInvalid(undefined));
-  assert.deepEqual(["waiting", "triggered", "late", "below_ma50", "below_stop"].map(todayOrder), [0, 1, 2, 3, 4]);
+  assert.deepEqual(["waiting", "triggered", "late", "below_ma50", "below_stop"].map(todayOrder), [0, 1, 5, 6, 7]);
+  assert.deepEqual(["pivot_broken", "pivot_broken_low_vol", "pivot_broken_no_vol"].map(todayOrder), [2, 3, 4]);
+  assert.equal(TODAY_STATUS.pivot_broken_low_vol, "Pivot bruten, låg volym");
   assert.equal(todayOrder(null), null);
   for (const text of Object.values(TODAY_STATUS)) assert.ok(!/köp|sälj|kursmål/i.test(text));
 });
@@ -156,6 +158,9 @@ test("Momentum-utbrott (VCP): rekyldjup och kriterier", () => {
     { ok: false, text: "RS minst 80" },
   ]);
   assert.equal(labelClass("vcp-utbrott"), "pullback");
+  assert.equal(ciShareText(12, 47, [0.153, 0.397]), "25,5 % (12 av 47; 95 %: 15–40 %)");
+  assert.equal(ciShareText(4, 6, [0.3, 0.9]), "66,7 % (4 av 6; 95 %: 30–90 %), för få fall");
+  assert.equal(ciShareText(0, 0, null), "–");
 });
 
 test("bolag som saknas i Swing", () => {

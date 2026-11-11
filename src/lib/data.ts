@@ -176,6 +176,8 @@ export interface PullbackLevels {
 }
 /** Måtten i Momentum-utbrott (VCP) (scripts/vcp.state). */
 export interface VcpState {
+  /** Dagens öppning (referensen vid Utbrott); saknas i filer före 2026-11-11. */
+  open?: number;
   close: number; high: number; low: number;
   /** RS-percentil 0–99 mot listans bolag. */
   rs_pct: number;
@@ -258,7 +260,8 @@ export interface PullbackToday {
   ref: number;
   stop: number;
   ma50: number;
-  status: "waiting" | "triggered" | "late" | "below_stop" | "below_ma50";
+  /** pivot_broken*: Momentum-utbrott (VCP), pivoten bruten med eller utan volymkravet (scripts/bollinger.py). */
+  status: "waiting" | "triggered" | "pivot_broken" | "pivot_broken_low_vol" | "pivot_broken_no_vol" | "late" | "below_stop" | "below_ma50";
   /** Kontrollen där dagens high först låg över triggernivån, eller null. */
   trigger_seen_at: string | null;
   /** Dagens omsättning hittills mot normalt vid samma tid (bara Rekyl efter Bollingerutbrott; null utan timdata). */
@@ -293,6 +296,8 @@ export interface PullbackSummary {
 export interface VcpSummary {
   cases: number; decided: number; r3_first: number; stop_first: number; open: number; not_triggered: number;
   r3_share: number | null; mean_net_pct: number | null; mean_net_r: number | null;
+  /** 95 % konfidensintervall (Wilson) för andelen 3R först, [låg, hög]; saknas i äldre filer. */
+  r3_ci?: [number, number] | null;
 }
 export interface SwingStat {
   n: number;
@@ -320,7 +325,9 @@ export interface SwingView {
     vcp?: {
       rs_min: number; ma200_days: number; above_low_pct: number; below_high_pct: number; base_min_days: number;
       base_max_days: number; swing: number; min_contractions: number; dry_days: number; avg_days: number;
-      breakout_volume: number; near_pct: number; max_stop_pct: number; target_r: number; trigger_days: number; max_days: number;
+      breakout_volume: number; near_pct: number; max_stop_pct: number;
+      /** "high": utbrott när dagens high passerar pivoten (sedan 2026-11-11); saknas = stängningen. */
+      breakout_on?: string; target_r: number; trigger_days: number; max_days: number;
       ranking: { last_contraction_pct: number; rs_strong: number; at_pivot_pct: number; top: number };
     };
     /** Rekyl efter Bollingerutbrott (saknas i äldre filer). */
@@ -352,7 +359,9 @@ export interface SwingView {
       thresholds: { max_days: number; trigger_days: number; target_r: number };
       labels: Record<string, VcpSummary>;
       all: VcpSummary;
-      forward: Record<string, Record<string, SwingStat>>;
+      forward: Record<string, Record<string, SwingStat & { wilson?: [number, number] | null }>>;
+      /** Etiketterna räknade var för sig (ett fall i taget per bolag och etikett); saknas i äldre filer. */
+      separate_labels?: boolean;
       note: string;
     };
     /** Rekyl efter Bollingerutbrott: 2R före stoppet och tvärtom (saknas i äldre filer). */

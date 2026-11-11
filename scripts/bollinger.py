@@ -32,7 +32,11 @@ mot bandet och är ingen uppmaning.
 - Samma avsnitt ("bbrekyl") för strategin Rekyl efter Bollingerutbrott (scripts/bbrekyl.py): kandidaterna med en
   etikett ur den strategin, läget mot banden med strategins referens och stopp, och status i dag med triggernivån
   gårdagens high och gårdagens 50 MA ur strategins fönster.
-- Samma avsnitt ("vcp") för Momentum-utbrott (VCP, scripts/vcp.py), med pivoten som triggernivå.
+- Samma avsnitt ("vcp") för Momentum-utbrott (VCP, scripts/vcp.py), med pivoten som triggernivå. När dagens high
+  passerat pivoten (och ingen status med högre prioritet gäller) delas "triggered" upp efter dagens omsättning
+  hittills mot normalt vid samma tid (vcp_day_status): "pivot_broken" (Pivot bruten) vid minst breakout_volume (1,5)
+  gånger, "pivot_broken_low_vol" (Pivot bruten, låg volym) under det, "pivot_broken_no_vol" (Pivot bruten, volym
+  saknas) utan 15-minutersdata. Avsnittet har då "breakout_volume" (saknas i kontrollfiler före 2026-11-11).
 - Dagens omsättning hittills mot normalt vid samma tid ("today.volume", för Rekyl efter Bollingerutbrott och VCP):
   ett batchanrop till Yahoo med 15-minutersstaplar för strategins kandidater (de senaste INTRADAY_DAYS kalender-
   dagarna). Hittills = summan av dagens staplar; normalt = snittet för de VOLUME_PROFILE_DAYS senaste handelsdagarna
@@ -85,6 +89,10 @@ TODAY_STATUS = {
     "below_ma50": "Ogiltig: under 50 MA",
     "late": "Sen: mer än 1R över trigger",
     "triggered": "Trigger bruten",
+    # Momentum-utbrott (VCP): pivoten bruten, uppdelat efter omsättningen hittills mot normalt (vcp_day_status).
+    "pivot_broken": "Pivot bruten",
+    "pivot_broken_low_vol": "Pivot bruten, låg volym",
+    "pivot_broken_no_vol": "Pivot bruten, volym saknas",
     "waiting": "Väntar på trigger",
 }
 INVALID = {"below_stop", "below_ma50"}
@@ -192,6 +200,16 @@ def day_status(high: float, low: float, price: float, trigger: float, ref: float
     if high > trigger:
         return "triggered"
     return "waiting"
+
+
+def vcp_day_status(base: str, volume: dict | None, min_ratio: float) -> str:
+    """Status i dag för Momentum-utbrott (VCP): "triggered" (pivoten bruten) delas upp efter omsättningen hittills mot
+    normalt vid samma tid; övriga statusar oförändrade."""
+    if base != "triggered":
+        return base
+    if not volume:
+        return "pivot_broken_no_vol"
+    return "pivot_broken" if volume["ratio"] >= min_ratio else "pivot_broken_low_vol"
 
 
 def today_row(bar, c: dict, now: datetime, prev: dict | None, key: str = "pullback") -> dict | None:
@@ -336,6 +354,20 @@ def check(today: date, now: datetime, instruments: dict[str, Instrument], fetch:
         for r in bb_rows:
             r["today"]["volume"] = volume_vs_normal(df, yt[r["ticker"]], today) if df is not None and r["ticker"] in yt \
                 else None
+    vs = sections.get("vcp")
+    if vs:
+        # Pivot bruten: med eller utan volymkravet (omsättningen hittills mot normalt), sedan ändringarna på nytt.
+        import vcp
+
+        vs["breakout_volume"] = vcp.THRESHOLDS["breakout_volume"]
+        for r in vs["rows"]:
+            if r.get("today"):
+                r["today"]["status"] = vcp_day_status(r["today"]["status"], r["today"].get("volume"),
+                                                      vs["breakout_volume"])
+        prev = (previous or {}).get("vcp")
+        prev_rows = {r["ticker"]: r for r in prev["rows"]} if prev and prev.get("swing_date") == vs["swing_date"] else None
+        vs["changes"] = status_changes(vs["rows"], prev_rows)
+        vs["notice"] = status_notice(vs["changes"], vs["status_since"])
     return {
         "date": today.isoformat(),
         "checked_at": now.isoformat(timespec="seconds"),
@@ -392,12 +424,14 @@ def momentum_errors(m: dict | None, where: str) -> list[str]:
 def validate(data: dict) -> list[str]:
     """Statusen räknas om ur pris och band; listorna får inte överlappa. Pullback-kandidaternas läge räknas om."""
     errors = []
-    for r in [r for key in STRATEGY_KEYS for r in (data.get(key) or {}).get("rows", [])]:
+    for key, sec, r in [(key, data.get(key), r) for key in STRATEGY_KEYS for r in (data.get(key) or {}).get("rows", [])]:
         errors += position_errors(r, r["name"])
         errors += momentum_errors(r.get("momentum"), r["name"])
         td = r.get("today")
         if td:
             expected = day_status(td["high"], td["low"], td["price"], td["trigger"], td["ref"], td["stop"], td["ma50"])
+            if key == "vcp" and "breakout_volume" in sec:
+                expected = vcp_day_status(expected, td.get("volume"), sec["breakout_volume"])
             if td["status"] != expected:
                 errors.append(f"{r['name']}: status {td['status']!r} stämmer inte med dagens kurser (väntat {expected!r})")
             if (td["trigger_seen_at"] is not None) != (td["high"] > td["trigger"]):

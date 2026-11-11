@@ -598,6 +598,7 @@
                              "base_days", "pivot", "contractions", "volume", "volume_avg50", "vol_dry", "vol_avg",
                              "atr_dry", "atr_avg"],
                 "properties": {
+                  "open": {"type": "number", "description": "Dagens öppning (för referensen vid Utbrott); saknas i filer före 2026-11-11."},
                   "close": {"type": "number"}, "high": {"type": "number"}, "low": {"type": "number"},
                   "rs_pct": {"type": "integer", "minimum": 0, "maximum": 99},
                   "ma50": {"type": "number"}, "ma150": {"type": "number"}, "ma200": {"type": "number"},

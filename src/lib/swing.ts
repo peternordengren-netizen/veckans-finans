@@ -158,6 +158,18 @@ export function riskText(pct: number | null, atr: number | null): string {
   return atr === null ? p : `${p} · ${pctFmt.format(atr)} ATR`;
 }
 
+/**
+ * Andel med 95 % konfidensintervall: "25,5 % (12 av 47; 95 %: 15–40 %)", med ", för få fall" under MIN_CASES;
+ * "–" utan fall.
+ */
+export function ciShareText(k: number, n: number, ci: readonly [number, number] | null | undefined): string {
+  if (n === 0) return "–";
+  const whole = new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 0 });
+  const range = ci ? `; 95 %: ${whole.format(ci[0] * 100)}–${whole.format(ci[1] * 100)} %` : "";
+  const share = `${pctFmt.format((k / n) * 100)} % (${k.toLocaleString("sv-SE")} av ${n.toLocaleString("sv-SE")}${range})`;
+  return n < MIN_CASES ? `${share}, för få fall` : share;
+}
+
 /** Andel av de avgjorda fallen: "48,2 % (27 av 56)", "–" utan avgjorda; "(för få fall)" under MIN_CASES. */
 export function decidedShareText(n: number, decided: number): string {
   if (decided === 0) return "–";
@@ -246,6 +258,9 @@ export function missingText(m: { reason: string; bars: number }): string {
 export const TODAY_STATUS: Record<string, string> = {
   waiting: "Väntar på trigger",
   triggered: "Trigger bruten",
+  pivot_broken: "Pivot bruten",
+  pivot_broken_low_vol: "Pivot bruten, låg volym",
+  pivot_broken_no_vol: "Pivot bruten, volym saknas",
   late: "Sen: mer än 1R över trigger",
   below_ma50: "Ogiltig: under 50 MA",
   below_stop: "Ogiltig: under stopp",
@@ -256,7 +271,8 @@ export function todayInvalid(status: string | null | undefined): boolean {
   return status === "below_stop" || status === "below_ma50";
 }
 
-/** Sorteringsvärde för kolumnen Status i dag: väntar 0, trigger bruten 1, sen 2, under 50 MA 3, under stopp 4. */
+/** Sorteringsvärde för kolumnen Status i dag, i TODAY_STATUS ordning: väntar 0, trigger bruten 1, pivot bruten 2–4,
+ *  sen 5, under 50 MA 6, under stopp 7. */
 export function todayOrder(status: string | null | undefined): number | null {
   const i = status ? Object.keys(TODAY_STATUS).indexOf(status) : -1;
   return i < 0 ? null : i;

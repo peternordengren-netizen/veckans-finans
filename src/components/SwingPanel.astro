@@ -12,7 +12,7 @@ import {
   MIN_CASES, altStopText, decidedShareText, labelClass, labelCounts, levelText, missingText, netText, priceText,
   reportText, resistanceRText, riskText, shareText, bollingerSourceText, chipText, pctBText, signalText,
   TODAY_STATUS, todayInvalid, todayLines, todayOrder, bbLevelText, breakoutLines, todayVolumeText, volumeRuleLines,
-  momentumText, depthsText, criteriaLines, rText, rankText, rankTitle, srDistText, srInsideText, srKindText, srLevelText, upperRText, vsBaseText,
+  momentumText, depthsText, criteriaLines, ciShareText, rText, rankText, rankTitle, srDistText, srInsideText, srKindText, srLevelText, upperRText, vsBaseText,
 } from "../lib/swing";
 
 interface Props {
@@ -378,13 +378,15 @@ const rankHist = pbHist?.ranking ?? null;
               dagarna; lägre räknas som avtagande (rangkriterier).
             </li>
             <li>
-              <strong>Etiketter:</strong> <em>Nära pivot</em> när stängningen ligger högst {num(vt.near_pct, 0)} % under pivoten;
-              <em> Utbrott</em> när stängningen ligger över pivoten och omsättningen är minst {num(vt.breakout_volume)} gånger
-              snittet för de {vt.avg_days} dagarna före.
+              <strong>Etiketter:</strong> <em>Utbrott</em> när {vt.breakout_on === "high" ? "dagens high passerar pivoten" : "stängningen ligger över pivoten"}
+              {" "}och omsättningen är minst {num(vt.breakout_volume)} gånger snittet för de {vt.avg_days} dagarna före;
+              <em> Nära pivot</em> när stängningen ligger högst {num(vt.near_pct, 0)} % under pivoten (och inget utbrott). En
+              stängning över pivoten utan volymkravet ger ingen etikett.
             </li>
             <li>
               <strong>Stopp och mål:</strong> stoppet är sista rekylens lägsta low och får ligga högst {num(vt.max_stop_pct, 0)} %
-              under pivoten (annars ingen etikett). Referensen är pivoten vid Nära pivot och stängningen vid Utbrott. R =
+              under pivoten (annars ingen etikett). Referensen är pivoten vid Nära pivot; vid Utbrott
+              {vt.breakout_on === "high" ? " priset där pivoten bröts: pivoten, eller öppningen om dagen öppnade över den" : " stängningen"}. R =
               referens minus stopp, samma R överallt; målet är {num(vt.target_r, 0)}R.
             </li>
             {
@@ -400,11 +402,17 @@ const rankHist = pbHist?.ranking ?? null;
             }
             <li>
               <strong>Status i dag</strong> vid Bollingerkontrollerna 09:20 och 13:20 (fördröjda ca 15 minuter): som för de andra
-              strategierna, med pivoten som triggernivå, och omsättningen hittills mot normalt vid samma tid.
+              strategierna, med pivoten som triggernivå. När dagens high passerat pivoten jämförs dagens omsättning hittills
+              med det normala vid samma tid på dagen (snittet för de 20 senaste handelsdagarna fram till samma klockslag):
+              <em> Pivot bruten</em> vid minst {num(vt.breakout_volume)} gånger det normala, <em>Pivot bruten, låg volym</em>
+              {" "}under det, och <em>Pivot bruten, volym saknas</em> när 15-minutersdatan saknas. Under stoppet, under 50 MA
+              och mer än 1R över pivoten har företräde som i de andra strategierna.
             </li>
             <li>
-              <strong>Historiken</strong> under tabellen: de senaste tre åren, ett fall i taget per bolag. Nära pivot startar när
-              kursen når pivoten inom {vt.trigger_days} handelsdagar, Utbrott nästa dags öppning; avgjort när {num(vt.target_r, 0)}R
+              <strong>Historiken</strong> under tabellen: de senaste tre åren, ett fall i taget per bolag och etikett, så att ett
+              pågående Nära pivot-fall inte spärrar ett utbrott i samma bolag. Nära pivot startar när kursen når pivoten inom
+              {" "}{vt.trigger_days} handelsdagar, Utbrott vid referensen på signaldagen (stopp och mål prövas från nästa
+              dag); avgjort när {num(vt.target_r, 0)}R
               eller stoppet nås, högst {vt.max_days} handelsdagar. Dessutom utvecklingen mot OMX Stockholm PI efter 5, 20 och 60
               handelsdagar. Bara dagens bevakningslista, så bolag som avnoterats under perioden saknas.
             </li>
@@ -770,7 +778,7 @@ const rankHist = pbHist?.ranking ?? null;
                             {label === "vcp-utbrott" && lv.volume_ratio !== null && (
                               <span class="sub">omsättning {lv.volume_ratio.toLocaleString("sv-SE")}× 50-dagarssnittet</span>
                             )}
-                            <span class="sub">{lv.trigger !== null ? `Trigger ${priceText(lv.trigger)} (pivoten)` : `Referens ${priceText(lv.ref)} (stängningen)`}</span>
+                            <span class="sub">{lv.trigger !== null ? `Trigger ${priceText(lv.trigger)} (pivoten)` : `Referens ${priceText(lv.ref)} (${vt?.breakout_on === "high" ? "där pivoten bröts" : "stängningen"})`}</span>
                             <Momentum m={r.momentum} />
                           </>
                         ) : "–"}
@@ -824,7 +832,9 @@ const rankHist = pbHist?.ranking ?? null;
         <h3 id="swing-vcp">Momentum-utbrott (VCP): 3R eller stoppet först</h3>
         <p class="note">
           Varje dag med etiketten {shortDate(vcHist.period.start)} {vcHist.period.start.slice(0, 4)} – {shortDate(vcHist.period.end)}{" "}
-          {vcHist.period.end.slice(0, 4)}, ett fall i taget per bolag, utan courtage. Andelarna gäller de avgjorda fallen;
+          {vcHist.period.end.slice(0, 4)}, ett fall i taget per bolag{vcHist.separate_labels ? " och etikett" : ""}, utan courtage.
+          Andelarna gäller de avgjorda fallen, med 95 % konfidensintervall: det spann som andelen med stor sannolikhet
+          ligger inom givet antalet fall. Ett brett spann betyder att fallen är för få för att säga något säkert;
           öppna fall (inget avgörande inom {vcHist.thresholds.max_days} handelsdagar) och ej utlösta (pivoten nåddes inte inom
           {" "}{vcHist.thresholds.trigger_days} dagar) räknas inte in. {vcHist.note} Historiken säger inget om hur det går nästa gång.
         </p>
@@ -834,6 +844,7 @@ const rankHist = pbHist?.ranking ?? null;
               <tr>
                 <th scope="col">Etikett</th>
                 <th scope="col" class="num">Fall</th>
+                <th scope="col" class="num">Avgjorda</th>
                 <th scope="col" class="num">3R före stoppet</th>
                 <th scope="col" class="num">Stoppet först</th>
                 <th scope="col" class="num">Öppna</th>
@@ -851,14 +862,18 @@ const rankHist = pbHist?.ranking ?? null;
                     <tr class:list={{ base: key === "all" }}>
                       <th scope="row">{name}</th>
                       <td class="num">{s.cases.toLocaleString("sv-SE")}</td>
-                      <td class="num">{decidedShareText(s.r3_first, s.decided)}</td>
+                      <td class="num">{s.decided.toLocaleString("sv-SE")}</td>
+                      <td class="num">{s.r3_ci !== undefined ? ciShareText(s.r3_first, s.decided, s.r3_ci) : decidedShareText(s.r3_first, s.decided)}</td>
                       <td class="num">{decidedShareText(s.stop_first, s.decided)}</td>
                       <td class="num">{s.open}</td>
                       <td class="num">{s.not_triggered}</td>
                       <td class="num">{netText(s.mean_net_pct, s.mean_net_r)}</td>
                       {["5", "20", "60"].map((k) => {
                         const f = vcHist.forward[key]?.[k];
-                        return <td class="num">{f && f.n > 0 ? `${shareText(f)} · ${signedPct(f.mean === null ? null : f.mean * 100)}` : "–"}</td>;
+                        if (!f || f.n === 0) return <td class="num">–</td>;
+                        const share = f.wilson !== undefined && f.better !== null
+                          ? ciShareText(Math.round(f.better * f.n), f.n, f.wilson) : shareText(f);
+                        return <td class="num">{share} · {signedPct(f.mean === null ? null : f.mean * 100)}</td>;
                       })}
                     </tr>
                   ),
@@ -866,7 +881,12 @@ const rankHist = pbHist?.ranking ?? null;
             </tbody>
           </table>
         </div>
-        <p class="note">"Mot index": andelen fall där aktien gått bättre än OMX Stockholm PI, och snittet i procentenheter.</p>
+        <p class="note">
+          "Mot index": andelen fall där aktien gått bättre än OMX Stockholm PI (antal av alla fall med så många dagars
+          data, och 95 % konfidensintervall), och snittet i procentenheter.{vcHist.separate_labels
+            ? " Raden Båda lägger ihop etiketterna; ett utbrott och ett Nära pivot-fall i samma bolag kan överlappa i tid."
+            : ""}
+        </p>
       </section>
     )
   }
@@ -1358,6 +1378,9 @@ const rankHist = pbHist?.ranking ?? null;
     color: var(--muted);
   }
   td.today.today-triggered .line,
+  td.today.today-pivot_broken .line,
+  td.today.today-pivot_broken_low_vol .line,
+  td.today.today-pivot_broken_no_vol .line,
   td.today.today-late .line {
     font-weight: 600;
   }

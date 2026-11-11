@@ -22,7 +22,7 @@ Rekyl efter Bollingerutbrott (scripts/bbrekyl.py): samma uppföljning av varje d
 rekylens lägsta low som stopp ("bbrekyl" i filen).
 
 Momentum-utbrott (VCP, scripts/vcp.py): de senaste vcp.HISTORY_YEARS åren (längre än övriga), varje dag med
-etiketten, ett fall i taget per bolag: hur ofta 3R nåddes före stoppet, och utvecklingen mot index efter 5, 20 och 60
+etiketten, ett fall i taget per bolag och etikett: hur ofta 3R nåddes före stoppet, och utvecklingen mot index efter 5, 20 och 60
 handelsdagar från signaldagens stängning ("vcp" i filen). RS-percentilen räknas mot listans bolag samma dag. Volymvillkoren prövas också var för sig ("bbrekyl.rules"):
 grundregeln (utbrott med 1,5× omsättning, inga övriga volymvillkor), grundregeln plus ett villkor i taget, och alla
 tillsammans (= strategins etiketter), varje variant med sina egna fall (ett i taget per bolag).
@@ -120,6 +120,13 @@ def market_filter(index_bars: list) -> dict[date, bool]:
     return out
 
 
+def _vcp_stats(values: list[float]) -> dict:
+    """_stats med 95 % konfidensintervall (Wilson) för andelen bättre än index, [låg, hög] ("wilson")."""
+    out = _stats(values)
+    out["wilson"] = list(vcp.wilson(sum(v > 0 for v in values), len(values))) if values else None
+    return out
+
+
 def vcp_history(bars: dict, instruments: dict) -> dict:
     """Momentum-utbrott (VCP) de senaste vcp.HISTORY_YEARS åren: fall (3R eller stoppet först) och utvecklingen mot
     index efter VCP_HORIZONS dagar, per etikett och totalt (se modulbeskrivningen)."""
@@ -156,9 +163,10 @@ def vcp_history(bars: dict, instruments: dict) -> dict:
         for x in c:
             pre.append(pre[-1] + x)
         ma = lambda i, n: (pre[i + 1] - pre[i + 1 - n]) / n  # noqa: E731
-        busy = -1
+        # Ett fall i taget per bolag och etikett: ett pågående "Nära pivot"-fall spärrar inte ett utbrott.
+        busy = {k: -1 for k in vcp.LABELS}
         for i, s in scores[t].items():
-            if i <= busy:
+            if i <= min(busy.values()):
                 continue
             pct = vcp.percentile(s, by_day[b[i].day])
             # Snabbt förfilter (samma villkor som vcp.labels): RS och MA-ordningen, innan måtten räknas.
@@ -166,12 +174,12 @@ def vcp_history(bars: dict, instruments: dict) -> dict:
                 continue
             st = vcp.state(o, h, lo, c, v, i, pct)
             lbls = vcp.labels(st)
-            if not lbls:
+            if not lbls or i <= busy[lbls[0]]:
                 continue
             lv = vcp.levels(st, lbls[0], None)
             case = vcp.simulate(o, h, lo, i, lbls[0], lv)
             cases[lbls[0]].append(case)
-            busy = case["end"]
+            busy[lbls[0]] = case["end"]
             d0 = b[i].day
             for k in VCP_HORIZONS:
                 if i + k < len(b) and d0 in idx and b[i + k].day in idx:
@@ -183,11 +191,14 @@ def vcp_history(bars: dict, instruments: dict) -> dict:
         "labels": {k: vcp.summarize(v) for k, v in cases.items()},
         "all": vcp.summarize([x for v in cases.values() for x in v]),
         "forward": {
-            **{lab: {str(k): _stats(fwd[lab].get(k, [])) for k in VCP_HORIZONS} for lab in vcp.LABELS},
-            "all": {str(k): _stats(both[k]) for k in VCP_HORIZONS},
+            **{lab: {str(k): _vcp_stats(fwd[lab].get(k, [])) for k in VCP_HORIZONS} for lab in vcp.LABELS},
+            "all": {str(k): _vcp_stats(both[k]) for k in VCP_HORIZONS},
         },
+        # Etiketterna räknas var för sig (ett fall i taget per bolag och etikett).
+        "separate_labels": True,
         "note": "Dagens bevakningslista: bolag som avnoterats under perioden saknas (överlevnadsbias). RS-percentilen "
-                "jämförs mot listans bolag samma dag. Utan courtage, spread och glidning.",
+                "jämförs mot listans bolag samma dag. Etiketterna räknas var för sig, så ett utbrott kan infalla under "
+                "ett pågående Nära pivot-fall i samma bolag. Utan courtage, spread och glidning.",
     }
 
 
