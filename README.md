@@ -794,24 +794,37 @@ och 60 handelsdagar från signaldagens stängning. Dagens bevakningslista använ
    rangkriterier, omsättning mot snitt, RSI(14), Stoch RSI, avstånd till stöd och motstånd i R, sektor, rapport de
    senaste 5 handelsdagarna och veckans signaler. R är strategins (referens − stopp); bolag med bara starka signaler
    saknar R.
-2. **Uppföljning** efter 1, 3 och 5 handelsdagar: rörelse (justerad stängning), rörelse mot OMX Stockholm PI i
-   procentenheter, högsta high under dagarna i R från signaldagens stängning och snittomsättningen mot de 20 dagarna
-   före signaldagen. Ifyllda värden ändras inte.
-3. **Gårdagens bästa rörelser**: topp 10 mot index efter 1 dag i den senaste ögonblicksbilden med uppföljning, med
-   kännetecken.
-4. **Mönster** (`summary.json`): för varje kännetecken med minst 10 fall, andelen bland de 20 % med störst rörelse
-   mot index jämfört med övriga, efter 3 och 5 dagar, med antal och 95 % konfidensintervall (Wilson). Hållit en
-   vecka: andelen bland de 20 % var högre än bland övriga i veckans fall (de 20 % räknade inom veckan). ✓ efter 4
-   veckor i rad.
-5. **Måndagar** (veckans första handelsdag): `run_swing_note.ps1` (från `run_morning.ps1`) låter Claude
+2. **Marknadsläget** samma dag sparas med varje ögonblicksbild, och läget med varje fall, och visas överst:
+   OMX Stockholm PI mot 50 och 200 dagars MA, 20 dagars volatilitet (per år), andelen bolag över sitt 50 dagars MA
+   (och en vecka tidigare), antal bolag på 52 veckors högsta och lägsta, och sektorernas utveckling mot index de
+   senaste 20 dagarna med omsättning mot snitt. **Läget** = trend (upptrend: index över båda MA, nedtrend: under
+   båda, annars blandad) och svängningar (lugna under 20 % volatilitet, annars stora).
+3. **Uppföljning** efter 1–5 handelsdagar: rörelse (justerad stängning), rörelse mot index i procentenheter, högsta
+   high i R från signaldagens stängning och snittomsättningen mot de 20 dagarna före signaldagen.
+4. **Gårdagens bästa rörelser**: topp 10 mot index efter 1 dag, med kännetecken.
+5. **Mönster**: för varje kännetecken med minst 10 fall, andelen bland de 20 % med störst rörelse mot index jämfört
+   med övriga, efter 3 och 5 dagar, med antal och 95 % konfidensintervall (Wilson). Först de senaste 2 och 6 veckorna
+   och dagar med samma läge som nu; hela perioden som bakgrund (väljs i rullistan). ✓ när mönstret hållit 4 veckor i
+   rad (andelen bland de 20 % högre än bland övriga i varje veckas fall).
+6. **Lyckade fall**: fall som inom 5 handelsdagar nådde minst 2R (högsta high) eller stängde minst 5 procentenheter
+   över index, med kännetecken och marknadsläge, filtrerbara på strategi, sektor och läge. Alla avgjorda fall sparas
+   (`cases_index`), så filtret visar också andelen lyckade av alla. Ett litet R gör 2R lättare att nå.
+7. **Larm i notisen 09:20 och 13:20** (`bollinger.py` `eval_alerts`, ur morgonens sammanställning, alltså gårdagens
+   stängning; samma larm vid båda kontrollerna):
+   - *Liknar nyligen lyckade fall*: dagens kandidater som delar strategi och har kännetecken med Jaccardlikhet minst
+     0,6 med lyckade fall i minst tre olika bolag de senaste 4 veckorna, med hur många av alla liknande fall som
+     lyckades.
+   - *Marknadstecken*: andelen bolag över 50 MA ändrad mer än 10 procentenheter på en vecka, en sektors omsättning
+     minst 2× snittet, eller ett nytt marknadsläge mot dagen före.
+8. **Måndagar** (veckans första handelsdag): `run_swing_note.ps1` (från `run_morning.ps1`) låter Claude
    (`/swing-utvardering`, Sonnet, läget dontAsk, skriver bara i `data/swing_eval/`) skriva 5–8 meningar märkta
-   "Claudes tolkning". `swing_eval.py --kontrollera` godkänner bara texten när antalet meningar stämmer, inga
-   uppmaningar finns och varje tal finns i `summary.json`; `--klar` flyttar den till `notes/<vecka>.json` i
-   rådatarepot. Högst två försök.
+   "Claudes tolkning" om marknadsläget, vilka lägen och fall som lyckats de senaste veckorna och vad som ändrats.
+   `swing_eval.py --kontrollera` godkänner bara texten när antalet meningar stämmer, inga uppmaningar finns och varje
+   tal finns i `summary.json`; `--klar` flyttar den till `notes/<vecka>.json` i rådatarepot. Högst två försök.
 
-Ögonblicksbilder före införandet (2026-11-11) skapades i efterhand ur de sparade swingfilerna
-(`swing_eval.py --efterhand`, en hämtning). Begränsningar: dagens bevakningslista (överlevnadsbias), fallen
-överlappar i tid och är inte oberoende, utan courtage. Mönstren beskriver vad som hänt, inte vad som kommer att hända.
+Ögonblicksbilderna från 2026-10-28 skapades i efterhand ur de sparade swingfilerna (`swing_eval.py --efterhand`, en
+hämtning). Begränsningar: dagens bevakningslista (överlevnadsbias), fallen överlappar i tid och är inte oberoende,
+utan courtage. Mönstren och de lyckade fallen beskriver vad som hänt, inte vad som kommer att hända.
 
 ## Sidan (Astro)
 
