@@ -25,6 +25,8 @@ Kommandot körs utan att någon tittar på, med behörighetsläget `dontAsk`. Ba
    rörelserna mot index efter 3 och 5 dagar, hur stort underlaget är och hur osäkert det är (breda intervall, få
    veckor), och vilka mönster som hållit minst 4 veckor (eller att inget gjort det än). Ta med antal fall när du
    nämner en andel.
+   Skriv lättläst: avrunda andelar till heltal eller en decimal (29,8 % eller 30 %), skriv kännetecknen med vanliga
+   ord utan prefix (fastighetsbolagen, inte "Sektor: Fastigheter"), och ta inte med fler tal än som behövs.
 3. Skriv filen `data/swing_eval/$ARGUMENTS.json`:
    ```json
    {"week": "$ARGUMENTS", "label": "Claudes tolkning", "summary_generated_at": "<summary.json:s generated_at>",
