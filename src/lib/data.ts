@@ -31,18 +31,9 @@ export interface MorningChange {
   end_pct: number;
   change_pp: number;
 }
-/** Dagens avsnitt av Handelsbankens podd Morgonrapporten (scripts/podcast.py). */
-export interface MorningPodcast {
-  show: string;
-  feed: string;
-  episode: { title: string; url: string; published: string } | null;
-  error: string | null;
-}
 export interface MorningReport {
   date: string;
   generated_at: string;
-  /** Poddens avsnitt i dag (saknas i äldre filer, null utan hämtning). */
-  podcast?: MorningPodcast | null;
   /** Riksbankens senaste räntebeslut (saknas i äldre filer). */
   policy_decision?: PolicyDecision | null;
   news_since: string;

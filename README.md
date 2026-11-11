@@ -430,9 +430,11 @@ hämtning. Villkoren säger att rapporterna inte får mångfaldigas eller sprida
 
 Loggar i `logs\hb\`.
 
-**Podden** Morgonrapporten: morgonkörningen hämtar poddens RSS en gång (`scripts/podcast.py`). Flödet är
-`spreaker.com/show/2904244/episodes/feed`, som Apples podd-katalog anger för podden. Dagens avsnitt, med titel, länk
-och tid, visas överst i morgonrapporten. Flödet har inga beskrivningar, och ljudet hämtas aldrig.
+**Podden** Morgonrapporten: morgonrapporten har en fast länk till Handelsbankens sida för podden
+(`handelsbanken.se/sv/foretag/kund-hos-oss/nyhetsbrev/morgonrapport`), utan dagens titel. Poddens flöde och ljud
+hämtas inte: flödet ligger hos Spreaker, vars villkor förbjuder automatisk hämtning, nedladdning, bearbetning och
+användning av innehållet med AI. Ljudfilerna på `api.spreaker.com` är dessutom spärrade i robots.txt. Den automatiska
+hämtningen av flödet (`scripts/podcast.py`, 2026-11-11) är borttagen.
 
 ### Morgonrapport (`scripts/morning.py`)
 

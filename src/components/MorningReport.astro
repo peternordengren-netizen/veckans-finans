@@ -43,20 +43,15 @@ const signedPp = (v: number) => `${pp.format(v)} procentenheter`;
 const meetings = report.reports_today.filter((e) => e.kind === "stämma");
 // Kursdatumet kommer ur datan; är det inte förra handelsdagen (Yahoo saknade gårdagens kurser) varnas det.
 const priceStale = !!report.price.expected_day && report.price.day !== report.price.expected_day;
+// Fast länk till Handelsbankens sida för podden Morgonrapporten (kontrollerad 2026-11-11). Poddens flöde hämtas inte:
+// Spreakers villkor förbjuder automatisk hämtning av innehållet.
+const HB_MORGONRAPPORT_URL = "https://www.handelsbanken.se/sv/foretag/kund-hos-oss/nyhetsbrev/morgonrapport";
 ---
 
 <div class:list={["morning", `level-${level}`]}>
-  {
-    report.podcast?.episode && (
-      <p class="podcast">
-        Dagens podd, {report.podcast.show}:{" "}
-        <a href={report.podcast.episode.url} rel="noopener">{report.podcast.episode.title}</a>
-        <span class="podcast-time">
-          {" "}kl. {new Date(report.podcast.episode.published).toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Stockholm" })}
-        </span>
-      </p>
-    )
-  }
+  <p class="podcast">
+    Handelsbankens podd <a href={HB_MORGONRAPPORT_URL} rel="noopener">Morgonrapporten</a> (morgonmöte med Makroanalys)
+  </p>
   <nav class="toc" aria-label="Morgonrapportens innehåll">
     {results && <a href="#utfall">Utfall <span class="n">{results.reports.length}</span></a>}
     {reaction && <a href="#kursreaktion">Kursreaktion <span class="n">{reaction.companies.length}</span></a>}
@@ -528,13 +523,9 @@ const priceStale = !!report.price.expected_day && report.price.day !== report.pr
     font-size: 0.875rem;
     max-width: 75ch;
   }
-  /* Dagens avsnitt av Handelsbankens podd, överst i morgonrapporten. */
+  /* Fast länk till Handelsbankens podd Morgonrapporten, överst i morgonrapporten. */
   .podcast {
     margin: 0 0 8px;
     font-size: 0.9rem;
-  }
-  .podcast-time {
-    color: var(--muted);
-    font-size: 0.8rem;
   }
 </style>

@@ -1,5 +1,4 @@
-"""Tester för Handelsbanken-rapporterna som laddas ner för hand (scripts/hb_manual.py) och poddens avsnitt
-(scripts/podcast.py). Påhittade rapporter, bolag och avsnitt."""
+"""Tester för Handelsbanken-rapporterna som laddas ner för hand (scripts/hb_manual.py). Påhittade rapporter och bolag."""
 
 import json
 import sys
@@ -13,7 +12,6 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import hb_manual  # noqa: E402
-import podcast  # noqa: E402
 from validate import Instrument  # noqa: E402
 
 TZ = ZoneInfo("Europe/Stockholm")
@@ -240,35 +238,6 @@ def test_klar_till_radatarepot_och_arbetsfilerna_bort(tmp_path, monkeypatch):
     (hb / f"{fid}.json").write_text(json.dumps({**good_summary(META), "label": "x"}), encoding="utf-8")
     ok, msg = hb_manual.cmd_done(fid, now, raw, hb_dir=hb, work_dir=work, commit=commit)
     assert not ok and "märkningen" in msg and (work / f"{fid}.txt").exists() and len(committed) == 1
-
-
-FEED = b"""<?xml version="1.0" encoding="UTF-8"?>
-<rss version="2.0"><channel><title>Exempelpodden</title>
-<item><title>991111 - Ett lugnt marknadsl\xc3\xa4ge</title><link>https://exempel.test/avsnitt/991111</link>
-<pubDate>Wed, 11 Nov 2099 05:15:14 +0000</pubDate></item>
-<item><title>991110 - Ig\xc3\xa5r</title><link>https://exempel.test/avsnitt/991110</link>
-<pubDate>Tue, 10 Nov 2099 06:11:44 +0000</pubDate></item>
-<item><title>utan datum</title><link>https://exempel.test/x</link></item>
-</channel></rss>"""
-
-
-def test_poddens_avsnitt_i_dag():
-    eps = podcast.episodes(FEED)
-    assert [e["title"] for e in eps] == ["991111 - Ett lugnt marknadsläge", "991110 - Igår"]
-    assert eps[0]["published"] == "2099-11-11T06:15+01:00"  # Stockholmstid
-    ep = podcast.today_episode(FEED, date(2099, 11, 11))
-    assert ep == {"title": "991111 - Ett lugnt marknadsläge", "url": "https://exempel.test/avsnitt/991111",
-                  "published": "2099-11-11T06:15+01:00"}
-    assert podcast.today_episode(FEED, date(2099, 11, 12)) is None
-    calls = []
-    res = podcast.for_morning(date(2099, 11, 11), get=lambda url: calls.append(url) or FEED)
-    assert calls == [podcast.FEED_URL] and res["episode"]["url"].endswith("991111") and res["error"] is None
-
-    def fail(url):
-        raise TimeoutError("timeout")
-
-    res = podcast.for_morning(date(2099, 11, 11), get=fail)
-    assert res["episode"] is None and "TimeoutError" in res["error"]
 
 
 def test_bolagsdata_ur_sidans_filer(tmp_path):
