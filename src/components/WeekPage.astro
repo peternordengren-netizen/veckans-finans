@@ -14,7 +14,6 @@ import CompanyCard from "./CompanyCard.astro";
 import MorningReportView from "./MorningReport.astro";
 import { weekdayDate } from "../lib/calendar";
 import AfternoonReportView from "./AfternoonReport.astro";
-import BollingerCheckView from "./BollingerCheck.astro";
 import {
   formatDate,
   listMorningDates,
@@ -25,7 +24,6 @@ import {
   loadUpdateResults,
   weekLabel,
   type AfternoonReport,
-  type BollingerCheck,
   type MorningReport,
   type WeekView,
 } from "../lib/data";
@@ -39,13 +37,8 @@ interface Props {
   morning?: MorningReport | null;
   /** Startsidan: eftermiddagsuppdateringen, ovanför morgonrapporten. */
   afternoon?: AfternoonReport | null;
-  /** Startsidan: senaste Bollingerkontrollen under handelsdagen, överst. */
-  bollinger?: BollingerCheck | null;
 }
-const { view, weeks, morning = null, afternoon = null, bollinger = null } = Astro.props;
-const bollingerWhen = bollinger
-  ? `${weekdayDate(bollinger.date).toLowerCase()} kl. ${new Date(bollinger.checked_at).toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Stockholm" })}`
-  : null;
+const { view, weeks, morning = null, afternoon = null } = Astro.props;
 // Swing gäller i dag (uppdateras varje morgon): bara på den senaste veckans sida.
 const swing = view.week === weeks[0] && !view.mock ? loadLatestSwing() : null;
 const afternoonTime = afternoon
@@ -81,31 +74,12 @@ const morningTime = morning
     }
 
     {
-      bollinger && (
-        <section class="morning-top" aria-labelledby="bollinger-rubrik">
+      afternoon && (
+        <section class="morning-top afternoon-top" aria-labelledby="eftermiddag-rubrik">
           <div class="wrap">
             <p class="brand">
               <a href={`${base}/`}>Veckans finans</a>
             </p>
-            <h2 id="bollinger-rubrik" class="morning-title">
-              Bollinger under dagen
-              <span class="morning-time">senaste kontrollen {bollingerWhen}</span>
-            </h2>
-            <BollingerCheckView check={bollinger} />
-          </div>
-        </section>
-      )
-    }
-
-    {
-      afternoon && (
-        <section class="morning-top afternoon-top" aria-labelledby="eftermiddag-rubrik">
-          <div class="wrap">
-            {!bollinger && (
-              <p class="brand">
-                <a href={`${base}/`}>Veckans finans</a>
-              </p>
-            )}
             <h2 id="eftermiddag-rubrik" class="morning-title">
               Eftermiddag {weekdayDate(afternoon.date).toLowerCase()}
               <span class="morning-time">uppdaterad kl. {afternoonTime}</span>
@@ -120,7 +94,7 @@ const morningTime = morning
       morning && (
         <section class="morning-top" aria-labelledby="morgon-rubrik">
           <div class="wrap">
-            {!afternoon && !bollinger && (
+            {!afternoon && (
               <p class="brand">
                 <a href={`${base}/`}>Veckans finans</a>
               </p>

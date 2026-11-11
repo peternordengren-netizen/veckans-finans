@@ -1,15 +1,15 @@
 ﻿# Bollingerkontrollen under handelsdagen (scripts/bollinger.py, utan Claude), en Windows-notis och bygget av sidan
-# ("Bollinger" överst på startsidan).
+# (fliken Swing: Bollinger, status i dag och RSI för strategikandidaterna).
 #
 # Körs av den schemalagda uppgiften VeckansFinansBollinger vardagar 09:20 och 13:20 (-Scheduled).
 # - Ingen börsdag (helg eller svensk börshelgdag): gör ingenting.
 # - -Scheduled: bara mellan 09:00 och 17:30, så att en körning som tas igen efter att datorn varit
 #   avstängd inte visar en kontroll utanför handelstid.
-# - Notisen listar bolagen vid eller över det övre bandet och, separat, de inom 1 % under det, och säger att
-#   kurserna är fördröjda ca 15 minuter. Ett eget avsnitt listar pullback-kandidaterna (strategin Pullback i
-#   trend i fliken Swing) vid eller över övre bandet, med avståndet dit i R, och kandidaternas ändrade
-#   "Status i dag" sedan föregående kontroll (väntar på trigger, trigger bruten, sen, ogiltig), och samma för
-#   strategin Rekyl efter Bollingerutbrott när den har kandidater. Ett klick öppnar sidan.
+# - Notisen gäller bara kandidaterna i strategierna Pullback i trend och Rekyl efter Bollingerutbrott (fliken
+#   Swing): deras ändrade "Status i dag" sedan föregående kontroll (väntar på trigger, trigger bruten, sen,
+#   ogiltig) och de som ligger vid eller över övre bandet, med avståndet dit i R. Den säger att kurserna är
+#   fördröjda ca 15 minuter. Ett klick öppnar sidan. (Listorna över alla bolag vid bandet finns kvar i
+#   kontrollfilen men visas inte sedan 2026-11-11.)
 # - Bygget uppdaterar kolumnerna "Bollinger" och "Status i dag" i fliken Swing med kontrollens kurser och tid.
 # - Logg i logs/bollinger/<datum>.log.
 #
@@ -57,39 +57,40 @@ if ($code -ne 0) {
 $latest = Get-ChildItem (Join-Path $Root "data\bollinger") -Filter "*.json" | Sort-Object Name | Select-Object -Last 1
 $data = Get-Content $latest.FullName -Raw -Encoding UTF8 | ConvertFrom-Json
 
-function NameList($rows, [int]$max = 8) {
-    $names = @($rows | ForEach-Object { "{0} ({1:+0.0;-0.0;0.0} %)" -f $_.name, $_.vs_upper_pct })
-    if ($names.Count -eq 0) { return "inga" }
-    $more = if ($names.Count -gt $max) { " och $($names.Count - $max) till" } else { "" }
-    return (($names | Select-Object -First $max) -join ", ") + $more
-}
 function Esc([string]$s) { [Security.SecurityElement]::Escape($s) }
 
-$time = ([datetime]$data.checked_at).ToString("HH:mm")
-$title = "Bollinger kl. $time - övre bandet (20 d, 2 std)"
-$over = "Vid eller över: " + (NameList $data.over)
-$near = "Inom 1 % under: " + (NameList $data.near)
-# Eget avsnitt: pullback-kandidaterna (strategin Pullback i trend) vid eller över övre bandet, med avståndet i R.
-$pbText = if ($null -eq $data.pullback) { "Pullback-kandidater: ingen swingfil för i dag." } else {
-    $hit = @($data.pullback.rows | Where-Object { $_.at_upper })
+# En strategis kandidater vid eller över övre bandet, med avståndet dit i R ("Hoist (0,6 R över)").
+function UpperList($section) {
     $sv = [Globalization.CultureInfo]::GetCultureInfo("sv-SE")
-    $names = @($hit | ForEach-Object {
-        # Eget namn: ForEach-Object körs i skriptets scope, och $over är listan "Vid eller över" i notisen.
+    $names = @($section.rows | Where-Object { $_.at_upper } | ForEach-Object {
         $overR = -[double]$_.upper_r  # vid eller över bandet: upper_r <= 0
         $where = if ($null -eq $_.upper_r) { "" } elseif ([math]::Round($overR, 1) -eq 0) { " (vid bandet)" } else { " ({0} R över)" -f $overR.ToString("0.0", $sv) }
         "$($_.name)$where"
     })
-    $list = if ($names.Count -eq 0) { "inga" } else { $names -join ", " }
-    "Pullback-kandidater vid övre bandet: $list (av $($data.pullback.candidates))."
+    if ($names.Count -eq 0) { return "inga" }
+    return $names -join ", "
 }
-# Status i dag för pullback-kandidaterna: ändringarna sedan föregående kontroll (bollinger.py status_notice).
-$statusText = if ($null -ne $data.pullback -and $data.pullback.notice) { "$($data.pullback.notice) " } else { "" }
-# Samma för Rekyl efter Bollingerutbrott, bara när strategin har kandidater med kurs i dag.
-if ($null -ne $data.bbrekyl -and @($data.bbrekyl.rows).Count -gt 0) {
-    $statusText += "Rekyl efter Bollingerutbrott: $($data.bbrekyl.notice) "
+
+$time = ([datetime]$data.checked_at).ToString("HH:mm")
+$title = "Swing kl. $time - strategikandidaterna"
+# Bara kandidaterna i de två strategierna: status i dag (ändringar sedan föregående kontroll) och övre bandet.
+$strategies = @(
+    @{ Name = "Pullback i trend"; Section = $data.pullback },
+    @{ Name = "Rekyl efter Bollingerutbrott"; Section = $data.bbrekyl }
+)
+$statusParts = @()
+$upperParts = @()
+foreach ($s in $strategies) {
+    if ($null -eq $s.Section -or @($s.Section.rows).Count -eq 0) { continue }
+    $statusParts += "$($s.Name): $($s.Section.notice)"
+    $upperParts += "$($s.Name) vid övre bandet: $(UpperList $s.Section) (av $($s.Section.candidates))."
 }
+$statusText = if ($statusParts.Count -gt 0) { $statusParts -join " " } elseif ($null -eq $data.pullback) {
+    "Ingen swingfil för i dag (inga kandidater)."
+} else { "Inga kandidater med kurs i dag." }
+$upperText = $upperParts -join " "
 $foot = $data.delay_note
-Log "Notis: $over | $near | $statusText$pbText"
+Log "Notis: $statusText | $upperText"
 
 try {
     [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
@@ -99,8 +100,8 @@ try {
   <visual>
     <binding template="ToastGeneric">
       <text>$(Esc $title)</text>
-      <text>$(Esc "$over. $near.")</text>
-      <text>$(Esc "$statusText$pbText $foot")</text>
+      <text>$(Esc $statusText)</text>
+      <text>$(Esc "$upperText $foot".Trim())</text>
     </binding>
   </visual>
 </toast>

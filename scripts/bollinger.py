@@ -1,7 +1,9 @@
-"""Bollingerkontroll under handelsdagen: bolag vid eller över det övre Bollingerbandet, och inom 1 % under det.
+"""Bollingerkontroll under handelsdagen: bolag vid eller över det övre Bollingerbandet, och inom 1 % under det, och
+läget för strategikandidaterna i fliken Swing.
 
 Körs av scripts/run_bollinger.ps1 (schemalagd vardagar 09:20 och 13:20, utan Claude), som visar en Windows-notis
-och bygger om sidan ("Bollinger" överst på startsidan). Ett informationsverktyg: listan beskriver var kursen ligger
+om strategikandidaterna och bygger om sidan (fliken Swing). Listorna över alla bolag ("over", "near") sparas i
+filen men visas inte sedan 2026-11-11. Ett informationsverktyg: listan beskriver var kursen ligger
 mot bandet och är ingen uppmaning.
 
 - Kurserna: ett batchanrop till Yahoo (scripts/signals.yahoo_bars) för alla bolag i instruments.csv. Dagens senaste

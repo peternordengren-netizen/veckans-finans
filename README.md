@@ -565,9 +565,9 @@ Uppgiften **VeckansFinansBollinger** kör vardagar 09:20 och 13:20, utan Claude.
   det står i notisen och på sidan.
 - Övre bandet: snittet av de 20 senaste stängningskurserna plus 2 standardavvikelser (populationens), med den
   aktuella kursen som den tjugonde.
-- Windows-notisen listar bolagen vid eller över bandet och, separat, de som ligger högst 1 % under. Ett eget
-  avsnitt listar pullback-kandidaterna vid eller över övre bandet med avståndet i R ("3,4 R över", "vid bandet").
-  Ett klick öppnar sidan.
+- Windows-notisen gäller bara kandidaterna i strategierna Pullback i trend och Rekyl efter Bollingerutbrott:
+  ändringarna i "Status i dag" sedan föregående kontroll, och de som ligger vid eller över övre bandet med
+  avståndet i R ("3,4 R över", "vid bandet"). Ett klick öppnar sidan.
 - **Pullback-kandidaterna** är bolagen med en etikett ur strategin Pullback i trend i dagens swingfil. För dem räknas
   båda banden med dagens kurs. Resultatet blir kolumnen "Bollinger" i fliken Swing när strategin är vald, med
   kontrollens tid. Kolumnen visar:
@@ -590,7 +590,9 @@ Uppgiften **VeckansFinansBollinger** kör vardagar 09:20 och 13:20, utan Claude.
   Ogiltiga kandidater sorteras sist i tabellen, oavsett kolumn. Notisen listar ändringarna sedan föregående kontroll
   samma dag (vid 09:20 sedan morgonen, då alla räknas som väntande). Valideringen räknar om statusen ur de sparade
   kurserna. Före 09:20 står "–".
-- Senaste kontrollen visas överst på startsidan, med tid (`data/bollinger/<datum>-<hhmm>.json`, git-ignorerad).
+- Kontrollen sparas i `data/bollinger/<datum>-<hhmm>.json` (git-ignorerad) och uppdaterar fliken Swing. Listorna
+  över alla bolag vid eller nära övre bandet (`over`, `near`) finns kvar i filen. Avsnittet "Bollinger under dagen"
+  på startsidan och listorna i notisen togs bort 2026-11-11; ⚠ vid varje kandidat i Swing finns kvar.
 - Inget körs på börsens stängda dagar eller utanför 09:00–17:30. En missad kontroll tas inte igen senare.
 - Logg i `logs/bollinger/`.
 
