@@ -864,6 +864,59 @@ export function loadHbSummaries(): HbSummary[] {
   return out;
 }
 
+/** Uppföljningen av ett fall (scripts/swing_eval.py follow_up). */
+export interface SwingEvalFollow {
+  day: string; move_pct: number; vs_index_pp: number; max_high_r: number | null; volume_ratio: number | null;
+}
+/** Andel med 95 % konfidensintervall (Wilson). */
+export interface SwingEvalShare { k: number; n: number; share: number | null; ci: [number, number] | null }
+export interface SwingEvalPattern {
+  feature: string; text: string; cases: number; top: SwingEvalShare; other: SwingEvalShare; diff_pp: number | null;
+  weeks_held: number; held: boolean;
+}
+/** Den dagliga utvärderingen i fliken Swing (data/raw/swing_eval/summary.json, scripts/swing_eval.py). */
+export interface SwingEval {
+  generated_at: string;
+  period: { start: string | null; end: string | null };
+  snapshots: number; entries: number;
+  thresholds: { top_share: number; top_n: number; hold_weeks: number; min_feature_cases: number; horizons: number[];
+    volume_high: number; volume_low: number; rsi_high: number; rsi_low: number; stoch_high: number; stoch_low: number;
+    support_r: number; resistance_r: number };
+  feature_texts: Record<string, string>;
+  top: {
+    day: string; followed_day: string; cases: number;
+    rows: {
+      ticker: string; name: string; sector: string | null; strategies: string[]; strong: boolean; signals: string[];
+      labels: string[]; criteria: Record<string, string[]>; volume_ratio: number | null; rsi14: number | null;
+      stoch_k: number | null; stoch_d: number | null; r: number | null; support_r: number | null;
+      resistance_r: number | null; report_5d: boolean; features: string[]; follow: SwingEvalFollow;
+    }[];
+  } | null;
+  patterns: Record<string, { horizon: number; cases: number; top_n: number; weeks: string[]; features: SwingEvalPattern[] }>;
+  note: string;
+  /** Claudes senaste veckotext (data/raw/swing_eval/notes/<vecka>.json), märkt som tolkning. */
+  weekly?: { week: string; label: string; text: string } | null;
+}
+
+/** Utvärderingen ur rådatarepot med den senaste veckotexten; null i mockläget eller utan underlag. */
+export function loadSwingEval(): SwingEval | null {
+  const dir = join(DATA, "raw", "swing_eval");
+  const path = join(dir, "summary.json");
+  if (IS_MOCK || !existsSync(path)) return null;
+  try {
+    const out = readJson<SwingEval>(path);
+    const notes = join(dir, "notes");
+    const latest = existsSync(notes)
+      ? readdirSync(notes).filter((f) => /^\d{4}-W\d{2}\.json$/.test(f)).sort().pop()
+      : undefined;
+    out.weekly = latest ? readJson<SwingEval["weekly"]>(join(notes, latest)) : null;
+    return out;
+  } catch (err) {
+    console.warn(`[veckans-finans] kunde inte läsa ${path}, visar Swing utan utvärdering:`, err);
+    return null;
+  }
+}
+
 function readJson<T>(path: string): T {
   return JSON.parse(readFileSync(path, "utf-8")) as T;
 }

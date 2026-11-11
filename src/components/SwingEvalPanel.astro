@@ -1,0 +1,244 @@
+---
+/**
+ * Den dagliga utvärderingen överst i fliken Swing (scripts/swing_eval.py, data/raw/swing_eval/): "Gårdagens bästa
+ * rörelser" (topp 10 mot index efter 1 dag) och "Mönster" (kännetecken bland de 20 % med störst rörelse mot index
+ * jämfört med övriga, efter 3 och 5 dagar). Beskrivande, inga uppmaningar.
+ */
+import type { SwingEval } from "../lib/data";
+import { shortDate } from "../lib/format";
+import { signedPct } from "../lib/signals";
+import { ciShareText, evalName, evalTraits, ppText, rText } from "../lib/swing";
+
+interface Props {
+  ev: SwingEval;
+}
+const { ev } = Astro.props;
+const th = ev.thresholds;
+const texts = ev.feature_texts;
+const topPct = Math.round(th.top_share * 100);
+const day = (iso: string | null) => (iso ? `${shortDate(iso)} ${iso.slice(0, 4)}` : "–");
+const one = new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 1 });
+const horizons = Object.keys(ev.patterns).sort((a, b) => Number(a) - Number(b));
+---
+
+<div class="swing-eval">
+  {
+    ev.top && (
+      <section class="eval-top" aria-labelledby="eval-top">
+        <h3 id="eval-top">Gårdagens bästa rörelser</h3>
+        <p class="note">
+          De {ev.top.rows.length} med störst rörelse mot index en handelsdag efter signaldagen {day(ev.top.day)} (uppföljd
+          {" "}{day(ev.top.followed_day)}), bland alla {ev.top.cases} bolag som då var kandidater i någon av de tre
+          strategierna eller hade starka signaler. Det beskriver vad som hänt, inte varför, och är ingen uppmaning.
+        </p>
+        <div class="hist-wrap">
+          <table class="hist">
+            <thead>
+              <tr>
+                <th scope="col">Bolag</th>
+                <th scope="col" class="num">Mot index</th>
+                <th scope="col" class="num">Rörelse</th>
+                <th scope="col" class="num">Högsta high</th>
+                <th scope="col" class="num">Omsättning</th>
+                <th scope="col">Urval och etiketter</th>
+                <th scope="col">Kännetecken på signaldagen</th>
+              </tr>
+            </thead>
+            <tbody>
+              {ev.top.rows.map((r) => (
+                <tr>
+                  <th scope="row">
+                    <span class="name">{r.name}</span> <span class="ticker">{r.ticker}</span>
+                  </th>
+                  <td class="num">{ppText(r.follow.vs_index_pp)}</td>
+                  <td class="num">{signedPct(r.follow.move_pct)}</td>
+                  <td class="num">{rText(r.follow.max_high_r)}</td>
+                  <td class="num">{r.follow.volume_ratio === null ? "–" : `${one.format(r.follow.volume_ratio)}×`}</td>
+                  <td class="wrap">
+                    {[...r.strategies.map((s) => evalName(`strategi:${s}`, texts)), ...(r.strong ? ["Starka signaler"] : [])].join(", ")}
+                    {r.labels.length > 0 && <span class="sub">{r.labels.map((l) => evalName(`etikett:${l}`, texts)).join(", ")}</span>}
+                    {Object.entries(r.criteria).map(([k, xs]) =>
+                      xs.length > 0 && <span class="sub">✓ {xs.map((x) => evalName(`kriterium:${k}:${x}`, texts).replace(/^Kriterium \([^)]*\): /, "")).join("; ")}</span>,
+                    )}
+                    {r.signals.length > 0 && <span class="sub">veckosignaler: {r.signals.join(", ")}</span>}
+                  </td>
+                  <td class="wrap">
+                    {r.sector && <span>{evalName(`sektor:${r.sector}`, texts)}</span>}
+                    <span class="sub">{evalTraits(r).join(" · ") || "–"}</span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p class="note">
+          Mot index: rörelsen minus OMX Stockholm PI:s, i procentenheter. Högsta high: dagens högsta kurs mot signaldagens
+          stängning, i strategins R ("–" utan strategi). Omsättning: dagens mot snittet för de {20} handelsdagarna före
+          signaldagen.
+        </p>
+      </section>
+    )
+  }
+
+  <details class="eval-patterns">
+    <summary>
+      <strong>Mönster</strong>: kännetecken bland de {topPct} % största rörelserna mot index, efter{" "}
+      {horizons.join(" och ")} dagar ({ev.entries} fall, {day(ev.period.start)} – {day(ev.period.end)})
+    </summary>
+    <p class="note">
+      Varje morgon sparas alla gårdagens kandidater i Pullback i trend, Rekyl efter Bollingerutbrott och Momentum-utbrott
+      (VCP) och alla bolag med starka signaler (samma regel som fliken Signaler, senaste veckans signalfil), med sina
+      kännetecken, och de följs upp efter 1, 3 och 5 handelsdagar. För varje kännetecken med minst {th.min_feature_cases}
+      {" "}fall jämförs andelen som hade det bland de {topPct} % med störst rörelse mot index (de bästa) med andelen bland
+      övriga, med antal och 95 % konfidensintervall (Wilson): spannet som andelen med stor sannolikhet ligger inom givet
+      antalet fall. Ett mönster har hållit en vecka när andelen bland de {topPct} % var högre än bland övriga i veckans
+      fall (de {topPct} % räknade inom veckan); ✓ efter {th.hold_weeks} veckor i rad. {ev.note}
+    </p>
+    {
+      ev.weekly && (
+        <div class="weekly">
+          <p class="weekly-label">
+            <strong>{ev.weekly.label}</strong>, vecka {ev.weekly.week.slice(-2).replace(/^0/, "")} (Claude, inte fakta;
+            talen är kontrollerade mot underlaget)
+          </p>
+          <p>{ev.weekly.text}</p>
+        </div>
+      )
+    }
+    {horizons.map((h) => {
+      const p = ev.patterns[h];
+      return (
+        <section class="history" aria-label={`Mönster efter ${h} dagar`}>
+          <h4>
+            Efter {h} handelsdagar: {p.cases} fall, varav {p.top_n} bland de {topPct} % största rörelserna mot index
+            {p.weeks.length > 0 && ` (${p.weeks.length} ${p.weeks.length === 1 ? "vecka" : "veckor"})`}
+          </h4>
+          {p.features.length === 0 ? (
+            <p class="note">Inga kännetecken med minst {th.min_feature_cases} uppföljda fall än.</p>
+          ) : (
+            <div class="hist-wrap">
+              <table class="hist">
+                <thead>
+                  <tr>
+                    <th scope="col">Kännetecken</th>
+                    <th scope="col" class="num">Fall</th>
+                    <th scope="col" class="num">Bland de {topPct} % bästa</th>
+                    <th scope="col" class="num">Bland övriga</th>
+                    <th scope="col" class="num">Skillnad</th>
+                    <th scope="col" class="num">Hållit</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {p.features.map((f) => (
+                    <tr class:list={{ held: f.held }}>
+                      <th scope="row">{f.text}</th>
+                      <td class="num">{f.cases}</td>
+                      <td class="num">{ciShareText(f.top.k, f.top.n, f.top.ci)}</td>
+                      <td class="num">{ciShareText(f.other.k, f.other.n, f.other.ci)}</td>
+                      <td class="num">{ppText(f.diff_pp)}</td>
+                      <td class="num">
+                        {f.held ? <span aria-label={`hållit minst ${th.hold_weeks} veckor`}>✓ </span> : null}
+                        {f.weeks_held} {f.weeks_held === 1 ? "vecka" : "veckor"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      );
+    })}
+  </details>
+</div>
+
+<style>
+  .swing-eval {
+    margin: 0 0 20px;
+  }
+  .swing-eval h3 {
+    margin: 0 0 6px;
+    font-size: 1.0625rem;
+  }
+  .swing-eval h4 {
+    margin: 12px 0 6px;
+    font-size: 0.9375rem;
+  }
+  .note {
+    color: var(--muted);
+    font-size: 0.875rem;
+    max-width: 80ch;
+  }
+  .hist-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 0.875rem;
+    font-variant-numeric: tabular-nums;
+  }
+  th,
+  td {
+    padding: 6px 10px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+    vertical-align: top;
+  }
+  tbody tr:last-child > * {
+    border-bottom: 0;
+  }
+  thead th {
+    background: var(--surface-2);
+  }
+  tbody th {
+    font-weight: normal;
+    white-space: normal;
+  }
+  .num {
+    text-align: right;
+  }
+  .wrap {
+    white-space: normal;
+    min-width: 14rem;
+  }
+  .sub {
+    display: block;
+    color: var(--muted);
+    font-size: 0.8125rem;
+  }
+  .name {
+    font-weight: 600;
+  }
+  .ticker {
+    font-size: 0.75rem;
+    color: var(--muted);
+  }
+  tr.held > * {
+    font-weight: 600;
+  }
+  .eval-patterns {
+    margin-top: 16px;
+  }
+  .eval-patterns summary {
+    cursor: pointer;
+  }
+  .weekly {
+    margin: 10px 0;
+    padding: 8px 12px;
+    border-left: 3px solid var(--border);
+    background: var(--surface-2);
+    max-width: 80ch;
+  }
+  .weekly p {
+    margin: 4px 0;
+  }
+  .weekly-label {
+    font-size: 0.8125rem;
+    color: var(--muted);
+  }
+</style>

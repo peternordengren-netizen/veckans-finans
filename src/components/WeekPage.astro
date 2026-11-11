@@ -8,6 +8,7 @@ import AnalysisPanel from "./AnalysisPanel.astro";
 import CalendarPanel from "./CalendarPanel.astro";
 import SignalsPanel from "./SignalsPanel.astro";
 import SwingPanel from "./SwingPanel.astro";
+import SwingEvalPanel from "./SwingEvalPanel.astro";
 import HbSummaryView from "./HbSummary.astro";
 import type { HbSummary as HbSummaryData } from "../lib/hb";
 import ResultsPanel from "./ResultsPanel.astro";
@@ -22,6 +23,7 @@ import {
   loadAfternoonBefore,
   loadMorning,
   loadLatestSwing,
+  loadSwingEval,
   loadResults,
   loadUpdateResults,
   weekLabel,
@@ -45,6 +47,8 @@ interface Props {
 const { view, weeks, morning = null, afternoon = null, hb = [] } = Astro.props;
 // Swing gäller i dag (uppdateras varje morgon): bara på den senaste veckans sida.
 const swing = view.week === weeks[0] && !view.mock ? loadLatestSwing() : null;
+// Den dagliga utvärderingen överst i Swing (data/raw/swing_eval/, scripts/swing_eval.py).
+const swingEval = swing ? loadSwingEval() : null;
 const afternoonTime = afternoon
   ? new Date(afternoon.generated_at).toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Stockholm" })
   : null;
@@ -417,6 +421,7 @@ const morningTime = morning
         swing && (
           <section class="sector" id="sektor-swing" role="tabpanel" aria-labelledby="tab-swing" tabindex="0">
             <h2>Swing</h2>
+            {swingEval && <SwingEvalPanel ev={swingEval} />}
             <SwingPanel swing={swing} />
           </section>
         )

@@ -324,3 +324,32 @@ export function chipText(label: string, name: string, crossDays: number | null |
   }
   return name;
 }
+
+/** Utvärderingen (scripts/swing_eval.py): kännetecknets text utan prefix ("Strategi: Pullback i trend" → "Pullback i trend"). */
+export function evalName(key: string, texts: Record<string, string>): string {
+  const t = texts[key] ?? key;
+  return t.replace(/^(Strategi|Etikett|Sektor|Veckosignal): /, "");
+}
+
+/** Procentenheter med tecken: "+1,2 pe", "−0,4 pe"; "–" utan värde. */
+export function ppText(v: number | null | undefined): string {
+  if (v === null || v === undefined) return "–";
+  return `${new Intl.NumberFormat("sv-SE", { minimumFractionDigits: 1, maximumFractionDigits: 1, signDisplay: "exceptZero" }).format(v)} pe`;
+}
+
+/** Utvärderingens kännetecken för en rad i "Gårdagens bästa rörelser": RSI, Stoch RSI, stöd och motstånd i R,
+ *  omsättning, rapport. */
+export function evalTraits(r: {
+  rsi14: number | null; stoch_k: number | null; support_r: number | null; resistance_r: number | null;
+  volume_ratio: number | null; report_5d: boolean;
+}): string[] {
+  const one = new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 1 });
+  const out: string[] = [];
+  if (r.rsi14 !== null) out.push(`RSI(14) ${one.format(r.rsi14)}`);
+  if (r.stoch_k !== null) out.push(`Stoch RSI ${one.format(r.stoch_k)}`);
+  if (r.volume_ratio !== null) out.push(`omsättning ${one.format(r.volume_ratio)}× snittet`);
+  if (r.support_r !== null) out.push(`stöd ${one.format(r.support_r)} R`);
+  if (r.resistance_r !== null) out.push(`motstånd ${one.format(r.resistance_r)} R`);
+  if (r.report_5d) out.push("rapport senaste 5 dagarna");
+  return out;
+}

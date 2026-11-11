@@ -14,6 +14,9 @@
 #      utlösare, inom gränsen för försök nedan.
 #   3b. Handelsbanken-rapporter i data\hb_manual\ (run_hb.ps1): en ny fil sammanfattas en gång; körs vid varje
 #      utlösare, också när morgonkörningen redan är klar
+#   3c. Veckans text om Swing-utvärderingen (run_swing_note.ps1, Claude): veckans första handelsdag när texten
+#      saknas (normalt måndag), högst två försök; också när morgonkörningen redan är klar. Själva
+#      utvärderingen (ögonblicksbild och uppföljning) görs av morning.py utan Claude.
 #   4. npm run build                    om något steg kördes
 # - Saknas förra handelsdagens kurser eller nätverket skrivs morgonrapporten ändå, men med "retry"
 #   (morning.py exit 2), felet loggas och nästa utlösare gör om den. Samma för förra dagens
@@ -87,6 +90,17 @@ function Build {
     & cmd.exe /c "npm run build > `"$BuildLog`" 2>&1"
     Log "npm run build: exit $LASTEXITCODE (logg: $BuildLog)"
 }
+# 3c. Veckans text om Swing-utvärderingen (inget körs när texten finns eller underlag saknas).
+function SwingNote {
+    if ((Attempts "Startar swing-text") -ge $MaxAttempts) { return $false }
+    & cmd.exe /c ".venv\Scripts\python.exe scripts\swing_eval.py --behover-text > nul 2>&1"
+    if ($LASTEXITCODE -ne 0) { return $false }
+    # Loggraderna får inte bli funktionens returvärde (de står i loggfilen).
+    Log "Startar swing-text" | Out-Null
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "run_swing_note.ps1") |
+        ForEach-Object { Log "  $_" } | Out-Null
+    return ($LASTEXITCODE -eq 10)
+}
 # 3b. Handelsbanken-rapporter som laddats ner för hand: körs vid varje utlösare (inget händer utan nya filer).
 & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "run_hb.ps1") | ForEach-Object { Log "  $_" }
 $hbAdded = $LASTEXITCODE -eq 10
@@ -101,6 +115,7 @@ $needResults = -not (ResultsComplete) -and
 & cmd.exe /c ".venv\Scripts\python.exe scripts\afternoon.py --forra-om-saknas --klar > nul 2>&1"
 $needReaction = $LASTEXITCODE -eq 4 -and (Attempts "Startar kursreaktion") -lt $MaxFetchAttempts
 if (-not $needReport -and (Test-Path $Report) -and (Test-Path $Consensus) -and -not $needResults -and -not $needReaction) {
+    if (SwingNote) { $hbAdded = $true }
     if ($hbAdded) { Build }
     Write-Output "Dagens morgonkörning är klar (eller har gjort sina försök) - inget att göra$(if ($hbAdded) { ' utöver Handelsbanken' })."
     exit 0
@@ -164,6 +179,9 @@ if ($needResults) {
     }
     $ran = $true
 }
+
+# 3c. Veckans text om Swing-utvärderingen (efter morning.py, som skriver underlaget).
+if (SwingNote) { $ran = $true }
 
 # 4. Bygget.
 if ($ran) { Build }

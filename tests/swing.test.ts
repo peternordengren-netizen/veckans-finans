@@ -4,7 +4,7 @@ import { test } from "node:test";
 
 import {
   decidedShareText, isPullbackLabel, labelClass, labelCounts, levelText, netText, priceText, reportText, riskText, shareText,
-  altStopText, bbLevelText, ciShareText, breakoutLines, criteriaLines, depthsText, momentumText, todayVolumeText, volumeRuleLines, missingText, resistanceRText, todayInvalid, todayLines, todayOrder, TODAY_STATUS,
+  altStopText, bbLevelText, ciShareText, evalName, evalTraits, ppText, breakoutLines, criteriaLines, depthsText, momentumText, todayVolumeText, volumeRuleLines, missingText, resistanceRText, todayInvalid, todayLines, todayOrder, TODAY_STATUS,
   bollingerSourceText, chipText, pctBText, rankText, rankTitle, rText, signalText, srDistText, srInsideText, srLevelText, upperRText, vsBaseText,
 } from "../src/lib/swing.ts";
 
@@ -205,4 +205,17 @@ test("rang: siffra för de fem första, antal kriterier och tooltip", () => {
   assert.equal(rankTitle({ a: true, b: false }, texts),
     "Uppfyllda kriterier (1 av 2): Vändsignal. Inte uppfyllda: Stoppet högst 1,5 ATR bort. Räknat på gårdagens stängning.");
   assert.equal(rankTitle({ a: false, b: false }, texts).startsWith("Uppfyllda kriterier (0 av 2): inga."), true);
+});
+test("Swing-utvärderingen: texter", () => {
+  const texts = { "strategi:vcp": "Strategi: Momentum-utbrott (VCP)", "etikett:utbrott": "Etikett: Utbrott" };
+  assert.equal(evalName("strategi:vcp", texts), "Momentum-utbrott (VCP)");
+  assert.equal(evalName("etikett:utbrott", texts), "Utbrott");
+  assert.equal(evalName("okänd", texts), "okänd");
+  assert.equal(ppText(1.25), "+1,3 pe");
+  assert.equal(ppText(-0.4), "−0,4 pe");
+  assert.equal(ppText(null), "–");
+  assert.deepEqual(
+    evalTraits({ rsi14: 72.3, stoch_k: null, support_r: 0.5, resistance_r: 3, volume_ratio: 1.8, report_5d: true }),
+    ["RSI(14) 72,3", "omsättning 1,8× snittet", "stöd 0,5 R", "motstånd 3 R", "rapport senaste 5 dagarna"],
+  );
 });

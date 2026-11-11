@@ -784,6 +784,35 @@ både stoppet och målet räknas stoppet. Dessutom utvecklingen mot index (^OMXS
 och 60 handelsdagar från signaldagens stängning. Dagens bevakningslista används, så bolag som avnoterats saknas
 (överlevnadsbias), och RS jämförs bara mot listan. Utan courtage, spread och glidning.
 
+#### Daglig utvärdering (`scripts/swing_eval.py`)
+
+Överst i fliken Swing. Underlaget finns bara i rådatarepot (`data/raw/swing_eval/`), aldrig i det här repot.
+1. **Varje morgon** (`morning.py`, efter swingfilen, samma hämtning, utan Claude): en ögonblicksbild
+   (`<signaldag>.json`) med ALLA gårdagens kandidater i Pullback i trend, Rekyl efter Bollingerutbrott och
+   Momentum-utbrott (VCP) och ALLA bolag med starka signaler (samma regel som fliken Signaler, ur senaste veckans
+   signalfil före swingfilens datum). Inget urval efter utfall. Kännetecken: strategier, etiketter, uppfyllda
+   rangkriterier, omsättning mot snitt, RSI(14), Stoch RSI, avstånd till stöd och motstånd i R, sektor, rapport de
+   senaste 5 handelsdagarna och veckans signaler. R är strategins (referens − stopp); bolag med bara starka signaler
+   saknar R.
+2. **Uppföljning** efter 1, 3 och 5 handelsdagar: rörelse (justerad stängning), rörelse mot OMX Stockholm PI i
+   procentenheter, högsta high under dagarna i R från signaldagens stängning och snittomsättningen mot de 20 dagarna
+   före signaldagen. Ifyllda värden ändras inte.
+3. **Gårdagens bästa rörelser**: topp 10 mot index efter 1 dag i den senaste ögonblicksbilden med uppföljning, med
+   kännetecken.
+4. **Mönster** (`summary.json`): för varje kännetecken med minst 10 fall, andelen bland de 20 % med störst rörelse
+   mot index jämfört med övriga, efter 3 och 5 dagar, med antal och 95 % konfidensintervall (Wilson). Hållit en
+   vecka: andelen bland de 20 % var högre än bland övriga i veckans fall (de 20 % räknade inom veckan). ✓ efter 4
+   veckor i rad.
+5. **Måndagar** (veckans första handelsdag): `run_swing_note.ps1` (från `run_morning.ps1`) låter Claude
+   (`/swing-utvardering`, Sonnet, läget dontAsk, skriver bara i `data/swing_eval/`) skriva 5–8 meningar märkta
+   "Claudes tolkning". `swing_eval.py --kontrollera` godkänner bara texten när antalet meningar stämmer, inga
+   uppmaningar finns och varje tal finns i `summary.json`; `--klar` flyttar den till `notes/<vecka>.json` i
+   rådatarepot. Högst två försök.
+
+Ögonblicksbilder före införandet (2026-11-11) skapades i efterhand ur de sparade swingfilerna
+(`swing_eval.py --efterhand`, en hämtning). Begränsningar: dagens bevakningslista (överlevnadsbias), fallen
+överlappar i tid och är inte oberoende, utan courtage. Mönstren beskriver vad som hänt, inte vad som kommer att hända.
+
 ## Sidan (Astro)
 
 Kräver Node 22 eller senare.

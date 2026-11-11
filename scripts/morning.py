@@ -445,6 +445,11 @@ def write_swing(today: date, now: datetime, instruments: dict[str, Instrument], 
         out = swing.write(data, instruments)
         if out:
             print(swing.summary(data, out))
+            # Daglig utvärdering (scripts/swing_eval.py): gårdagens kandidater sparas och tidigare följs upp, med samma
+            # hämtning; underlaget går bara till rådatarepot.
+            import swing_eval
+
+            print(swing_eval.morning_update(data, bars, instruments, now))
     except Exception as e:  # noqa: BLE001
         print(f"Swing kunde inte skrivas: {e}", file=sys.stderr)
 
