@@ -1,10 +1,10 @@
 ---
-description: Skriv veckans text (5–8 meningar) om vad Swing-utvärderingens underlag visar, märkt som tolkning
+description: Skriv veckans text (5–8 meningar) om marknadsläget och vad Swing-utvärderingens underlag visar, märkt som tolkning
 argument-hint: "<vecka>, t.ex. 2026-W47"
 ---
 
-Du ska skriva en kort text om vad den dagliga utvärderingen i fliken Swing visar, för Veckans finans. Argument:
-`$ARGUMENTS`, veckan (ISO, t.ex. 2026-W47).
+Du ska skriva en kort text om marknadsläget och vad den dagliga utvärderingen i fliken Swing visar, för Veckans
+finans. Argument: `$ARGUMENTS`, veckan (ISO, t.ex. 2026-W47).
 
 ## Schemalagd körning
 
@@ -13,20 +13,25 @@ Kommandot körs utan att någon tittar på, med behörighetsläget `dontAsk`. Ba
 
 ## Arbetsgång
 
-1. Läs `data/raw/swing_eval/summary.json` (beskrivs i `scripts/swing_eval.py`, punkt 3):
-   - `top`: Gårdagens bästa rörelser (topp 10 mot index efter 1 dag).
-   - `patterns."3"` och `patterns."5"`: för varje kännetecken andelen bland de 20 % med störst rörelse mot index
-     (`top.share`, `top.k` av `top.n`, 95 % intervall `top.ci`) jämfört med övriga (`other`), skillnaden i
-     procentenheter (`diff_pp`), antal fall (`cases`) och hur många veckor i rad mönstret hållit (`weeks_held`,
-     `held` = minst 4).
-   - `period`, `snapshots`, `entries`.
+1. Läs `data/raw/swing_eval/summary.json` (beskrivs i `scripts/swing_eval.py`). Det du behöver:
+   - `market_today`: marknadsläget vid senaste stängningen (`regime_text`; indexet mot 50/200 dagars MA i
+     `index.vs_ma50_pct`/`vs_ma200_pct`; svängningarna `index.vol20`; andelen bolag över 50 MA
+     `breadth.above_ma50_pct` och en vecka tidigare `breadth.week_ago_pct`; `new_highs`/`new_lows`; sektorerna i
+     `sectors` med `rs20_pp`; marknadstecknen i `signs`).
+   - `market_week_ago`: samma en vecka tidigare, och `market_history` dag för dag.
+   - `success_recent`: andelen lyckade fall senaste 4 veckorna (`all`), per marknadsläge (`by_regime`, nycklarna
+     förklaras i `regime_texts`) och per strategi (`by_strategy`), med `successes` av `cases` och 95 % intervall `ci`.
+   - `patterns."2v"`, `"6v"` och `"lage"` (`"3"`/`"5"` dagar): kännetecken bland de 20 % största rörelserna mot index
+     jämfört med övriga (`top.share`, `other.share`, `diff_pp`, `cases`).
    Andelar står som tal mellan 0 och 1; skriv dem i procent (0,31 → 31 %).
-2. Skriv 5–8 meningar på svenska om vad underlaget visar: vilka kännetecken som var vanligare bland de största
-   rörelserna mot index efter 3 och 5 dagar, hur stort underlaget är och hur osäkert det är (breda intervall, få
-   veckor), och vilka mönster som hållit minst 4 veckor (eller att inget gjort det än). Ta med antal fall när du
-   nämner en andel.
-   Skriv lättläst: avrunda andelar till heltal eller en decimal (29,8 % eller 30 %), skriv kännetecknen med vanliga
-   ord utan prefix (fastighetsbolagen, inte "Sektor: Fastigheter"), och ta inte med fler tal än som behövs.
+2. Skriv 5–8 meningar på svenska som beskriver:
+   - **marknadsläget** nu (trend, svängningar, bredd, sektorer),
+   - **vilka typer av lägen och fall som lyckats** de senaste veckorna (andel lyckade per läge och strategi, med antal
+     fall och osäkerhet),
+   - **vad som ändrats** mot en vecka tidigare (läge, bredd, sektorer, marknadstecken).
+   Skriv lättläst: avrunda andelar till heltal eller en decimal, skriv kännetecken och lägen med vanliga ord utan
+   prefix (fastighetsbolagen, inte "Sektor: Fastigheter"), och ta inte med fler tal än som behövs. Ta med antal fall
+   när du nämner en andel.
 3. Skriv filen `data/swing_eval/$ARGUMENTS.json`:
    ```json
    {"week": "$ARGUMENTS", "label": "Claudes tolkning", "summary_generated_at": "<summary.json:s generated_at>",
@@ -43,5 +48,5 @@ Kommandot körs utan att någon tittar på, med behörighetsläget `dontAsk`. Ba
 - Texten är din tolkning, märkt så (`label`), och beskrivande. Använd inte orden köp, sälj, kursmål eller
   rekommendation i någon böjning, och ingen uppmaning. "Bäst" bara i avsnittens namn ("Gårdagens bästa rörelser",
   "de 20 % bästa").
-- Säg inget om framtiden: mönstren beskriver vad som hänt, och fallen är få och överlappar i tid.
+- Säg inget om framtiden: läget och mönstren beskriver vad som hänt, och fallen är få och överlappar i tid.
 - Skriv inget annat än filen ovan.

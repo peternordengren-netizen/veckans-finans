@@ -875,24 +875,55 @@ export interface SwingEvalPattern {
   weeks_held: number; held: boolean;
 }
 /** Den dagliga utvärderingen i fliken Swing (data/raw/swing_eval/summary.json, scripts/swing_eval.py). */
+/** Ett fall i utvärderingen (de fält sidan visar). */
+export interface SwingEvalCase {
+  ticker: string; name: string; sector: string | null; strategies: string[]; strong: boolean; signals: string[];
+  labels: string[]; criteria: Record<string, string[]>; volume_ratio: number | null; rsi14: number | null;
+  stoch_k: number | null; stoch_d?: number | null; r: number | null; support_r: number | null;
+  resistance_r: number | null; report_5d: boolean; features: string[]; regime: string | null;
+}
+/** Marknadsläget vid en stängning (scripts/swing_eval.market_state). */
+export interface SwingEvalMarket {
+  day: string;
+  index: { close: number; ma50: number; ma200: number; vs_ma50_pct: number; vs_ma200_pct: number; vol20: number;
+    change20_pct: number };
+  trend: string; volatility: string; regime: string; regime_text: string; prev_regime: string;
+  breadth: { above_ma50_pct: number | null; week_ago_pct: number | null; change_pp: number | null; companies: number };
+  new_highs: number; new_lows: number;
+  sectors: { sector: string; name: string; companies: number; rs20_pp: number; volume_ratio: number | null }[];
+  signs: { kind: string; text: string }[];
+}
+export interface SwingEvalRate { cases: number; successes: number; share: number | null; ci: [number, number] | null }
+export interface SwingEvalPatterns { horizon: number; cases: number; top_n: number; weeks: string[]; features: SwingEvalPattern[] }
+/** Den dagliga utvärderingen i fliken Swing (data/raw/swing_eval/summary.json, scripts/swing_eval.py). */
 export interface SwingEval {
+  schema_version: number;
   generated_at: string;
   period: { start: string | null; end: string | null };
   snapshots: number; entries: number;
   thresholds: { top_share: number; top_n: number; hold_weeks: number; min_feature_cases: number; horizons: number[];
+    success_r: number; success_pp: number; success_days: number; similar_days: number; similar_min: number;
+    similar_jaccard: number; breadth_alert_pp: number; sector_volume_alert: number; vol_calm_max: number;
     volume_high: number; volume_low: number; rsi_high: number; rsi_low: number; stoch_high: number; stoch_low: number;
     support_r: number; resistance_r: number };
   feature_texts: Record<string, string>;
-  top: {
-    day: string; followed_day: string; cases: number;
-    rows: {
-      ticker: string; name: string; sector: string | null; strategies: string[]; strong: boolean; signals: string[];
-      labels: string[]; criteria: Record<string, string[]>; volume_ratio: number | null; rsi14: number | null;
-      stoch_k: number | null; stoch_d: number | null; r: number | null; support_r: number | null;
-      resistance_r: number | null; report_5d: boolean; features: string[]; follow: SwingEvalFollow;
-    }[];
-  } | null;
-  patterns: Record<string, { horizon: number; cases: number; top_n: number; weeks: string[]; features: SwingEvalPattern[] }>;
+  regime_texts: Record<string, string>;
+  market_today: SwingEvalMarket | null;
+  market_week_ago: SwingEvalMarket | null;
+  top: { day: string; followed_day: string; cases: number; regime: string | null;
+    rows: (SwingEvalCase & { follow: SwingEvalFollow })[] } | null;
+  /** Mönstren per fönster ("2v", "6v", "lage", "alla") och horisont ("3", "5"). */
+  patterns: Record<string, { text: string; regime: string | null; days: string[] } & Record<string, SwingEvalPatterns>>;
+  /** Lyckade fall, nyast först. */
+  successes: (SwingEvalCase & { day: string; reasons: string[]; follow: Record<string, SwingEvalFollow> })[];
+  success_recent: { since: string; all: SwingEvalRate; by_regime: Record<string, SwingEvalRate>;
+    by_strategy: Record<string, SwingEvalRate> };
+  /** Alla avgjorda fall: [signaldag, strategier, starka signaler, sektor, läge, "lyckad" | "ej"]. */
+  cases_index: [string, string[], boolean, string | null, string | null, string][];
+  alerts: { swing_date: string | null; day: string | null;
+    similar: { ticker: string; name: string; strategies: string[]; matches: number; similar_cases: number;
+      similar_successes: number; examples: string[] }[];
+    market: { kind: string; text: string }[] };
   note: string;
   /** Claudes senaste veckotext (data/raw/swing_eval/notes/<vecka>.json), märkt som tolkning. */
   weekly?: { week: string; label: string; text: string } | null;
@@ -905,6 +936,7 @@ export function loadSwingEval(): SwingEval | null {
   if (IS_MOCK || !existsSync(path)) return null;
   try {
     const out = readJson<SwingEval>(path);
+    if ((out.schema_version ?? 1) < 2) return null; // äldre format: byggs om vid nästa morgonkörning
     const notes = join(dir, "notes");
     const latest = existsSync(notes)
       ? readdirSync(notes).filter((f) => /^\d{4}-W\d{2}\.json$/.test(f)).sort().pop()

@@ -104,7 +104,7 @@ def test_uppfoljning_efter_1_3_5_dagar():
     assert a["follow"]["5"]["move_pct"] == 5.0 and a["follow"]["5"]["vs_index_pp"] == 3.0
     g = next(e for e in snap["entries"] if e["ticker"] == "GAMMA")
     assert set(g["follow"]) == {"1"} and g["follow"]["1"]["max_high_r"] is None  # utan R; bara en dag till
-    assert added == 4
+    assert added == 6 and set(a["follow"]) == {"1", "2", "3", "4", "5"}  # dag 1–5 för ALFA, dag 1 för GAMMA
     assert se.follow_up(snap, bars) == 0  # redan ifyllt ändras inte
 
 
@@ -201,3 +201,93 @@ def test_behover_text(tmp_path):
     (tmp_path / "notes" / "2026-W47.json").unlink()
     assert not se.needs_note(date(2026, 11, 18), tmp_path)  # onsdag: bara veckans första handelsdag
     assert se.first_business_day(date(2026, 4, 8)) == date(2026, 4, 7)  # annandag påsk 6 april
+
+
+def market_bars(n=260, index_up=True, flat_last=False):
+    """Index och två påhittade bolag i varsin sektor, n handelsdagar fram till 2026-11-10."""
+    end = date(2026, 11, 10)
+    days, d = [], end
+    while len(days) < n:
+        if d.weekday() < 5:
+            days.append(d)
+        d -= timedelta(days=1)
+    days.sort()
+    idx = [1000.0 + (j if index_up else -j) for j in range(n)]
+    alfa = [100.0 + j * 0.5 for j in range(n)]  # stiger hela tiden: över 50 MA, nytt 52v-högsta
+    beta = [200.0 - j * 0.3 for j in range(n)]  # faller: under 50 MA, nytt 52v-lägsta
+    vb = [1000.0] * (n - 1) + [3000.0]  # tredubbel omsättning sista dagen
+    mk = lambda cs, vs=None: [Bar(dd, c, c, c, c, (vs or [1000.0] * n)[k], c) for k, (dd, c) in enumerate(zip(days, cs))]  # noqa: E731
+    return {INDEX_TICKER: mk(idx), "ALFA.ST": mk(alfa), "BETA.ST": mk(beta, vb)}, end
+
+
+def test_marknadslaget():
+    bars, end = market_bars()
+    m = se.market_state(bars, {"ALFA.ST": "industri", "BETA.ST": "bank"}, end, {"industri": "Industri", "bank": "Banker"})
+    assert m["trend"] == "upp" and m["regime"] == "upp-lugn" and m["regime_text"] == "Upptrend, lugna svängningar"
+    assert m["index"]["vs_ma50_pct"] > 0 and m["index"]["vs_ma200_pct"] > 0
+    assert m["breadth"]["above_ma50_pct"] == 50.0 and m["breadth"]["companies"] == 2
+    assert m["new_highs"] == 1 and m["new_lows"] == 1
+    assert [x["sector"] for x in m["sectors"]] == ["industri", "bank"]  # industri starkast mot index
+    bank = m["sectors"][1]
+    assert bank["volume_ratio"] == 3.0 and bank["rs20_pp"] < 0
+    assert [x["kind"] for x in m["signs"]] == ["sektorvolym"] and "Banker" in m["signs"][0]["text"]
+    down, _ = market_bars(index_up=False)
+    assert se.market_state(down, {}, end, {})["trend"] == "ned"
+    assert se.market_state(bars, {}, date(2026, 1, 5), {}) is None  # för kort historik
+
+
+def test_lyckat_fall():
+    f = lambda k, pp, r=None: {str(k): {"vs_index_pp": pp, "max_high_r": r}}  # noqa: E731
+    assert se.success_status({"follow": {**f(1, 1.0, 2.1)}}) == "lyckad"  # 2R redan dag 1
+    assert se.success_status({"follow": {**f(1, 1.0), **f(3, 5.2)}}) == "lyckad"  # 5 pe över index
+    assert se.success_status({"follow": {**f(1, 1.0, 1.0), **f(5, 4.9, 1.9)}}) == "ej"
+    assert se.success_status({"follow": {**f(1, 1.0, 1.0)}}) is None  # inte avgjort än
+    assert se.success_reasons({"follow": {**f(2, 6.0, 2.5)}}) == ["2R", "5 pe"]
+
+
+def case(name, day, feats, status_ok, strategies=("pullback",)):
+    fol = {"5": {"vs_index_pp": 6.0 if status_ok else 0.0, "max_high_r": None, "move_pct": 0, "day": day,
+                 "volume_ratio": 1.0}}
+    return {"ticker": name[:4].upper(), "name": name, "sector": "industri", "strategies": list(strategies),
+            "strong": False, "signals": [], "labels": [], "criteria": {}, "volume_ratio": 1.0, "rsi14": 50.0,
+            "stoch_k": None, "stoch_d": None, "r": None, "support_r": None, "resistance_r": None, "report_5d": False,
+            "features": feats, "follow": fol, "regime": "upp-lugn"}
+
+
+def test_larm_liknar_lyckade_fall_och_notis():
+    feats = ["strategi:pullback", "etikett:rekyl-i-trend", "stod:nara", "sektor:industri"]
+    old = [{"day": "2026-11-02", "entries": [case("Alfaverken", "2026-11-09", feats, True),
+                                             case("Betabolaget", "2026-11-09", feats, True),
+                                             case("Gammagruppen", "2026-11-09", feats + ["rsi:hog"], True),
+                                             case("Deltahem", "2026-11-09", feats, False)]},
+           {"day": "2026-09-01", "entries": [case("Epsilonbolaget", "2026-09-08", feats, True)]}]  # för gammalt
+    today = case("Zetaverken", "2026-11-10", feats, False)
+    today["follow"] = {}
+    snaps = old + [{"day": "2026-11-10", "swing_date": "2026-11-11", "entries": [today],
+                    "market": {"day": "2026-11-10", "regime": "upp-lugn", "regime_text": "Upptrend, lugna svängningar",
+                               "index": {"vs_ma50_pct": 1.0, "vol20": 12.0}, "new_highs": 3, "new_lows": 1,
+                               "breadth": {"above_ma50_pct": 64.3, "week_ago_pct": 50.2, "change_pp": 14.1},
+                               "signs": [{"kind": "bredd", "text": "Andelen bolag över 50 MA steg 14,1 procentenheter"}]}}]
+    s = se.summary(snaps, NOW)
+    sim = s["alerts"]["similar"]
+    assert [x["name"] for x in sim] == ["Zetaverken"] and sim[0]["matches"] == 3
+    assert sim[0]["similar_cases"] == 4 and sim[0]["similar_successes"] == 3  # Deltahem liknar men lyckades inte
+    assert len(s["successes"]) == 4 and s["successes"][0]["reasons"] == ["5 pe"]
+    assert s["success_recent"]["all"]["cases"] == 4  # september-fallet ligger utanför 28 dagar
+    assert s["cases_index"][0][-1] in ("lyckad", "ej")
+    n = se.alerts_notice(s, "2026-11-11")
+    assert "Liknar nyligen lyckade fall: Zetaverken (3 av 4 liknande lyckades)." in n["notice"]
+    assert "Marknadstecken (gårdagens stängning): Andelen bolag över 50 MA steg" in n["notice"]
+    assert se.alerts_notice(s, "2026-11-12") is None  # gäller inte dagens swingfil
+    assert set(s["patterns"]) == {"2v", "6v", "lage", "alla"} and s["patterns"]["lage"]["regime"] == "upp-lugn"
+    # De lyckade fallen och kännetecknen räknas som tal i texten, men inte cases_index.
+    assert "14,1" in se.accepted_numbers(s)
+
+
+def test_fonster_for_monster():
+    rows_ = [{"day": d, "regime": rg} for d, rg in [("2026-10-01", "ned-orolig"), ("2026-10-20", "upp-lugn"),
+                                                     ("2026-11-09", "upp-lugn")]]
+    assert [r["day"] for r in se._window_rows(rows_, "2v", 14, "2026-11-10", None)] == ["2026-11-09"]
+    assert len(se._window_rows(rows_, "6v", 42, "2026-11-10", None)) == 3
+    assert [r["day"] for r in se._window_rows(rows_, "lage", None, "2026-11-10", "ned-orolig")] == ["2026-10-01"]
+    assert len(se._window_rows(rows_, "alla", None, "2026-11-10", None)) == 3

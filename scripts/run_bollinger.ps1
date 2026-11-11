@@ -90,6 +90,8 @@ $statusText = if ($statusParts.Count -gt 0) { $statusParts -join " " } elseif ($
     "Ingen swingfil för i dag (inga kandidater)."
 } else { "Inga kandidater med kurs i dag." }
 $upperText = $upperParts -join " "
+# Larm ur Swing-utvärderingen (liknar nyligen lyckade fall, marknadstecken; scripts/swing_eval.py).
+if ($data.eval_alerts -and $data.eval_alerts.notice) { $statusText = "$statusText $($data.eval_alerts.notice)" }
 $foot = $data.delay_note
 Log "Notis: $statusText | $upperText"
 

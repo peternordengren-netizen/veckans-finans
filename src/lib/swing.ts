@@ -353,3 +353,27 @@ export function evalTraits(r: {
   if (r.report_5d) out.push("rapport senaste 5 dagarna");
   return out;
 }
+
+/** Filtret i biblioteket med lyckade fall: strategi ("" = alla, "stark" = starka signaler), sektor och läge. */
+export interface CaseFilter { strategy: string; sector: string; regime: string }
+
+/** Passar ett fall filtret? (strategier, starka signaler, sektor, läge) */
+export function caseMatches(c: { strategies: string[]; strong: boolean; sector: string | null; regime: string | null },
+  f: CaseFilter): boolean {
+  if (f.strategy === "stark" ? !c.strong : f.strategy !== "" && !c.strategies.includes(f.strategy)) return false;
+  if (f.sector !== "" && c.sector !== f.sector) return false;
+  return f.regime === "" || c.regime === f.regime;
+}
+
+/** Lyckade och avgjorda fall för ett filter, ur utvärderingens cases_index. */
+export function successCount(index: readonly [string, string[], boolean, string | null, string | null, string][],
+  f: CaseFilter): { successes: number; cases: number } {
+  let successes = 0;
+  let cases = 0;
+  for (const [, strategies, strong, sector, regime, status] of index) {
+    if (!caseMatches({ strategies, strong, sector, regime }, f)) continue;
+    cases++;
+    if (status === "lyckad") successes++;
+  }
+  return { successes, cases };
+}

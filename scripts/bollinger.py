@@ -40,6 +40,10 @@ mot bandet och är ingen uppmaning.
   Under stoppet ("below_stop") för en kandidat med etiketten Nära pivot ("label" i today) och dagens high högst
   pivoten blir "base_broken" (Basen bruten nedåt); "Ogiltig: under stopp" gäller bara när pivoten brutits (Utbrott,
   eller dagens high över pivoten).
+- Larm ur Swing-utvärderingen ("eval_alerts", scripts/swing_eval.alerts_notice): dagens kandidater som liknar minst tre
+  nyligen lyckade fall, och marknadstecken (andelen bolag över 50 MA, sektorvolym, skifte i marknadsläget). Bygger på
+  gårdagens stängning (morgonens sammanställning för dagens swingfil), så samma larm står vid båda kontrollerna;
+  null utan sammanställning för dagens swingfil.
 - Dagens omsättning hittills mot normalt vid samma tid ("today.volume", för Rekyl efter Bollingerutbrott och VCP):
   ett batchanrop till Yahoo med 15-minutersstaplar för strategins kandidater (de senaste INTRADAY_DAYS kalender-
   dagarna). Hittills = summan av dagens staplar; normalt = snittet för de VOLUME_PROFILE_DAYS senaste handelsdagarna
@@ -393,7 +397,21 @@ def check(today: date, now: datetime, instruments: dict[str, Instrument], fetch:
         "pullback": sections["pullback"],
         "bbrekyl": sections["bbrekyl"],
         "vcp": sections["vcp"],
+        "eval_alerts": eval_alerts(swing),
     }
+
+
+def eval_alerts(swing: dict | None) -> dict | None:
+    """Larmen ur Swing-utvärderingen för dagens swingfil (se modulbeskrivningen); fel här stoppar aldrig kontrollen."""
+    if swing is None:
+        return None
+    try:
+        import swing_eval
+
+        return swing_eval.alerts_notice(swing_eval.load_summary(), swing.get("date"))
+    except Exception as exc:  # noqa: BLE001
+        print(f"Swing-utvärderingens larm kunde inte läsas: {type(exc).__name__}", file=sys.stderr)
+        return None
 
 
 def strategy_section(key: str, swing: dict, previous: dict | None, today_bands: dict, today_bars: dict,

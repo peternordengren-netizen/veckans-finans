@@ -1,8 +1,9 @@
 ---
 /**
- * Den dagliga utvärderingen överst i fliken Swing (scripts/swing_eval.py, data/raw/swing_eval/): "Gårdagens bästa
- * rörelser" (topp 10 mot index efter 1 dag) och "Mönster" (kännetecken bland de 20 % med störst rörelse mot index
- * jämfört med övriga, efter 3 och 5 dagar). Beskrivande, inga uppmaningar.
+ * Den dagliga utvärderingen överst i fliken Swing (scripts/swing_eval.py, data/raw/swing_eval/): dagens marknadsläge
+ * och larm, "Gårdagens bästa rörelser", "Mönster" (senaste 2 och 6 veckorna och samma marknadsläge först, hela
+ * perioden som bakgrund) och biblioteket "Lyckade fall" (filtrerbart på strategi, sektor och läge, jämfört med alla
+ * avgjorda fall). Beskrivande, inga uppmaningar.
  */
 import type { SwingEval } from "../lib/data";
 import { shortDate } from "../lib/format";
@@ -18,10 +19,111 @@ const texts = ev.feature_texts;
 const topPct = Math.round(th.top_share * 100);
 const day = (iso: string | null) => (iso ? `${shortDate(iso)} ${iso.slice(0, 4)}` : "–");
 const one = new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 1 });
-const horizons = Object.keys(ev.patterns).sort((a, b) => Number(a) - Number(b));
+const num = (v: number | null | undefined) => (v === null || v === undefined ? "–" : one.format(v));
+const m = ev.market_today;
+const regimeName = (k: string | null) => (k ? ev.regime_texts[k] ?? k : "–");
+const strategyName = (k: string) => (k === "stark" ? "Starka signaler" : evalName(`strategi:${k}`, texts));
+const STRATS = ["pullback", "bbrekyl", "vcp", "stark"];
+const windows = ["2v", "6v", "lage", "alla"].filter((k) => ev.patterns[k]);
+const horizons = ["5", "3"];
+const rate = (r: { successes: number; cases: number; ci: [number, number] | null } | undefined) =>
+  r && r.cases > 0 ? ciShareText(r.successes, r.cases, r.ci) : "–";
+const sectorsInLib = [...new Map(ev.cases_index.filter((c) => c[3]).map((c) => [c[3] as string, evalName(`sektor:${c[3]}`, texts)]))]
+  .sort((a, b) => a[1].localeCompare(b[1], "sv"));
+const regimesInLib = [...new Set(ev.cases_index.map((c) => c[4]).filter((x): x is string => !!x))].sort();
+const LIB_MAX = 300;
 ---
 
-<div class="swing-eval">
+<div class="swing-eval" data-swing-eval>
+  {
+    m && (
+      <section class="market" aria-labelledby="eval-market">
+        <h3 id="eval-market">Marknadsläget: {m.regime_text}</h3>
+        <p class="note">Vid stängningen {day(m.day)}. Bygger på dagsdata och är en beskrivning, ingen prognos.</p>
+        <ul class="market-facts">
+          <li>
+            <strong>Index</strong> (OMX Stockholm PI) {signedPct(m.index.vs_ma50_pct)} mot 50 dagars MA och{" "}
+            {signedPct(m.index.vs_ma200_pct)} mot 200 dagars MA; {signedPct(m.index.change20_pct)} på 20 dagar.
+          </li>
+          <li>
+            <strong>Svängningar:</strong> {num(m.index.vol20)} % (20 dagars volatilitet, per år);{" "}
+            {m.volatility === "lugn" ? "lugnt" : "oroligt"} (gräns {num(th.vol_calm_max)} %).
+          </li>
+          <li>
+            <strong>Bredd:</strong> {num(m.breadth.above_ma50_pct)} % av {m.breadth.companies} bolag över sitt 50 dagars MA
+            {m.breadth.week_ago_pct !== null && ` (för en vecka sedan ${num(m.breadth.week_ago_pct)} %, ${ppText(m.breadth.change_pp)})`}.
+          </li>
+          <li>
+            <strong>52 veckor:</strong> {m.new_highs} bolag på årshögsta och {m.new_lows} på årslägsta.
+          </li>
+        </ul>
+        <details class="sectors">
+          <summary>
+            Sektorerna senaste 20 dagarna mot index: starkast {m.sectors[0]?.name ?? "–"} ({ppText(m.sectors[0]?.rs20_pp)}),
+            svagast {m.sectors[m.sectors.length - 1]?.name ?? "–"} ({ppText(m.sectors[m.sectors.length - 1]?.rs20_pp)})
+          </summary>
+          <div class="hist-wrap">
+            <table class="hist">
+              <thead>
+                <tr>
+                  <th scope="col">Sektor</th>
+                  <th scope="col" class="num">Bolag</th>
+                  <th scope="col" class="num">Mot index 20 d</th>
+                  <th scope="col" class="num">Omsättning mot snitt</th>
+                </tr>
+              </thead>
+              <tbody>
+                {m.sectors.map((s) => (
+                  <tr>
+                    <th scope="row">{s.name}</th>
+                    <td class="num">{s.companies}</td>
+                    <td class="num">{ppText(s.rs20_pp)}</td>
+                    <td class:list={["num", s.volume_ratio !== null && s.volume_ratio >= th.sector_volume_alert && "flag"]}>
+                      {s.volume_ratio === null ? "–" : `${one.format(s.volume_ratio)}×`}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p class="note">
+            Snittet av bolagens utveckling i sektorn minus indexets, i procentenheter. Omsättning: sektorns samlade omsättning
+            vid stängningen mot snittet för de 20 dagarna före.
+          </p>
+        </details>
+        {
+          (ev.alerts.market.length > 0 || ev.alerts.similar.length > 0) && (
+            <div class="alerts">
+              {ev.alerts.market.length > 0 && (
+                <>
+                  <p class="alerts-head"><strong>Marknadstecken</strong> (också i notisen 09:20 och 13:20)</p>
+                  <ul>{ev.alerts.market.map((a) => <li>{a.text}.</li>)}</ul>
+                </>
+              )}
+              {ev.alerts.similar.length > 0 && (
+                <>
+                  <p class="alerts-head">
+                    <strong>Liknar nyligen lyckade fall</strong>: dagens kandidater som liknar lyckade fall i minst{" "}
+                    {th.similar_min} olika bolag de senaste {Math.round(th.similar_days / 7)} veckorna
+                  </p>
+                  <ul>
+                    {ev.alerts.similar.map((a) => (
+                      <li>
+                        <strong>{a.name}</strong> ({a.strategies.map(strategyName).join(", ")}): liknar {a.matches} bolag
+                        med lyckade fall, till exempel {a.examples.join(", ")}. Av alla {a.similar_cases} liknande fall
+                        lyckades {a.similar_successes}.
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+            </div>
+          )
+        }
+      </section>
+    )
+  }
+
   {
     ev.top && (
       <section class="eval-top" aria-labelledby="eval-top">
@@ -29,7 +131,8 @@ const horizons = Object.keys(ev.patterns).sort((a, b) => Number(a) - Number(b));
         <p class="note">
           De {ev.top.rows.length} med störst rörelse mot index en handelsdag efter signaldagen {day(ev.top.day)} (uppföljd
           {" "}{day(ev.top.followed_day)}), bland alla {ev.top.cases} bolag som då var kandidater i någon av de tre
-          strategierna eller hade starka signaler. Det beskriver vad som hänt, inte varför, och är ingen uppmaning.
+          strategierna eller hade starka signaler. Marknadsläget den dagen: {regimeName(ev.top.regime).toLowerCase()}. Det
+          beskriver vad som hänt, inte varför, och är ingen uppmaning.
         </p>
         <div class="hist-wrap">
           <table class="hist">
@@ -55,7 +158,7 @@ const horizons = Object.keys(ev.patterns).sort((a, b) => Number(a) - Number(b));
                   <td class="num">{rText(r.follow.max_high_r)}</td>
                   <td class="num">{r.follow.volume_ratio === null ? "–" : `${one.format(r.follow.volume_ratio)}×`}</td>
                   <td class="wrap">
-                    {[...r.strategies.map((s) => evalName(`strategi:${s}`, texts)), ...(r.strong ? ["Starka signaler"] : [])].join(", ")}
+                    {[...r.strategies.map(strategyName), ...(r.strong ? ["Starka signaler"] : [])].join(", ")}
                     {r.labels.length > 0 && <span class="sub">{r.labels.map((l) => evalName(`etikett:${l}`, texts)).join(", ")}</span>}
                     {Object.entries(r.criteria).map(([k, xs]) =>
                       xs.length > 0 && <span class="sub">✓ {xs.map((x) => evalName(`kriterium:${k}:${x}`, texts).replace(/^Kriterium \([^)]*\): /, "")).join("; ")}</span>,
@@ -73,26 +176,22 @@ const horizons = Object.keys(ev.patterns).sort((a, b) => Number(a) - Number(b));
         </div>
         <p class="note">
           Mot index: rörelsen minus OMX Stockholm PI:s, i procentenheter. Högsta high: dagens högsta kurs mot signaldagens
-          stängning, i strategins R ("–" utan strategi). Omsättning: dagens mot snittet för de {20} handelsdagarna före
+          stängning, i strategins R ("–" utan strategi). Omsättning: dagens mot snittet för de 20 handelsdagarna före
           signaldagen.
         </p>
       </section>
     )
   }
 
-  <details class="eval-patterns">
-    <summary>
-      <strong>Mönster</strong>: kännetecken bland de {topPct} % största rörelserna mot index, efter{" "}
-      {horizons.join(" och ")} dagar ({ev.entries} sparade fall, {day(ev.period.start)} – {day(ev.period.end)})
-    </summary>
+  <section class="eval-patterns" aria-labelledby="eval-patterns">
+    <h3 id="eval-patterns">Mönster</h3>
     <p class="note">
-      Varje morgon sparas alla gårdagens kandidater i Pullback i trend, Rekyl efter Bollingerutbrott och Momentum-utbrott
-      (VCP) och alla bolag med starka signaler (samma regel som fliken Signaler, senaste veckans signalfil), med sina
-      kännetecken, och de följs upp efter 1, 3 och 5 handelsdagar. För varje kännetecken med minst {th.min_feature_cases}
-      {" "}fall jämförs andelen som hade det bland de {topPct} % med störst rörelse mot index (de bästa) med andelen bland
-      övriga, med antal och 95 % konfidensintervall (Wilson): spannet som andelen med stor sannolikhet ligger inom givet
-      antalet fall. Ett mönster har hållit en vecka när andelen bland de {topPct} % var högre än bland övriga i veckans
-      fall (de {topPct} % räknade inom veckan); ✓ efter {th.hold_weeks} veckor i rad. {ev.note}
+      Kännetecken bland de {topPct} % med störst rörelse mot index (de bästa) jämfört med övriga, för kännetecken med minst
+      {" "}{th.min_feature_cases} fall, med antal och 95 % konfidensintervall (Wilson): spannet som andelen med stor
+      sannolikhet ligger inom givet antalet fall. Senaste veckorna och dagar med samma marknadsläge som nu visas först;
+      hela perioden ({ev.entries} sparade fall, {day(ev.period.start)} – {day(ev.period.end)}) är bakgrund. Ett mönster har
+      hållit en vecka när andelen bland de {topPct} % var högre än bland övriga i veckans fall; ✓ efter {th.hold_weeks}{" "}
+      veckor i rad. {ev.note}
     </p>
     {
       ev.weekly && (
@@ -105,56 +204,212 @@ const horizons = Object.keys(ev.patterns).sort((a, b) => Number(a) - Number(b));
         </div>
       )
     }
-    {horizons.map((h) => {
-      const p = ev.patterns[h];
-      return (
-        <section class="history" aria-label={`Mönster efter ${h} dagar`}>
-          <h4>
-            Efter {h} handelsdagar: {p.cases} fall, varav {p.top_n} bland de {topPct} % största rörelserna mot index
-            {p.weeks.length > 0 && ` (${p.weeks.length} ${p.weeks.length === 1 ? "vecka" : "veckor"})`}
-          </h4>
-          {p.features.length === 0 ? (
-            <p class="note">Inga kännetecken med minst {th.min_feature_cases} uppföljda fall än.</p>
-          ) : (
-            <div class="hist-wrap">
-              <table class="hist">
-                <thead>
-                  <tr>
-                    <th scope="col">Kännetecken</th>
-                    <th scope="col" class="num">Fall</th>
-                    <th scope="col" class="num">Bland de {topPct} % bästa</th>
-                    <th scope="col" class="num">Bland övriga</th>
-                    <th scope="col" class="num">Skillnad</th>
-                    <th scope="col" class="num">Hållit</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {p.features.map((f) => (
-                    <tr class:list={{ held: f.held }}>
-                      <th scope="row">{f.text}</th>
-                      <td class="num">{f.cases}</td>
-                      <td class="num">{ciShareText(f.top.k, f.top.n, f.top.ci)}</td>
-                      <td class="num">{ciShareText(f.other.k, f.other.n, f.other.ci)}</td>
-                      <td class="num">{ppText(f.diff_pp)}</td>
-                      <td class="num">
-                        {f.held ? <span aria-label={`hållit minst ${th.hold_weeks} veckor`}>✓ </span> : null}
-                        {f.weeks_held} {f.weeks_held === 1 ? "vecka" : "veckor"}
-                      </td>
+    <div class="controls" data-pattern-controls hidden>
+      <label>
+        Period
+        <select data-pattern-window>
+          {windows.map((w) => (
+            <option value={w}>{ev.patterns[w].text}{w === "alla" ? " (bakgrund)" : ""}</option>
+          ))}
+        </select>
+      </label>
+      <label>
+        Efter
+        <select data-pattern-h>
+          {horizons.map((h) => <option value={h}>{h} handelsdagar</option>)}
+        </select>
+      </label>
+    </div>
+    {windows.map((w) =>
+      horizons.map((h) => {
+        const win = ev.patterns[w];
+        const p = win[h];
+        return (
+          <section class="pattern" data-window={w} data-h={h} aria-label={`${win.text}, efter ${h} dagar`}>
+            <h4>
+              {win.text}{w === "alla" ? " (bakgrund)" : ""}, efter {h} handelsdagar: {p.cases} fall
+              {p.cases > 0 && `, varav ${p.top_n} bland de ${topPct} % största rörelserna mot index`}
+              {win.days.length > 0 && ` (${win.days.length} signaldagar)`}
+            </h4>
+            {p.features.length === 0 ? (
+              <p class="note">Inga kännetecken med minst {th.min_feature_cases} uppföljda fall här än.</p>
+            ) : (
+              <div class="hist-wrap">
+                <table class="hist">
+                  <thead>
+                    <tr>
+                      <th scope="col">Kännetecken</th>
+                      <th scope="col" class="num">Fall</th>
+                      <th scope="col" class="num">Bland de {topPct} % bästa</th>
+                      <th scope="col" class="num">Bland övriga</th>
+                      <th scope="col" class="num">Skillnad</th>
+                      <th scope="col" class="num">Hållit</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
-      );
-    })}
-  </details>
+                  </thead>
+                  <tbody>
+                    {p.features.map((f) => (
+                      <tr class:list={{ held: f.held }}>
+                        <th scope="row">{f.text}</th>
+                        <td class="num">{f.cases}</td>
+                        <td class="num">{ciShareText(f.top.k, f.top.n, f.top.ci)}</td>
+                        <td class="num">{ciShareText(f.other.k, f.other.n, f.other.ci)}</td>
+                        <td class="num">{ppText(f.diff_pp)}</td>
+                        <td class="num">
+                          {f.held ? <span aria-label={`hållit minst ${th.hold_weeks} veckor`}>✓ </span> : null}
+                          {f.weeks_held} {f.weeks_held === 1 ? "vecka" : "veckor"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        );
+      }),
+    )}
+  </section>
+
+  <section class="eval-lib" aria-labelledby="eval-lib">
+    <h3 id="eval-lib">Lyckade fall</h3>
+    <p class="note">
+      Fall som inom {th.success_days} handelsdagar nådde minst {num(th.success_r)} R (högsta high mot signaldagens
+      stängning, i strategins R) eller stängde minst {num(th.success_pp)} procentenheter över index, med kännetecken och
+      marknadsläge. Alla fall sparas, så andelen lyckade kan jämföras med alla avgjorda fall (femte dagen uppföljd eller
+      redan lyckade). Ett litet R (stoppet nära) gör 2R lättare att nå. Det säger inget om hur det går nästa gång.
+    </p>
+    <p class="rates">
+      Senaste {Math.round(th.similar_days / 7)} veckorna: {rate(ev.success_recent.all)} lyckades.
+      {STRATS.filter((k) => ev.success_recent.by_strategy[k]?.cases).map((k) => (
+        <span class="sub">{strategyName(k)}: {rate(ev.success_recent.by_strategy[k])}</span>
+      ))}
+      {Object.entries(ev.success_recent.by_regime).map(([k, r]) => (
+        <span class="sub">Läge {regimeName(k).toLowerCase()}: {rate(r)}</span>
+      ))}
+    </p>
+    <div class="controls" data-lib-controls hidden>
+      <label>
+        Strategi
+        <select data-lib-strategy>
+          <option value="">alla</option>
+          {STRATS.map((k) => <option value={k}>{strategyName(k)}</option>)}
+        </select>
+      </label>
+      <label>
+        Sektor
+        <select data-lib-sector>
+          <option value="">alla</option>
+          {sectorsInLib.map(([k, n]) => <option value={k}>{n}</option>)}
+        </select>
+      </label>
+      <label>
+        Marknadsläge
+        <select data-lib-regime>
+          <option value="">alla</option>
+          {regimesInLib.map((k) => <option value={k}>{regimeName(k)}</option>)}
+        </select>
+      </label>
+      <span class="shown" data-lib-count aria-live="polite"></span>
+    </div>
+    <script type="application/json" data-lib-index set:html={JSON.stringify(ev.cases_index)} />
+    {ev.successes.length > LIB_MAX && <p class="note">Visar de {LIB_MAX} senaste av {ev.successes.length} lyckade fall.</p>}
+    <div class="hist-wrap">
+      <table class="hist">
+        <thead>
+          <tr>
+            <th scope="col">Signaldag</th>
+            <th scope="col">Bolag</th>
+            <th scope="col">Lyckades</th>
+            <th scope="col" class="num">Mot index 5 d</th>
+            <th scope="col">Urval och etiketter</th>
+            <th scope="col">Kännetecken</th>
+            <th scope="col">Marknadsläge</th>
+          </tr>
+        </thead>
+        <tbody>
+          {ev.successes.slice(0, LIB_MAX).map((c) => {
+            const last = c.follow[String(th.success_days)] ?? Object.values(c.follow).pop();
+            return (
+              <tr data-lib-row data-strategies={c.strategies.join(" ")} data-strong={c.strong ? "1" : "0"}
+                data-sector={c.sector ?? ""} data-regime={c.regime ?? ""}>
+                <td>{day(c.day)}</td>
+                <th scope="row"><span class="name">{c.name}</span> <span class="ticker">{c.ticker}</span></th>
+                <td>{c.reasons.join(" och ")}</td>
+                <td class="num">{last ? ppText(last.vs_index_pp) : "–"}</td>
+                <td class="wrap">
+                  {[...c.strategies.map(strategyName), ...(c.strong ? ["Starka signaler"] : [])].join(", ")}
+                  {c.labels.length > 0 && <span class="sub">{c.labels.map((l) => evalName(`etikett:${l}`, texts)).join(", ")}</span>}
+                </td>
+                <td class="wrap">
+                  {c.sector && <span>{evalName(`sektor:${c.sector}`, texts)}</span>}
+                  <span class="sub">{evalTraits(c).join(" · ") || "–"}</span>
+                </td>
+                <td>{regimeName(c.regime)}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  </section>
 </div>
+
+<script>
+  import { caseMatches, successCount } from "../lib/swing";
+
+  for (const root of document.querySelectorAll<HTMLElement>("[data-swing-eval]")) {
+    // Mönster: ett fönster och en horisont åt gången (utan JavaScript visas alla).
+    const pc = root.querySelector<HTMLElement>("[data-pattern-controls]");
+    const win = root.querySelector<HTMLSelectElement>("[data-pattern-window]");
+    const hor = root.querySelector<HTMLSelectElement>("[data-pattern-h]");
+    const showPatterns = () => {
+      for (const s of root.querySelectorAll<HTMLElement>(".pattern")) {
+        s.hidden = s.dataset.window !== win?.value || s.dataset.h !== hor?.value;
+      }
+    };
+    if (pc && win && hor) {
+      pc.hidden = false;
+      win.addEventListener("change", showPatterns);
+      hor.addEventListener("change", showPatterns);
+      showPatterns();
+    }
+    // Lyckade fall: filter och jämförelse med alla avgjorda fall.
+    const lc = root.querySelector<HTMLElement>("[data-lib-controls]");
+    const idxEl = root.querySelector<HTMLScriptElement>("[data-lib-index]");
+    const sel = (k: string) => root.querySelector<HTMLSelectElement>(`[data-lib-${k}]`);
+    const count = root.querySelector<HTMLElement>("[data-lib-count]");
+    if (lc && idxEl) {
+      const index = JSON.parse(idxEl.textContent || "[]");
+      const apply = () => {
+        const f = { strategy: sel("strategy")?.value ?? "", sector: sel("sector")?.value ?? "", regime: sel("regime")?.value ?? "" };
+        let shown = 0;
+        for (const tr of root.querySelectorAll<HTMLElement>("[data-lib-row]")) {
+          const ok = caseMatches({
+            strategies: (tr.dataset.strategies ?? "").split(" ").filter(Boolean), strong: tr.dataset.strong === "1",
+            sector: tr.dataset.sector || null, regime: tr.dataset.regime || null,
+          }, f);
+          tr.hidden = !ok;
+          if (ok) shown++;
+        }
+        const c = successCount(index, f);
+        if (count) {
+          const pct = c.cases ? ` (${new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 1 }).format((c.successes / c.cases) * 100)} %)` : "";
+          count.textContent = `${shown} rader visas · ${c.successes} lyckade av ${c.cases} avgjorda fall${pct}`;
+        }
+      };
+      lc.hidden = false;
+      for (const k of ["strategy", "sector", "regime"]) sel(k)?.addEventListener("change", apply);
+      apply();
+    }
+  }
+</script>
 
 <style>
   .swing-eval {
     margin: 0 0 20px;
+  }
+  .swing-eval > section {
+    margin: 0 0 18px;
   }
   .swing-eval h3 {
     margin: 0 0 6px;
@@ -168,6 +423,37 @@ const horizons = Object.keys(ev.patterns).sort((a, b) => Number(a) - Number(b));
     color: var(--muted);
     font-size: 0.875rem;
     max-width: 80ch;
+  }
+  .market-facts {
+    margin: 4px 0 8px;
+    padding-left: 1.2em;
+    font-size: 0.9375rem;
+  }
+  .sectors summary,
+  .alerts-head {
+    font-size: 0.875rem;
+  }
+  .sectors summary {
+    cursor: pointer;
+  }
+  .alerts {
+    margin: 8px 0;
+    padding: 8px 12px;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    font-size: 0.875rem;
+    max-width: 100ch;
+  }
+  .alerts ul {
+    margin: 2px 0 6px;
+    padding-left: 1.2em;
+  }
+  .alerts-head {
+    margin: 4px 0 0;
+  }
+  .flag {
+    font-weight: 600;
   }
   .hist-wrap {
     overflow-x: auto;
@@ -221,11 +507,24 @@ const horizons = Object.keys(ev.patterns).sort((a, b) => Number(a) - Number(b));
   tr.held > * {
     font-weight: 600;
   }
-  .eval-patterns {
-    margin-top: 16px;
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 16px;
+    align-items: center;
+    margin: 8px 0;
+    font-size: 0.875rem;
   }
-  .eval-patterns summary {
-    cursor: pointer;
+  .controls[hidden],
+  [hidden] {
+    display: none;
+  }
+  .shown {
+    color: var(--muted);
+  }
+  .rates {
+    font-size: 0.875rem;
+    margin: 4px 0 8px;
   }
   .weekly {
     margin: 10px 0;

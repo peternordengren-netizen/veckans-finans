@@ -4,7 +4,7 @@ import { test } from "node:test";
 
 import {
   decidedShareText, isPullbackLabel, labelClass, labelCounts, levelText, netText, priceText, reportText, riskText, shareText,
-  altStopText, bbLevelText, ciShareText, evalName, evalTraits, ppText, breakoutLines, criteriaLines, depthsText, momentumText, todayVolumeText, volumeRuleLines, missingText, resistanceRText, todayInvalid, todayLines, todayOrder, TODAY_STATUS,
+  altStopText, bbLevelText, ciShareText, evalName, evalTraits, ppText, successCount, breakoutLines, criteriaLines, depthsText, momentumText, todayVolumeText, volumeRuleLines, missingText, resistanceRText, todayInvalid, todayLines, todayOrder, TODAY_STATUS,
   bollingerSourceText, chipText, pctBText, rankText, rankTitle, rText, signalText, srDistText, srInsideText, srLevelText, upperRText, vsBaseText,
 } from "../src/lib/swing.ts";
 
@@ -218,4 +218,16 @@ test("Swing-utvärderingen: texter", () => {
     evalTraits({ rsi14: 72.3, stoch_k: null, support_r: 0.5, resistance_r: 3, volume_ratio: 1.8, report_5d: true }),
     ["RSI(14) 72,3", "omsättning 1,8× snittet", "stöd 0,5 R", "motstånd 3 R", "rapport senaste 5 dagarna"],
   );
+});
+
+test("Swing-utvärderingen: filtret för lyckade fall", () => {
+  const idx: [string, string[], boolean, string | null, string | null, string][] = [
+    ["2026-11-02", ["pullback"], false, "industri", "upp-lugn", "lyckad"],
+    ["2026-11-02", ["vcp"], true, "bank", "upp-lugn", "ej"],
+    ["2026-11-03", [], true, "industri", "ned-orolig", "lyckad"],
+  ];
+  assert.deepEqual(successCount(idx, { strategy: "", sector: "", regime: "" }), { successes: 2, cases: 3 });
+  assert.deepEqual(successCount(idx, { strategy: "stark", sector: "", regime: "" }), { successes: 1, cases: 2 });
+  assert.deepEqual(successCount(idx, { strategy: "pullback", sector: "industri", regime: "upp-lugn" }), { successes: 1, cases: 1 });
+  assert.deepEqual(successCount(idx, { strategy: "", sector: "", regime: "ned-orolig" }), { successes: 1, cases: 1 });
 });

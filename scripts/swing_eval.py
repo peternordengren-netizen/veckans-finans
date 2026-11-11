@@ -13,16 +13,34 @@ uppmaning och säger inget säkert om hur det går nästa gång.
    mot snitt, RSI(14), Stoch RSI, avstånd till stöd och motstånd i R, sektor, rapport de senaste 5 handelsdagarna
    (reaktionsdagen inräknad) och veckans signaler. R = strategins R (referens − stopp, den första av Pullback,
    Bollingerrekyl och VCP där bolaget är kandidat); bolag som bara har starka signaler saknar R (fliken har ett enda R).
-2. Uppföljning efter 1, 3 och 5 handelsdagar (HORIZONS) med samma hämtning som morgonens swingfil: rörelse
+   Marknadsläget samma dag sparas med varje ögonblicksbild ("market", market_state) och läget ("regime") med varje
+   fall: indexet (OMX Stockholm PI) mot 50 och 200 dagars MA, indexets svängningar (20 dagars volatilitet,
+   annualiserad), andelen bolag i listan över sitt 50 dagars MA (och en vecka tidigare), antal bolag på 52 veckors
+   högsta respektive lägsta (dagens high/low på årets högsta/lägsta) och sektorernas relativa styrka de senaste 20
+   dagarna (snittutveckling mot index) med omsättning mot snitt. Läget = trend (upptrend: index över båda MA,
+   nedtrend: under båda, annars blandad) och svängningar (lugna under VOL_CALM_MAX % volatilitet, annars stora).
+   Marknadstecken (larm): andelen över 50 MA ändrad mer än BREADTH_ALERT_PP procentenheter på en vecka (5
+   handelsdagar), en sektors omsättning minst SECTOR_VOLUME_ALERT gånger snittet, eller ett nytt läge mot dagen före.
+2. Uppföljning efter 1–5 handelsdagar (HORIZONS) med samma hämtning som morgonens swingfil: rörelse
    (justerad stängning), rörelse mot index (OMX Stockholm PI) i procentenheter, högsta high under dagarna i R
    (från signaldagens stängning) och snittomsättningen under dagarna mot snittet för de 20 dagarna före signaldagen.
+   Lyckat fall (success_status): högsta high minst SUCCESS_R (2) R eller minst SUCCESS_PP (5) procentenheter över index
+   vid någon stängning inom SUCCESS_DAYS (5) handelsdagar; "ej" när femte dagen följts upp utan det, annars öppet.
 3. Sammanställningen (summary.json): "Gårdagens bästa rörelser" (topp 10 mot index efter 1 dag i den senaste
-   ögonblicksbilden med 1-dagsuppföljning) och "Mönster": för varje kännetecken med minst MIN_FEATURE_CASES fall,
+   ögonblicksbilden med 1-dagsuppföljning), dagens marknadsläge, "Mönster" per fönster (WINDOWS: senaste 2 och 6
+   veckorna, dagar med samma läge som det senaste, och hela perioden som bakgrund), biblioteket med lyckade fall
+   (successes, med alla avgjorda fall i cases_index för jämförelsen och lyckade per läge och strategi senaste
+   SIMILAR_DAYS dagarna) och larmen (alerts): dagens kandidater som liknar minst SIMILAR_MIN lyckade fall de senaste
+   SIMILAR_DAYS (28) dagarna, räknat i olika bolag (samma strategi och kännetecken med Jaccardlikhet minst
+   SIMILAR_JACCARD), med hur stor andel av alla liknande avgjorda fall som lyckades (som jämförelse), och
+   marknadstecknen. Larmen står i notisen vid Bollingerkontrollerna 09:20 och 13:20 (alerts_for, scripts/bollinger.py)
+   och bygger på gårdagens stängning. "Mönster": för varje kännetecken med minst MIN_FEATURE_CASES fall,
    andelen bland de 20 % (TOP_SHARE) med störst rörelse mot index jämfört med övriga, efter 3 och 5 dagar, med antal
    och 95 % konfidensintervall (Wilson). Ett mönster har "hållit" en vecka när andelen bland de 20 % var högre än
    bland övriga i den veckans fall (signaldagens ISO-vecka, de 20 % räknade inom veckan); markerat när det hållit
    HOLD_WEEKS (4) veckor i rad fram till den senaste veckan med uppföljning.
-4. Måndagar (veckans första handelsdag, needs_note): Claude skriver 5–8 meningar om vad underlaget visar, märkt som
+4. Måndagar (veckans första handelsdag, needs_note): Claude skriver 5–8 meningar om marknadsläget, vilka lägen som
+   lyckats de senaste veckorna och vad som ändrats, märkt som
    tolkning (/swing-utvardering, scripts/run_swing_note.ps1). Utkastet i data/swing_eval/<vecka>.json kontrolleras
    (check_note: antal meningar, inga uppmaningar, varje tal finns i sammanställningen) och flyttas sedan till
    rådatarepot.
@@ -57,7 +75,7 @@ from prices import INDEX_TICKER  # noqa: E402
 from validate import DATA_DIR  # noqa: E402
 
 TZ = ZoneInfo("Europe/Stockholm")
-HORIZONS = (1, 3, 5)
+HORIZONS = (1, 2, 3, 4, 5)
 PATTERN_HORIZONS = (3, 5)
 TOP_SHARE = 0.2
 TOP_N = 10
@@ -66,6 +84,17 @@ MIN_FEATURE_CASES = 10
 VOLUME_AVG_DAYS = 20
 REPORT_DAYS = 5
 KEEP_OPEN_DAYS = 14  # ögonblicksbilder äldre än så (kalenderdagar) följs inte upp längre
+SUCCESS_R, SUCCESS_PP, SUCCESS_DAYS = 2.0, 5.0, 5
+SIMILAR_DAYS, SIMILAR_MIN, SIMILAR_JACCARD = 28, 3, 0.6
+BREADTH_ALERT_PP = 10.0
+SECTOR_VOLUME_ALERT = 2.0
+VOL_CALM_MAX = 20.0
+MARKET_DAYS = 252  # 52 veckor
+# Fönstren för mönstren: (nyckel, text, kalenderdagar bakåt från den senaste signaldagen; None = hela perioden).
+WINDOWS = (("2v", "Senaste 2 veckorna", 14), ("6v", "Senaste 6 veckorna", 42), ("lage", "Samma marknadsläge", None),
+           ("alla", "Hela perioden", None))
+TREND_TEXT = {"upp": "Upptrend", "ned": "Nedtrend", "blandad": "Blandad trend"}
+VOL_TEXT = {"lugn": "lugna svängningar", "orolig": "stora svängningar"}
 RAW_SUBDIR = "swing_eval"
 EVAL_DIR = DATA_DIR / "raw" / RAW_SUBDIR
 NOTE_DIR = DATA_DIR / "swing_eval"  # Claudes utkast (en riktig mapp i driftkopian, som data/hb)
@@ -232,6 +261,111 @@ def snapshot(swing: dict, signals: dict | None, yahoo: dict[str, str], sectors: 
     }
 
 
+# --- Marknadsläget ------------------------------------------------------------------------------
+
+
+def _sma(x: list[float], i: int, n: int) -> float:
+    return sum(x[i - n + 1:i + 1]) / n
+
+
+def _trend_vol(c: list[float], i: int) -> tuple[str, str, float]:
+    """(trend, svängningar, 20 dagars volatilitet i procent, annualiserad) för indexets justerade stängningar."""
+    ma50, ma200 = _sma(c, i, 50), _sma(c, i, 200)
+    trend = "upp" if c[i] > ma50 and c[i] > ma200 else "ned" if c[i] < ma50 and c[i] < ma200 else "blandad"
+    rets = [math.log(c[j] / c[j - 1]) for j in range(i - 19, i + 1)]
+    mean = sum(rets) / len(rets)
+    vol = math.sqrt(sum((r - mean) ** 2 for r in rets) / len(rets)) * math.sqrt(252) * 100
+    return trend, "lugn" if vol < VOL_CALM_MAX else "orolig", vol
+
+
+def regime_text(key: str | None) -> str:
+    """"upp-lugn" → "Upptrend, lugna svängningar"."""
+    if not key or "-" not in key:
+        return "–"
+    t, v = key.split("-", 1)
+    return f"{TREND_TEXT.get(t, t)}, {VOL_TEXT.get(v, v)}"
+
+
+def _breadth(series: list[tuple[list, dict[date, int]]], d: date) -> tuple[float | None, int]:
+    """Andelen bolag (procent) med justerad stängning över sitt 50 dagars MA dag d, och antalet bolag."""
+    above = n = 0
+    for b, pos in series:
+        i = pos.get(d)
+        if i is None or i < 49:
+            continue
+        c = [x.adj_close for x in b[i - 49:i + 1]]
+        n += 1
+        above += c[-1] > sum(c) / 50
+    return (round(above / n * 100, 1) if n else None), n
+
+
+def market_state(bars: dict, sector_of: dict[str, str | None], d: date, sectors: dict[str, str]) -> dict | None:
+    """Marknadsläget vid stängningen dag d (se modulbeskrivningen), eller None om indexet saknar 200 dagar fram till d.
+    sector_of: Yahoo-ticker → sektorns id."""
+    idx = bars.get(INDEX_TICKER) or []
+    ipos = {x.day: n for n, x in enumerate(idx)}
+    i = ipos.get(d)
+    if i is None or i < 200:
+        return None
+    c = [x.adj_close for x in idx]
+    trend, vol_key, vol = _trend_vol(c, i)
+    ptrend, pvol, _ = _trend_vol(c, i - 1)
+    regime, prev = f"{trend}-{vol_key}", f"{ptrend}-{pvol}"
+    ma50, ma200 = _sma(c, i, 50), _sma(c, i, 200)
+    series = []
+    for yt, b in bars.items():
+        if yt != INDEX_TICKER and yt in sector_of and b:
+            series.append((b, {x.day: n for n, x in enumerate(b)}, yt))
+    br, n_br = _breadth([(b, pos) for b, pos, _ in series], d)
+    br_prev, _ = _breadth([(b, pos) for b, pos, _ in series], idx[i - 5].day)
+    highs = lows = 0
+    idx20 = c[i] / c[i - 20] - 1
+    by_sector: dict[str, dict] = {}
+    for b, pos, yt in series:
+        j = pos.get(d)
+        if j is None:
+            continue
+        if j >= MARKET_DAYS - 1:
+            window = b[j - MARKET_DAYS + 1:j + 1]
+            highs += b[j].high >= max(x.high for x in window)
+            lows += b[j].low <= min(x.low for x in window)
+        sec = sector_of.get(yt)
+        if not sec or j < 20:
+            continue
+        g = by_sector.setdefault(sec, {"ret": [], "vol": 0.0, "avg": 0.0})
+        g["ret"].append(b[j].adj_close / b[j - 20].adj_close - 1)
+        g["vol"] += b[j].volume
+        g["avg"] += sum(x.volume for x in b[j - 20:j]) / 20
+    secs = sorted(({"sector": k, "name": sectors.get(k, k), "companies": len(g["ret"]),
+                    "rs20_pp": round((sum(g["ret"]) / len(g["ret"]) - idx20) * 100, 2),
+                    "volume_ratio": round(g["vol"] / g["avg"], 2) if g["avg"] > 0 else None}
+                   for k, g in by_sector.items() if g["ret"]), key=lambda x: -x["rs20_pp"])
+    change = round(br - br_prev, 1) if br is not None and br_prev is not None else None
+    one = lambda x: f"{x:.1f}".replace(".", ",").replace("-", "−")  # noqa: E731
+    signs = []
+    if change is not None and abs(change) > BREADTH_ALERT_PP:
+        signs.append({"kind": "bredd", "text": f"Andelen bolag över 50 MA {'steg' if change > 0 else 'föll'} "
+                      f"{one(abs(change))} procentenheter på en vecka, från {one(br_prev)} % till {one(br)} %"})
+    for x in secs:
+        if x["volume_ratio"] is not None and x["volume_ratio"] >= SECTOR_VOLUME_ALERT:
+            signs.append({"kind": "sektorvolym", "text": f"{x['name']}: omsättning {one(x['volume_ratio'])} gånger snittet"})
+    if regime != prev:
+        signs.append({"kind": "läge", "text": f"Marknadsläget skiftade från {regime_text(prev).lower()} till "
+                      f"{regime_text(regime).lower()}"})
+    return {
+        "day": d.isoformat(),
+        "index": {"close": round(c[i], 2), "ma50": round(ma50, 2), "ma200": round(ma200, 2),
+                  "vs_ma50_pct": round((c[i] / ma50 - 1) * 100, 2), "vs_ma200_pct": round((c[i] / ma200 - 1) * 100, 2),
+                  "vol20": round(vol, 1), "change20_pct": round(idx20 * 100, 2)},
+        "trend": trend, "volatility": vol_key, "regime": regime, "regime_text": regime_text(regime),
+        "prev_regime": prev,
+        "breadth": {"above_ma50_pct": br, "week_ago_pct": br_prev, "change_pp": change, "companies": n_br},
+        "new_highs": highs, "new_lows": lows,
+        "sectors": secs,
+        "signs": signs,
+    }
+
+
 # --- Uppföljningen ------------------------------------------------------------------------------
 
 
@@ -332,38 +466,193 @@ def patterns(rows: list[dict], h: str, texts: dict[str, str]) -> dict:
     return {"horizon": int(h), "cases": len(rows), "top_n": len(top), "weeks": weeks, "features": out}
 
 
+def success_status(e: dict) -> str | None:
+    """"lyckad" (minst SUCCESS_R R eller SUCCESS_PP pe över index inom SUCCESS_DAYS dagar), "ej" (femte dagen
+    uppföljd utan det) eller None (öppet)."""
+    f = e.get("follow") or {}
+    for k in range(1, SUCCESS_DAYS + 1):
+        x = f.get(str(k))
+        if not x:
+            continue
+        if (x.get("max_high_r") is not None and x["max_high_r"] >= SUCCESS_R) or x["vs_index_pp"] >= SUCCESS_PP:
+            return "lyckad"
+    return "ej" if str(SUCCESS_DAYS) in f else None
+
+
+def success_reasons(e: dict) -> list[str]:
+    """Vad som gjorde fallet lyckat: "2R" och/eller "5 pe" (inom 5 dagar)."""
+    f = [e["follow"][str(k)] for k in range(1, SUCCESS_DAYS + 1) if str(k) in e["follow"]]
+    out = []
+    if any(x.get("max_high_r") is not None and x["max_high_r"] >= SUCCESS_R for x in f):
+        out.append("2R")
+    if any(x["vs_index_pp"] >= SUCCESS_PP for x in f):
+        out.append("5 pe")
+    return out
+
+
+def jaccard(a: list[str], b: list[str]) -> float:
+    sa, sb = set(a), set(b)
+    return len(sa & sb) / len(sa | sb) if sa | sb else 0.0
+
+
+def similar_cases(cand: dict, day: str, cases: list[dict]) -> list[dict]:
+    """Fall de senaste SIMILAR_DAYS dagarna före day som delar en strategi med kandidaten och har kännetecken med
+    Jaccardlikhet minst SIMILAR_JACCARD."""
+    d0 = date.fromisoformat(day)
+    out = []
+    for x in cases:
+        dd = date.fromisoformat(x["day"])
+        if not (d0 - timedelta(days=SIMILAR_DAYS) <= dd < d0):
+            continue
+        if set(x["strategies"]) & set(cand["strategies"]) and jaccard(x["features"], cand["features"]) >= SIMILAR_JACCARD:
+            out.append(x)
+    return out
+
+
+def _window_rows(rows: list[dict], key: str, days: int | None, last: str | None, regime: str | None) -> list[dict]:
+    if key == "lage":
+        return [r for r in rows if regime and r.get("regime") == regime]
+    if days is None or last is None:
+        return rows
+    first = (date.fromisoformat(last) - timedelta(days=days)).isoformat()
+    return [r for r in rows if r["day"] > first]
+
+
+def _rate(group: list[dict]) -> dict:
+    k = sum(g["status"] == "lyckad" for g in group)
+    return {"cases": len(group), "successes": k, "share": round(k / len(group), 4) if group else None,
+            "ci": wilson(k, len(group))}
+
+
 def summary(snaps: list[dict], now: datetime) -> dict:
-    """Sammanställningen för sidan och Claudes text (summary.json)."""
+    """Sammanställningen för sidan, larmen och Claudes text (summary.json)."""
+    snaps = sorted(snaps, key=lambda s: s["day"])
     texts: dict[str, str] = {}
     rows = []
-    for s in sorted(snaps, key=lambda s: s["day"]):
+    for s in snaps:
         texts.update(s.get("feature_texts", {}))
         for e in s["entries"]:
             rows.append({**e, "day": s["day"]})
+    last = snaps[-1] if snaps else None
+    market = [s["market"] for s in snaps if s.get("market")]
+    today = market[-1] if market else None
+    week_ago = market[-6] if len(market) >= 6 else None
     # Gårdagens bästa rörelser: den senaste ögonblicksbilden med 1-dagsuppföljning.
     with1 = [s for s in snaps if any("1" in e["follow"] for e in s["entries"])]
     top = None
     if with1:
-        s = max(with1, key=lambda s: s["day"])
+        s = with1[-1]
         cand = [e for e in s["entries"] if "1" in e["follow"]]
         cand.sort(key=lambda e: (-e["follow"]["1"]["vs_index_pp"], e["name"]))
         top = {"day": s["day"], "followed_day": cand[0]["follow"]["1"]["day"], "cases": len(cand),
-               "rows": [{k: e[k] for k in ("ticker", "name", "sector", "strategies", "strong", "signals", "labels",
-                                           "criteria", "volume_ratio", "rsi14", "stoch_k", "stoch_d", "r",
-                                           "support_r", "resistance_r", "report_5d", "features")}
+               "regime": (s.get("market") or {}).get("regime"),
+               "rows": [{k: e.get(k) for k in ("ticker", "name", "sector", "strategies", "strong", "signals", "labels",
+                                               "criteria", "volume_ratio", "rsi14", "stoch_k", "stoch_d", "r",
+                                               "support_r", "resistance_r", "report_5d", "features", "regime")}
                         | {"follow": e["follow"]["1"]} for e in cand[:TOP_N]]}
+    # Mönstren per fönster: senaste 2 och 6 veckorna, samma läge som det senaste, hela perioden.
+    last_day = last["day"] if last else None
+    regime = today["regime"] if today else None
+    pats = {}
+    for key, text, days in WINDOWS:
+        sub = _window_rows(rows, key, days, last_day, regime)
+        pats[key] = {"text": text if key != "lage" else f"{text} ({regime_text(regime).lower()})", "regime": regime
+                     if key == "lage" else None, "days": sorted({r["day"] for r in sub}),
+                     **{str(h): patterns(sub, str(h), texts) for h in PATTERN_HORIZONS}}
+    # Lyckade fall och alla avgjorda fall (för jämförelsen).
+    decided = []
+    successes = []
+    decided_rows = []
+    for r in rows:
+        st = success_status(r)
+        if st is None:
+            continue
+        decided_rows.append({**r, "status": st})
+        decided.append({"day": r["day"], "strategies": r["strategies"], "strong": r["strong"], "sector": r["sector"],
+                        "regime": r.get("regime"), "status": st})
+        if st == "lyckad":
+            successes.append({k: r.get(k) for k in ("day", "ticker", "name", "sector", "strategies", "strong",
+                                                    "signals", "labels", "criteria", "volume_ratio", "rsi14", "stoch_k",
+                                                    "r", "support_r", "resistance_r", "report_5d", "features",
+                                                    "regime")}
+                             | {"reasons": success_reasons(r),
+                                "follow": {k: r["follow"][k] for k in sorted(r["follow"]) if int(k) <= SUCCESS_DAYS}})
+    successes.sort(key=lambda x: (x["day"], x["name"]), reverse=True)
+    recent_first = (date.fromisoformat(last_day) - timedelta(days=SIMILAR_DAYS)).isoformat() if last_day else ""
+    recent = [x for x in decided if x["day"] >= recent_first]
+    by_regime = {}
+    for x in recent:
+        by_regime.setdefault(x["regime"] or "okänt", []).append(x)
+    by_strategy = {k: [x for x in recent if k in x["strategies"]] for k in STRATEGY_ORDER}
+    by_strategy["stark"] = [x for x in recent if x["strong"]]
+    # Larmen: dagens kandidater (senaste ögonblicksbilden) som liknar minst SIMILAR_MIN nyligen lyckade fall.
+    similar = []
+    if last:
+        for e in last["entries"]:
+            if not e["strategies"]:
+                continue
+            sim = similar_cases(e, last["day"], decided_rows)
+            ok = [x for x in sim if x["status"] == "lyckad"]
+            companies = sorted({x["name"] for x in ok})
+            if len(companies) >= SIMILAR_MIN:
+                similar.append({"ticker": e["ticker"], "name": e["name"], "strategies": e["strategies"],
+                                "matches": len(companies), "similar_cases": len(sim), "similar_successes": len(ok),
+                                "examples": companies[:3]})
+    similar.sort(key=lambda x: (-x["matches"], x["name"]))
     return {
-        "schema_version": 1, "generated_at": now.isoformat(timespec="seconds"),
-        "period": {"start": min((s["day"] for s in snaps), default=None), "end": max((s["day"] for s in snaps), default=None)},
+        "schema_version": 2, "generated_at": now.isoformat(timespec="seconds"),
+        "period": {"start": snaps[0]["day"] if snaps else None, "end": last_day},
         "snapshots": len(snaps), "entries": len(rows),
         "thresholds": {"top_share": TOP_SHARE, "top_n": TOP_N, "hold_weeks": HOLD_WEEKS,
-                       "min_feature_cases": MIN_FEATURE_CASES, "horizons": list(HORIZONS), **FEATURE_THRESHOLDS},
+                       "min_feature_cases": MIN_FEATURE_CASES, "horizons": list(HORIZONS),
+                       "success_r": SUCCESS_R, "success_pp": SUCCESS_PP, "success_days": SUCCESS_DAYS,
+                       "similar_days": SIMILAR_DAYS, "similar_min": SIMILAR_MIN, "similar_jaccard": SIMILAR_JACCARD,
+                       "breadth_alert_pp": BREADTH_ALERT_PP, "sector_volume_alert": SECTOR_VOLUME_ALERT,
+                       "vol_calm_max": VOL_CALM_MAX, **FEATURE_THRESHOLDS},
         "feature_texts": texts,
+        "regime_texts": {f"{t}-{v}": regime_text(f"{t}-{v}") for t in TREND_TEXT for v in VOL_TEXT},
+        "market_today": today,
+        "market_week_ago": week_ago,
+        "market_history": [{"day": m["day"], "regime": m["regime"], "above_ma50_pct": m["breadth"]["above_ma50_pct"],
+                            "vs_ma50_pct": m["index"]["vs_ma50_pct"], "vol20": m["index"]["vol20"],
+                            "new_highs": m["new_highs"], "new_lows": m["new_lows"]} for m in market],
         "top": top,
-        "patterns": {str(h): patterns(rows, str(h), texts) for h in PATTERN_HORIZONS},
+        "patterns": pats,
+        "successes": successes,
+        "success_recent": {"since": recent_first, "all": _rate(recent),
+                           "by_regime": {k: _rate(v) for k, v in sorted(by_regime.items())},
+                           "by_strategy": {k: _rate(v) for k, v in by_strategy.items()}},
+        "cases_index": [[x["day"], x["strategies"], x["strong"], x["sector"], x["regime"], x["status"]] for x in decided],
+        "alerts": {"swing_date": last.get("swing_date") if last else None, "day": last_day, "similar": similar,
+                   "market": (today or {}).get("signs", []) if today and today["day"] == last_day else []},
         "note": "Dagens bevakningslista (bolag som avnoterats saknas). Fallen överlappar i tid och är inte oberoende. "
-                "Utan courtage. Mönstren beskriver vad som hänt, inte vad som kommer att hända.",
+                "Utan courtage. Mönstren och de lyckade fallen beskriver vad som hänt, inte vad som kommer att hända.",
     }
+
+
+def alerts_notice(summ: dict | None, swing_date: str | None) -> dict | None:
+    """Larmen för notisen vid Bollingerkontrollerna (scripts/bollinger.py), eller None om sammanställningen inte gäller
+    dagens swingfil. {"similar", "market", "notice"}."""
+    a = (summ or {}).get("alerts") or {}
+    if not swing_date or a.get("swing_date") != swing_date:
+        return None
+    parts = []
+    if a.get("similar"):
+        names = ", ".join(f"{x['name']} ({x['similar_successes']} av {x['similar_cases']} liknande lyckades)"
+                          for x in a["similar"][:6])
+        more = f" och {len(a['similar']) - 6} till" if len(a["similar"]) > 6 else ""
+        parts.append(f"Liknar nyligen lyckade fall: {names}{more}.")
+    if a.get("market"):
+        parts.append("Marknadstecken (gårdagens stängning): " + "; ".join(x["text"] for x in a["market"]) + ".")
+    return {"similar": a.get("similar", []), "market": a.get("market", []), "notice": " ".join(parts)}
+
+
+def load_summary(eval_dir: Path = EVAL_DIR) -> dict | None:
+    p = eval_dir / "summary.json"
+    try:
+        return json.loads(p.read_text(encoding="utf-8")) if p.exists() else None
+    except (OSError, ValueError):
+        return None
 
 
 # --- Filer och rådatarepot -----------------------------------------------------------------------
@@ -433,18 +722,27 @@ def _sectors() -> dict[str, str]:
 
 
 def update(swing_files: list[dict], bars: dict, instruments: dict, now: datetime, eval_dir: Path = EVAL_DIR,
-           signals_dir: Path = SIGNALS_DIR) -> tuple[list[dict], dict, list[tuple[Path, str]]]:
-    """Nya ögonblicksbilder ur swingfilerna (befintliga skrivs inte över), uppföljning av de öppna och en ny
-    sammanställning. Returnerar (ögonblicksbilder, sammanställning, ändrade filer)."""
+           signals_dir: Path = SIGNALS_DIR, keep_open: int | None = KEEP_OPEN_DAYS
+           ) -> tuple[list[dict], dict, list[tuple[Path, str]]]:
+    """Nya ögonblicksbilder ur swingfilerna (befintliga skrivs inte över), marknadsläget där det saknas, uppföljning av
+    de öppna (keep_open kalenderdagar; None = alla) och en ny sammanställning. Returnerar (ögonblicksbilder,
+    sammanställning, ändrade filer)."""
     snaps = {s["day"]: s for s in load_snapshots(eval_dir)}
     yahoo = {t: i.yahoo_ticker for t, i in instruments.items()}
+    sector_of = {i.yahoo_ticker: i.sektor for i in instruments.values()}
     sectors = _sectors()
     for sw in swing_files:
         if sw.get("as_of") and sw["as_of"] not in snaps:
             snaps[sw["as_of"]] = snapshot(sw, latest_signals(sw["date"], signals_dir), yahoo, sectors, now)
     last = max((b.day for b in bars.get(INDEX_TICKER, [])), default=None)
     for s in snaps.values():
-        if last and (last - date.fromisoformat(s["day"])).days <= KEEP_OPEN_DAYS:
+        if not s.get("market"):
+            m = market_state(bars, sector_of, date.fromisoformat(s["day"]), sectors)
+            if m:
+                s["market"] = m
+        for e in s["entries"]:
+            e["regime"] = (s.get("market") or {}).get("regime")
+        if last and (keep_open is None or (last - date.fromisoformat(s["day"])).days <= keep_open):
             follow_up(s, bars)
     all_snaps = sorted(snaps.values(), key=lambda s: s["day"])
     summ = summary(all_snaps, now)
@@ -457,9 +755,12 @@ def morning_update(swing: dict, bars: dict, instruments: dict, now: datetime) ->
         snaps, summ, changed = update([swing], bars, instruments, now)
         msg = commit(changed, f"Swing-utvärdering {swing['as_of']}")
         top = summ.get("top") or {}
+        mt = summ.get("market_today") or {}
         return (f"Swing-utvärdering: {len(snaps)} dagar, {summ['entries']} fall, i dag "
                 f"{len(next((s for s in snaps if s['day'] == swing['as_of']), {'entries': []})['entries'])} bolag; "
-                f"topp {len(top.get('rows', []))} ({top.get('day', '–')}); {msg}")
+                f"topp {len(top.get('rows', []))} ({top.get('day', '–')}); läge {mt.get('regime_text', '–')}; "
+                f"{len(summ['successes'])} lyckade fall; larm {len(summ['alerts']['similar'])} liknande, "
+                f"{len(summ['alerts']['market'])} marknadstecken; {msg}")
     except Exception as exc:  # noqa: BLE001 - utvärderingen får aldrig stoppa morgonen
         return f"Swing-utvärdering misslyckades: {type(exc).__name__}: {exc}"
 
@@ -500,7 +801,7 @@ def accepted_numbers(obj) -> set[str]:
         elif isinstance(v, list):
             for x in v:
                 walk(x)
-    walk(obj)
+    walk({k: v for k, v in obj.items() if k != "cases_index"} if isinstance(obj, dict) else obj)
     # Texter som "20 %", "95 %", "5 dagar" och kännetecknens texter (t.ex. RSI(14), 1,5×) ingår i summary.
     for t in (obj.get("feature_texts") or {}).values():
         ok.update(re.findall(r"\d+(?:,\d+)?", t))
@@ -561,7 +862,7 @@ def needs_note(today: date, eval_dir: Path = EVAL_DIR) -> bool:
     if not p.exists():
         return False
     summ = json.loads(p.read_text(encoding="utf-8"))
-    return any(summ["patterns"][h]["cases"] > 0 for h in summ.get("patterns", {}))
+    return bool(summ.get("market_today")) or summ.get("entries", 0) > 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -623,10 +924,11 @@ def main(argv: list[str] | None = None) -> int:
         first = min(date.fromisoformat(f["as_of"]) for f in files)
         tickers = sorted({i.yahoo_ticker for i in listed(instruments, now.date()).values()
                           if i.yahoo_ticker.endswith(".ST")})
-        bars = yahoo_bars([*tickers, INDEX_TICKER], first - timedelta(days=45), now.date() - timedelta(days=1))
+        # Marknadsläget behöver 52 veckor (och 200 dagars MA) före den första signaldagen.
+        bars = yahoo_bars([*tickers, INDEX_TICKER], first - timedelta(days=400), now.date() - timedelta(days=1))
         if args.cache:
             args.cache.write_bytes(pickle.dumps(bars))
-    snaps, summ, changed = update(files, bars, instruments, now)
+    snaps, summ, changed = update(files, bars, instruments, now, keep_open=None)
     print(f"{len(snaps)} ögonblicksbilder, {summ['entries']} fall; {commit(changed, 'Swing-utvärdering i efterhand')}")
     return 0
 
