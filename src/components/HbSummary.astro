@@ -1,16 +1,24 @@
 ---
 /**
- * En Handelsbanken-sammanfattning överst på startsidan (scripts/hb_manual.py): rapportens datum, huvudbudskapet,
- * punkterna, synen på räntor och värderingar, delsegment och bolag ur bevakningslistan. Skriven med egna ord,
- * märkt "manuellt tillagd", med länk till källsidan. Inga citat.
+ * En Handelsbanken-sammanfattning överst på startsidan (scripts/hb_manual.py), i tre avsnitt:
+ * a) Rapporten i korthet: huvudbudskapet med egna ord, punkter, räntor, värderingar, delsegment och bolag som nämns.
+ * b) Betydelse för aktiemarknaden: berörda sektorer och bolag med riktning och motivering, märkt som Claudes tolkning,
+ *    inte Handelsbankens.
+ * c) Vad vår data visar: sidans egna värden för de berörda bolagen (lagda av skriptet, inte av Claude) och var
+ *    rapportens bild och marknadens rörelse går isär (⚠).
+ * Märkt "manuellt tillagd", med länk till källsidan. Inga citat, inga ord som köp eller sälj.
  */
+import { loadSectors } from "../lib/data";
 import { shortDate } from "../lib/format";
-import { KIND_NAMES, type HbSummary } from "../lib/hb";
+import { KIND_NAMES, dataCells, directionText, type HbSummary } from "../lib/hb";
 
 interface Props {
   s: HbSummary;
 }
 const { s } = Astro.props;
+const sectorName = new Map(loadSectors().map((x) => [x.id, x.name]));
+const imp = s.impact;
+const od = s.our_data ?? [];
 ---
 
 <article class="hb">
@@ -18,6 +26,8 @@ const { s } = Astro.props;
     {KIND_NAMES[s.kind]} {shortDate(s.report_date)} {s.report_date.slice(0, 4)}
     <span class="hb-label">{s.label}</span>
   </h3>
+
+  <h4>Rapporten i korthet</h4>
   <p class="hb-head">{s.headline}</p>
   <ul class="hb-points">
     {s.points.map((p) => <li>{p}</li>)}
@@ -40,7 +50,7 @@ const { s } = Astro.props;
   {
     s.companies.length > 0 && (
       <p>
-        <strong>Bolag i bevakningslistan:</strong>{" "}
+        <strong>Bolag som nämns:</strong>{" "}
         {s.companies.map((c, i) => (
           <>
             {i > 0 && "; "}
@@ -50,6 +60,76 @@ const { s } = Astro.props;
       </p>
     )
   }
+
+  {
+    imp && (
+      <>
+        <h4>
+          Betydelse för aktiemarknaden <span class="hb-label">{imp.label}</span>
+        </h4>
+        <ul class="hb-impact">
+          {imp.sectors.map((x) => {
+            const d = directionText(x.direction);
+            return (
+              <li>
+                <strong>{sectorName.get(x.sector) ?? x.sector}</strong> (sektor): <span class={d.cls}>{d.text}</span>. {x.reason}
+              </li>
+            );
+          })}
+          {imp.companies.map((x) => {
+            const d = directionText(x.direction);
+            return (
+              <li>
+                <strong>{x.name}</strong> ({x.ticker}): <span class={d.cls}>{d.text}</span>. {x.reason}
+              </li>
+            );
+          })}
+        </ul>
+      </>
+    )
+  }
+
+  {
+    od.length > 0 && (
+      <>
+        <h4>Vad vår data visar</h4>
+        <div class="hb-table-wrap">
+          <table class="hb-table">
+            <thead>
+              <tr>
+                <th scope="col">Bolag</th>
+                <th scope="col" class="num">Mot index, vecka</th>
+                <th scope="col" class="num">Mot index, i år</th>
+                <th scope="col" class="num">Blankning, vecka</th>
+                <th scope="col" class="num">Insyn, vecka</th>
+                <th scope="col" class="num">P/E i år</th>
+                <th scope="col" class="num">Nästa rapport</th>
+                <th scope="col">Kommentar</th>
+              </tr>
+            </thead>
+            <tbody>
+              {od.map((x) => (
+                <tr>
+                  <th scope="row">
+                    {x.diverges && <span class="warn" title="Rapportens bild och marknadens rörelse går isär">⚠ </span>}
+                    {x.name}
+                  </th>
+                  {dataCells(x.data, shortDate).map((c) => <td class="num">{c}</td>)}
+                  <td class="note">{x.note}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p class="hb-source">
+          Värdena kommer ur sidans egna filer
+          {s.data_sources && ` (signaler ${s.data_sources.signals ?? "–"}, Kurs mot vinst ${s.data_sources.valuation ?? "–"}, rapportkalendern från ${shortDate(s.data_sources.calendar_from)})`}.
+          ⚠ = rapportens bild och marknadens rörelse går isär (Claudes bedömning). pe = procentenheter.
+        </p>
+      </>
+    )
+  }
+
   <p class="hb-source">
     Sammanfattad med egna ord ur en rapport som laddats ner för hand ({s.file_name}).{" "}
     <a href={s.source_url} rel="noopener">Handelsbankens sida för rapporten</a>
@@ -65,6 +145,10 @@ const { s } = Astro.props;
   .hb-title {
     margin: 0 0 6px;
     font-size: 1.05rem;
+  }
+  .hb h4 {
+    margin: 12px 0 4px;
+    font-size: 0.95rem;
   }
   .hb-label {
     margin-left: 8px;
@@ -82,6 +166,38 @@ const { s } = Astro.props;
   .hb ul {
     margin: 4px 0;
     max-width: 80ch;
+  }
+  .pos {
+    color: var(--pos);
+  }
+  .neg {
+    color: var(--neg);
+  }
+  .hb-table-wrap {
+    overflow-x: auto;
+  }
+  .hb-table {
+    border-collapse: collapse;
+    font-size: 0.85rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .hb-table th,
+  .hb-table td {
+    padding: 4px 8px;
+    border-bottom: 1px solid var(--border);
+    text-align: left;
+    vertical-align: top;
+  }
+  .hb-table .num {
+    text-align: right;
+    white-space: nowrap;
+  }
+  .hb-table .note {
+    min-width: 24ch;
+    max-width: 60ch;
+  }
+  .warn {
+    color: var(--neg);
   }
   .hb-source {
     font-size: 0.8rem;

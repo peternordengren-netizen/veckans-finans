@@ -16,9 +16,61 @@ export interface HbSummary {
   valuations?: string | null;
   segments: { name: string; view: string }[];
   companies: { ticker: string; name: string; note: string }[];
+  /** b) Betydelse för aktiemarknaden: Claudes tolkning, inte Handelsbankens (saknas i äldre sammanfattningar). */
+  impact?: {
+    label: string;
+    sectors: { sector: string; direction: Direction; reason: string }[];
+    companies: { ticker: string; name: string; direction: Direction; reason: string }[];
+  };
+  /** c) Vad vår data visar: sidans värden (lagda av skriptet) och Claudes kommentar (saknas i äldre). */
+  our_data?: { ticker: string; name: string; diverges: boolean; note: string; data?: HbCompanyData }[];
+  data_sources?: { signals: string | null; valuation: string | null; calendar_from: string };
   label: string;
   source_url: string;
   summarized_at?: string;
+}
+
+export type Direction = "positiv" | "negativ" | "blandad";
+
+/** Värdena i avsnitt c) (scripts/hb_manual.DATA_FIELDS). */
+export interface HbCompanyData {
+  week_change_pct: number | null;
+  week_rel_index_pp: number | null;
+  ytd_pct: number | null;
+  ytd_rel_index_pp: number | null;
+  short_change_pp: number | null;
+  insider_net_sek: number | null;
+  insider_buyers: number | null;
+  insider_sellers: number | null;
+  pe_now: number | null;
+  pe_change_pct: number | null;
+  next_report: string | null;
+}
+
+const MINUS = "−";
+const fmt = (v: number, d: number) =>
+  new Intl.NumberFormat("sv-SE", { minimumFractionDigits: d, maximumFractionDigits: d }).format(Math.abs(v));
+const signed = (v: number | null, d: number, unit: string) =>
+  v === null ? "–" : `${v > 0 ? "+" : v < 0 ? MINUS : ""}${fmt(v, d)} ${unit}`;
+
+/** Cellerna i tabellen "Vad vår data visar": kurs mot index (vecka, i år), blankning, insyn, P/E i år, nästa rapport. */
+export function dataCells(d: HbCompanyData | undefined, shortDate: (iso: string) => string): string[] {
+  if (!d) return ["–", "–", "–", "–", "–", "–"];
+  // Insyn: nettobeloppet senaste veckan (förvärv minus avyttringar), i miljoner kronor.
+  const insider = d.insider_net_sek === null ? "–" : `${signed(d.insider_net_sek / 1e6, 1, "mkr")} netto`;
+  return [
+    signed(d.week_rel_index_pp, 1, "pe"),
+    signed(d.ytd_rel_index_pp, 1, "pe"),
+    signed(d.short_change_pp, 2, "pe"),
+    insider,
+    signed(d.pe_change_pct, 1, "%"),
+    d.next_report ? shortDate(d.next_report) : "–",
+  ];
+}
+
+/** Riktningens text och färgklass. */
+export function directionText(d: Direction): { text: string; cls: string } {
+  return d === "positiv" ? { text: "positiv", cls: "pos" } : d === "negativ" ? { text: "negativ", cls: "neg" } : { text: "blandad", cls: "" };
 }
 
 /** Hur länge (dagar efter rapportdatumet) en sammanfattning visas överst på startsidan, per rapporttyp. */

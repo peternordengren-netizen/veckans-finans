@@ -113,15 +113,42 @@ def good_summary(meta):
         "segments": [{"name": "logistik", "view": "botten nådd för avkastningskraven"},
                      {"name": "kontor", "view": "svagare i ytterområden"}],
         "companies": [{"ticker": "ALFA", "name": "Alfaverken Fastigheter", "note": "lyfts fram för sin starka balansräkning"}],
+        "impact": {
+            "label": hb_manual.IMPACT_LABEL,
+            "sectors": [{"sector": "fastigheter", "direction": "blandad",
+                         "reason": "Stabilare avkastningskrav för logistik men svagare kontor i ytterområden."}],
+            "companies": [{"ticker": "ALFA", "name": "Alfaverken Fastigheter", "direction": "positiv",
+                           "reason": "Stark balans gör bolaget mindre känsligt för höga räntor."}],
+        },
+        "our_data": [{"ticker": "ALFA", "name": "Alfaverken Fastigheter", "diverges": True,
+                      "note": "Kursen har gått 4,2 procentenheter sämre än index i år trots den positiva bilden, "
+                              "och blankningen ökade 0,35 procentenheter. Nästa rapport 2099-11-20."}],
         "label": "manuellt tillagd", "source_url": hb_manual.SOURCE_URLS["fastighetsrapport"],
     }
+
+
+DATA = {"sources": {"signals": "2099-W45", "valuation": "2099-W45", "calendar_from": "2099-11-11"},
+        "companies": {"ALFA": {"name": "Alfaverken Fastigheter", "week_change_pct": 1.2, "week_rel_index_pp": 0.8,
+                               "ytd_pct": 3.5, "ytd_rel_index_pp": -4.21, "short_change_pp": 0.35,
+                               "insider_net_sek": -1250000, "insider_buyers": 0, "insider_sellers": 1, "pe_now": 14.2,
+                               "pe_change_pct": -8.0, "next_report": "2099-11-20"}}}
+SECTORS = {"fastigheter", "industri"}
 
 
 META = {"id": "0123456789abcdef", "file_name": "fastighet.pdf", "kind": "fastighetsrapport", "file_date": None}
 
 
 def test_kontrollen_godkanner_egna_ord():
-    assert hb_manual.check(good_summary(META), META, SOURCE, INSTRUMENTS, date(2099, 11, 11)) == []
+    assert hb_manual.check(good_summary(META), META, SOURCE, INSTRUMENTS, date(2099, 11, 11), DATA, SECTORS) == []
+
+
+def test_tal_i_avsnitt_c_ska_finnas_i_sidans_data():
+    v, src = DATA["companies"]["ALFA"], DATA["sources"]
+    assert hb_manual.numbers_in_data("Ned 4,2 pe mot index i år, P/E −8 %, insyn 1,25 miljoner netto.", v, src) == []
+    assert hb_manual.numbers_in_data("Insyn 1 250 000 kr. Rapport 2099-11-20, data vecka 2099-W45.", v, src) == []
+    assert hb_manual.numbers_in_data("Kursen har stigit 12 % i år.", v, src) == ["12"]  # finns inte i datan
+    assert hb_manual.numbers_in_data("Rapport 2099-12-01.", v, src) == ["2099-12-01"]
+    assert hb_manual.numbers_in_data("P/E 14,25.", v, src) == ["14,25"]  # fler decimaler än i datan
 
 
 @pytest.mark.parametrize("change, fel", [
@@ -138,10 +165,20 @@ def test_kontrollen_godkanner_egna_ord():
     ({"report_date": "15 okt"}, "inget datum"),
     ({"points": ["bara en"]}, "punkterna"),
     ({"points": ["Banken anser att man bör köpa logistikbolag.", "Kontor svagare."]}, "köpa"),
+    # b) Betydelse för aktiemarknaden
+    ({"impact": {"label": "Handelsbankens syn", "sectors": [], "companies": [{"ticker": "ALFA", "name": "Alfaverken Fastigheter", "direction": "positiv", "reason": "x"}]}}, "Claudes tolkning"),
+    ({"impact": {"label": hb_manual.IMPACT_LABEL, "sectors": [], "companies": []}}, "minst en"),
+    ({"impact": {"label": hb_manual.IMPACT_LABEL, "sectors": [{"sector": "rymd", "direction": "positiv", "reason": "x"}], "companies": []}}, "sectors.json"),
+    ({"impact": {"label": hb_manual.IMPACT_LABEL, "sectors": [{"sector": "industri", "direction": "uppåt", "reason": "x"}], "companies": []}}, "riktning"),
+    ({"impact": {"label": hb_manual.IMPACT_LABEL, "sectors": [], "companies": [{"ticker": "BETA", "name": "Betabolaget", "direction": "negativ", "reason": "Sälj aktien."}]}}, "avsnitt c) saknar"),
+    # c) Vad vår data visar
+    ({"our_data": [{"ticker": "ALFA", "name": "Alfaverken Fastigheter", "diverges": False, "note": "Kursen steg 9 % i veckan."}]}, "finns inte i sidans data"),
+    ({"our_data": [{"ticker": "ALFA", "name": "Alfaverken Fastigheter", "note": "x"}]}, "diverges"),
+    ({"our_data": [{"ticker": "ALFA", "name": "Alfaverken Fastigheter", "diverges": False, "note": "Analytikerna säger sälj."}]}, "sälj"),
 ])
 def test_kontrollen_underkanner(change, fel):
     s = {**good_summary(META), **change}
-    errors = hb_manual.check(s, META, SOURCE, INSTRUMENTS, date(2099, 11, 11))
+    errors = hb_manual.check(s, META, SOURCE, INSTRUMENTS, date(2099, 11, 11), DATA, SECTORS)
     assert any(fel in e for e in errors), errors
 
 
@@ -149,10 +186,10 @@ def test_morgonrapportens_datum_ur_filnamnet():
     meta = {**META, "kind": "morgonrapport", "file_name": "991111 Final.pptx", "file_date": "2099-11-11"}
     s = {**good_summary(meta), "kind": "morgonrapport", "report_date": "2099-11-10", "rates": None,
          "valuations": None, "segments": [], "source_url": hb_manual.SOURCE_URLS["morgonrapport"]}
-    errors = hb_manual.check(s, meta, SOURCE, INSTRUMENTS, date(2099, 11, 11))
+    errors = hb_manual.check(s, meta, SOURCE, INSTRUMENTS, date(2099, 11, 11), DATA, SECTORS)
     assert errors == ["rapportdatumet 2099-11-10 ska vara 2099-11-11 (filnamnet)"]
     s["report_date"] = "2099-11-11"
-    assert hb_manual.check(s, meta, SOURCE, INSTRUMENTS, date(2099, 11, 11)) == []
+    assert hb_manual.check(s, meta, SOURCE, INSTRUMENTS, date(2099, 11, 11), DATA, SECTORS) == []
 
 
 def test_klar_till_radatarepot_och_arbetsfilerna_bort(tmp_path, monkeypatch):
@@ -162,7 +199,10 @@ def test_klar_till_radatarepot_och_arbetsfilerna_bort(tmp_path, monkeypatch):
     (work / f"{fid}.meta.json").write_text(json.dumps(META), encoding="utf-8")
     (work / f"{fid}.txt").write_text(SOURCE, encoding="utf-8")
     (hb / f"{fid}.json").write_text(json.dumps(good_summary(META), ensure_ascii=False), encoding="utf-8")
+    (work / f"{fid}.data.json").write_text(json.dumps(DATA), encoding="utf-8")
     monkeypatch.setattr(hb_manual, "load_instruments", lambda: INSTRUMENTS)
+    import validate
+    monkeypatch.setattr(validate, "load_sector_ids", lambda: SECTORS)
     committed = []
 
     def commit(raw_dir, files, message):
@@ -175,11 +215,16 @@ def test_klar_till_radatarepot_och_arbetsfilerna_bort(tmp_path, monkeypatch):
     assert ok, msg
     rel, saved, message = committed[0]
     assert rel == f"hb/{fid}.json" and saved["summarized_at"] == now.isoformat(timespec="seconds")
+    # Avsnitt c): värdena läggs på av skriptet ur sidans data, med källorna.
+    assert saved["our_data"][0]["data"]["ytd_rel_index_pp"] == -4.21
+    assert set(saved["our_data"][0]["data"]) == set(hb_manual.DATA_FIELDS)
+    assert saved["data_sources"]["signals"] == "2099-W45"
     assert "manuellt tillagd" in message
     assert not any(work.iterdir()) and not (hb / f"{fid}.json").exists()  # texten och utfilen borttagna
     # Underkänd: inget till rådatarepot, arbetsfilerna står kvar.
     (work / f"{fid}.meta.json").write_text(json.dumps(META), encoding="utf-8")
     (work / f"{fid}.txt").write_text(SOURCE, encoding="utf-8")
+    (work / f"{fid}.data.json").write_text(json.dumps(DATA), encoding="utf-8")
     (hb / f"{fid}.json").write_text(json.dumps({**good_summary(META), "label": "x"}), encoding="utf-8")
     ok, msg = hb_manual.cmd_done(fid, now, raw, hb_dir=hb, work_dir=work, commit=commit)
     assert not ok and "märkningen" in msg and (work / f"{fid}.txt").exists() and len(committed) == 1
@@ -212,3 +257,25 @@ def test_poddens_avsnitt_i_dag():
 
     res = podcast.for_morning(date(2099, 11, 11), get=fail)
     assert res["episode"] is None and "TimeoutError" in res["error"]
+
+
+def test_bolagsdata_ur_sidans_filer(tmp_path):
+    """company_data: senaste veckosignalerna, Kurs mot vinst och första rapporten från och med i dag."""
+    for d in ("signals", "valuation", "calendar"):
+        (tmp_path / d).mkdir()
+    (tmp_path / "signals" / "2099-W44.json").write_text(json.dumps({"week": "2099-W44", "companies": [
+        {"ticker": "ALFA", "name": "Alfaverken Fastigheter", "change_pct": 9.9, "relative_pp": 9.9}]}), encoding="utf-8")
+    (tmp_path / "signals" / "2099-W45.json").write_text(json.dumps({"week": "2099-W45", "companies": [
+        {"ticker": "ALFA", "name": "Alfaverken Fastigheter", "change_pct": 1.2, "relative_pp": 0.8, "short_aggregate_pp": 0.35,
+         "insider_net_sek": -1250000, "insider_buyers": 0, "insider_sellers": 1}]}), encoding="utf-8")
+    (tmp_path / "valuation" / "2099-W45.json").write_text(json.dumps({"week": "2099-W45", "companies": [
+        {"ticker": "ALFA", "name": "Alfaverken Fastigheter", "ytd_pct": 3.5, "rel_index_pp": -4.21, "pe_now": 14.2,
+         "pe_change_pct": -8.0}]}), encoding="utf-8")
+    (tmp_path / "calendar" / "2099-W46.json").write_text(json.dumps({"events": [
+        {"date": "2099-11-10", "kind": "rapport", "ticker": "ALFA", "name": "Alfaverken Fastigheter"},
+        {"date": "2099-11-25", "kind": "rapport", "ticker": "ALFA", "name": "Alfaverken Fastigheter"},
+        {"date": "2099-11-20", "kind": "rapport", "ticker": "ALFA", "name": "Alfaverken Fastigheter"},
+        {"date": "2099-11-12", "kind": "stamma", "ticker": "ALFA", "name": "Alfaverken Fastigheter"}]}), encoding="utf-8")
+    d = hb_manual.company_data(date(2099, 11, 11), tmp_path)
+    assert d["sources"] == {"signals": "2099-W45", "valuation": "2099-W45", "calendar_from": "2099-11-11"}
+    assert d["companies"]["ALFA"] == {**{k: v for k, v in DATA["companies"]["ALFA"].items()}}

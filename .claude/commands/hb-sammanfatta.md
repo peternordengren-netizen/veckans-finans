@@ -20,8 +20,24 @@ Kommandot körs utan att någon tittar på, med behörighetsläget `dontAsk`. Ba
 1. Läs `data/hb/work/<id>.meta.json`: filnamnet, rapporttypen (`kind`), datumet ur filnamnet (`file_date`, kan vara
    null), filens skapandedatum ur metadatan (`file_created`, kan vara null), länken (`source_url`) och utfilen (`out`).
 2. Läs rapportens text i `data/hb/work/<id>.txt` (bild för bild eller sida för sida). Läs inget annat om rapporten.
-3. Läs `data/instruments.csv` (kolumnerna namn, ticker) för att koppla bolag som nämns till bevakningslistan.
-4. Skriv utfilen `data/hb/<id>.json` med Write:
+3. Läs `data/instruments.csv` (kolumnerna namn, ticker, sektor) för att koppla bolag som nämns till bevakningslistan,
+   och `data/sectors.json` för sektorernas id.
+4. Läs `data/hb/work/<id>.data.json` (sökvägen står i meta under `data`): sidans egna värden per bolag (`companies`,
+   fälten förklaras under `fields`) och källorna (`sources`).
+
+Sammanfattningen har tre avsnitt:
+- a) **Rapporten i korthet**: huvudbudskapet med egna ord (fälten headline, points, rates, valuations, segments,
+  companies nedan).
+- b) **Betydelse för aktiemarknaden** (`impact`): vilka sektorer och bolag i instruments.csv rapporten berör, med
+  riktning `positiv`, `negativ` eller `blandad` och en kort motivering. Det är din tolkning, inte Handelsbankens, och
+  märks så. Ta bara med bolag där kopplingen till rapporten är tydlig.
+- c) **Vad vår data visar** (`our_data`): en rad per bolag i b) (fler får tas med). `note` beskriver kort vad sidans
+  värden visar för bolaget (kurs mot index senaste veckan och i år, blankningsändring, insyn, P/E-förändring i år,
+  kommande rapport) och pekar ut om rapportens bild och marknadens rörelse går isär (`diverges`: true/false).
+  **Varje tal i note ska finnas i bolagets värden i data.json** (avrundat till högst två decimaler, med decimalkomma,
+  utan tecken; kronbelopp får skrivas i miljoner). Skriv datum som ÅÅÅÅ-MM-DD. Hitta inte på tal och räkna inte om.
+  Saknas ett värde (null) säger du att det saknas. Du skriver inte värdena själva; skriptet lägger på dem.
+5. Skriv utfilen `data/hb/<id>.json` med Write:
 
 ```json
 {
@@ -36,6 +52,12 @@ Kommandot körs utan att någon tittar på, med behörighetsläget `dontAsk`. Ba
   "valuations": "<synen på värderingar (fastigheter, aktier eller marknaden), eller null>",
   "segments": [{"name": "<delsegment, t.ex. bostäder, kontor, logistik, handel>", "view": "<synen på segmentet>"}],
   "companies": [{"ticker": "<ticker ur instruments.csv>", "name": "<namn exakt som i instruments.csv>", "note": "<vad rapporten säger om bolaget>"}],
+  "impact": {
+    "label": "Claudes tolkning, inte Handelsbankens",
+    "sectors": [{"sector": "<id ur sectors.json>", "direction": "positiv|negativ|blandad", "reason": "<motivering>"}],
+    "companies": [{"ticker": "<ticker>", "name": "<namn som i instruments.csv>", "direction": "positiv|negativ|blandad", "reason": "<motivering>"}]
+  },
+  "our_data": [{"ticker": "<ticker>", "name": "<namn som i instruments.csv>", "diverges": false, "note": "<vad sidans värden visar, bara tal ur data.json>"}],
   "label": "manuellt tillagd",
   "source_url": "<source_url ur meta>"
 }
@@ -49,6 +71,7 @@ Kommandot körs utan att någon tittar på, med behörighetsläget `dontAsk`. Ba
 - Bolag som inte finns i instruments.csv tas inte med i `companies` (du kan nämna dem i en punkt). Gissa inga tickrar.
 - Siffror (räntor, procent, prognoser) får stå med, men formulera meningarna själv.
 
-5. Kör `.venv/Scripts/python scripts/hb_manual.py --kontrollera <id>`. Står det UNDERKÄND: rätta det som står efter
+6. Kör `.venv/Scripts/python scripts/hb_manual.py --kontrollera <id>`. Står det UNDERKÄND: rätta det som står efter
    `fel:` i utfilen och kör kontrollen igen, högst tre gånger. Skriv inget annat än utfilen.
-6. Avsluta med en rad: GODKÄND eller UNDERKÄND och antalet punkter, segment och bolag.
+7. Avsluta med en rad: GODKÄND eller UNDERKÄND och antalet punkter, segment, berörda bolag och fall där rapporten
+   och marknaden går isär.

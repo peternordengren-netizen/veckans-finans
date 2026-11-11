@@ -13,6 +13,15 @@ Steg (anropas av run_hb.ps1 vid morgonkörningen, Bollingerkontrollerna 09:20 oc
     python scripts/hb_manual.py --kontrollera <id> # Claude kör den här: kontrollerar data/hb/<id>.json mot texten
     python scripts/hb_manual.py --klar <id>        # godkänd: till rådatarepot, arbetsfilerna tas bort
 
+Sammanfattningen har tre avsnitt:
+a) "Rapporten i korthet": huvudbudskap, punkter, räntor, värderingar, delsegment och bolag som nämns, med egna ord.
+b) "Betydelse för aktiemarknaden" ("impact"): berörda sektorer (data/sectors.json) och bolag (instruments.csv) med
+   riktning (positiv, negativ eller blandad) och motivering. Märkt IMPACT_LABEL: Claudes tolkning, inte Handelsbankens.
+c) "Vad vår data visar" ("our_data"): för de berörda bolagen värden ur sidans befintliga filer (company_data: senaste
+   veckosignalerna, Kurs mot vinst och rapportkalendern), med Claudes kommentar och om rapportens bild och marknadens
+   rörelse går isär ("diverges"). Värdena läggs på av det här skriptet när sammanfattningen sparas, inte av Claude,
+   och varje tal i kommentaren ska finnas i bolagets värden (numbers_in_data).
+
 Kontrollen (check):
 - fälten finns och har rätt form; kind och datum stämmer med filen (Morgonrapporten: datumet i filnamnet, ÅÅMMDD)
 - label är "manuellt tillagd" och source_url är källsidan för rapporttypen (SOURCE_URLS, inga gissade adresser)
@@ -52,6 +61,22 @@ SOURCE_URLS = {
     "annan": "https://www.handelsbanken.se/sv/foretag/placera/marknadsinformation-och-analyser",
 }
 LABEL = "manuellt tillagd"
+IMPACT_LABEL = "Claudes tolkning, inte Handelsbankens"
+DIRECTIONS = {"positiv", "negativ", "blandad"}
+# Värdena i avsnitt c), med förklaring (visas på sidan och skrivs i datafilen till Claude).
+DATA_FIELDS = {
+    "week_change_pct": "kursförändring senaste veckan, procent",
+    "week_rel_index_pp": "kurs mot index senaste veckan, procentenheter",
+    "ytd_pct": "kursförändring i år, procent",
+    "ytd_rel_index_pp": "kurs mot index i år, procentenheter",
+    "short_change_pp": "ändring i sammanlagd blankning senaste veckan, procentenheter",
+    "insider_net_sek": "insyn senaste veckan, nettoköp (+) eller nettoförsäljning (−) i kronor",
+    "insider_buyers": "insyn, antal personer som köpt",
+    "insider_sellers": "insyn, antal personer som sålt",
+    "pe_now": "P/E nu",
+    "pe_change_pct": "P/E-förändring i år, procent",
+    "next_report": "kommande rapportdatum",
+}
 QUOTE_WORDS = 8
 MAX_ATTEMPTS = 3  # körningar (à två Claude-försök) per fil innan den hoppas över
 SUFFIXES = {".pptx", ".pdf"}
@@ -145,8 +170,10 @@ def prepare(fid: str, path: Path, work_dir: Path = WORK_DIR) -> dict:
     kind, file_date = guess_kind(path, text)
     work_dir.mkdir(parents=True, exist_ok=True)
     (work_dir / f"{fid}.txt").write_text(text, encoding="utf-8")
+    data = company_data(datetime.now(STOCKHOLM).date())
+    (work_dir / f"{fid}.data.json").write_text(json.dumps(data, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
     meta = {"id": fid, "file_name": path.name, "kind": kind, "kind_name": KINDS[kind], "file_date": file_date,
-            "file_created": file_created(path),
+            "file_created": file_created(path), "data": f"data/hb/work/{fid}.data.json",
             "source_url": SOURCE_URLS[kind], "label": LABEL, "out": f"data/hb/{fid}.json"}
     (work_dir / f"{fid}.meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return meta
@@ -162,6 +189,104 @@ def add_attempt(fid: str, work_dir: Path = WORK_DIR) -> int:
     work_dir.mkdir(parents=True, exist_ok=True)
     (work_dir / f"{fid}.attempts").write_text(str(n))
     return n
+
+
+# --- Avsnitt c): sidans befintliga data ----------------------------------------------------
+
+
+def _latest(dir_: Path) -> Path | None:
+    files = sorted(p for p in dir_.glob("*.json") if re.fullmatch(r"\d{4}-W\d{2}", p.stem))
+    return files[-1] if files else None
+
+
+def company_data(today: date, data_dir: Path = DATA_DIR) -> dict:
+    """{"sources": {...}, "companies": {ticker: {DATA_FIELDS}}} ur sidans filer: senaste veckosignalerna
+    (data/signals/<vecka>.json), senaste Kurs mot vinst (data/valuation/<vecka>.json) och rapportkalendern
+    (data/calendar/*.json, första rapporten från och med today). Saknade värden är null."""
+    out: dict[str, dict] = {}
+    sources: dict = {"signals": None, "valuation": None, "calendar_from": today.isoformat()}
+
+    def row(t: str, name: str) -> dict:
+        return out.setdefault(t, {"name": name, **{k: None for k in DATA_FIELDS}})
+
+    sig = _latest(data_dir / "signals")
+    if sig:
+        d = json.loads(sig.read_text(encoding="utf-8"))
+        sources["signals"] = d.get("week")
+        for c in d.get("companies", []):
+            r = row(c["ticker"], c["name"])
+            r.update({"week_change_pct": c.get("change_pct"), "week_rel_index_pp": c.get("relative_pp"),
+                      "short_change_pp": c.get("short_aggregate_pp"), "insider_net_sek": c.get("insider_net_sek"),
+                      "insider_buyers": c.get("insider_buyers"), "insider_sellers": c.get("insider_sellers")})
+    val = _latest(data_dir / "valuation")
+    if val:
+        d = json.loads(val.read_text(encoding="utf-8"))
+        sources["valuation"] = d.get("week")
+        for c in d.get("companies", []):
+            r = row(c["ticker"], c["name"])
+            r.update({"ytd_pct": c.get("ytd_pct"), "ytd_rel_index_pp": c.get("rel_index_pp"), "pe_now": c.get("pe_now"),
+                      "pe_change_pct": c.get("pe_change_pct")})
+    for p in sorted((data_dir / "calendar").glob("*.json")):
+        try:
+            events = json.loads(p.read_text(encoding="utf-8")).get("events", [])
+        except ValueError:
+            continue
+        for e in events:
+            if e.get("kind") == "rapport" and e.get("date", "") >= today.isoformat():
+                r = row(e["ticker"], e["name"])
+                if r["next_report"] is None or e["date"] < r["next_report"]:
+                    r["next_report"] = e["date"]
+    return {"sources": sources, "fields": DATA_FIELDS, "companies": out}
+
+
+def _accepted_numbers(values: dict, extra: list[str] = ()) -> set[str]:
+    """Skrivsätten för talen i ett bolags värden som får stå i en kommentar: med lagrade decimaler och avrundade till
+    0–2 decimaler, utan tecken, med decimalkomma; kronbelopp också i tusental och miljoner."""
+    ok: set[str] = set()
+    for k, v in values.items():
+        if k == "next_report" and isinstance(v, str):
+            ok.update(_date_numbers(v))
+            continue
+        if not isinstance(v, (int, float)) or isinstance(v, bool):
+            continue
+        a = abs(float(v))
+        for d in (0, 1, 2):
+            ok.add(f"{a:.{d}f}".replace(".", ","))
+        ok.add(f"{a:g}".replace(".", ","))
+        if k == "insider_net_sek":
+            ok.add(str(int(round(a))))
+            for d in (0, 1, 2):
+                ok.add(f"{a / 1e6:.{d}f}".replace(".", ","))
+                ok.add(f"{a / 1e3:.{d}f}".replace(".", ","))
+    for e in extra:
+        ok.update(_date_numbers(e))
+    return {x for x in ok if x}
+
+
+def _date_numbers(iso: str) -> set[str]:
+    m = re.fullmatch(r"(\d{4})-W?(\d{2})(?:-(\d{2}))?", iso)
+    if not m:
+        return set()
+    parts = {m[1], m[2], str(int(m[2]))}
+    if m[3]:
+        parts |= {m[3], str(int(m[3]))}
+    return parts
+
+
+def numbers_in_data(note: str, values: dict, sources: dict) -> list[str]:
+    """Tal i kommentaren som inte finns i bolagets värden (tom lista = alla finns). Datum i ISO-form räknas mot
+    kommande rapportdatum och datakällornas veckor."""
+    allowed = _accepted_numbers(values, [v for v in sources.values() if isinstance(v, str)])
+    missing = []
+    for iso in re.findall(r"\d{4}-\d{2}-\d{2}|\d{4}-W\d{2}", note):
+        if iso != values.get("next_report") and iso not in sources.values():
+            missing.append(iso)
+    rest = re.sub(r"\d{4}-\d{2}-\d{2}|\d{4}-W\d{2}", " ", note)
+    for tok in re.findall(r"\d+(?:[ \u00a0]\d{3})*(?:,\d+)?", rest):
+        t = re.sub(r"[ \u00a0]", "", tok)
+        if t not in allowed:
+            missing.append(tok)
+    return missing
 
 
 # --- Kontrollen -------------------------------------------------------------------------
@@ -191,14 +316,19 @@ def _texts(s: dict) -> list[str]:
     out += list(s.get("points") or [])
     out += [f"{x.get('name', '')} {x.get('view', '')}" for x in s.get("segments") or []]
     out += [x.get("note", "") for x in s.get("companies") or []]
+    imp = s.get("impact") or {}
+    out += [x.get("reason", "") for x in (imp.get("sectors") or []) + (imp.get("companies") or [])]
+    out += [x.get("note", "") for x in s.get("our_data") or []]
     return [t for t in out if t]
 
 
-def check(s: dict, meta: dict, source: str, instruments: dict[str, Instrument], today: date) -> list[str]:
-    """Fel i sammanfattningen (tom lista = godkänd), se modulbeskrivningen."""
+def check(s: dict, meta: dict, source: str, instruments: dict[str, Instrument], today: date,
+          data: dict | None = None, sector_ids: set[str] | None = None) -> list[str]:
+    """Fel i sammanfattningen (tom lista = godkänd), se modulbeskrivningen. data: company_data för avsnitt c)."""
     errors = []
     req = {"id": str, "kind": str, "title": str, "report_date": str, "headline": str, "points": list,
-           "segments": list, "companies": list, "label": str, "source_url": str, "file_name": str}
+           "segments": list, "companies": list, "label": str, "source_url": str, "file_name": str, "impact": dict,
+           "our_data": list}
     for k, typ in req.items():
         if not isinstance(s.get(k), typ):
             errors.append(f"fältet {k!r} saknas eller har fel typ")
@@ -235,6 +365,7 @@ def check(s: dict, meta: dict, source: str, instruments: dict[str, Instrument], 
         inst = instruments.get(c.get("ticker")) if isinstance(c, dict) else None
         if inst is None or inst.namn != c.get("name"):
             errors.append(f"bolaget {c!r} finns inte i instruments.csv med samma namn och ticker")
+    errors += _check_impact_and_data(s, instruments, data or {"sources": {}, "companies": {}}, sector_ids)
     texts = _texts(s)
     if any(ch in t for t in texts for ch in '"“”«»'):
         errors.append("sammanfattningen innehåller citattecken (inga citat)")
@@ -244,6 +375,52 @@ def check(s: dict, meta: dict, source: str, instruments: dict[str, Instrument], 
         m = FORBIDDEN.search(t)
         if m:
             errors.append(f"ordet {m.group(0)!r} ska inte användas (beskrivande sammanfattning)")
+    return errors
+
+
+def _check_impact_and_data(s: dict, instruments: dict[str, Instrument], data: dict,
+                           sector_ids: set[str] | None) -> list[str]:
+    """Avsnitt b) och c): märkningen, sektorerna och bolagen finns, riktningen, att c) har alla bolag i b), och att
+    varje tal i c):s kommentarer finns i bolagets värden."""
+    errors = []
+    imp = s["impact"]
+    if imp.get("label") != IMPACT_LABEL:
+        errors.append(f"avsnitt b) ska vara märkt {IMPACT_LABEL!r}")
+    secs, comps = imp.get("sectors"), imp.get("companies")
+    if not isinstance(secs, list) or not isinstance(comps, list) or not (secs or comps):
+        errors.append("avsnitt b) ska ha minst en berörd sektor eller ett berört bolag (sectors, companies)")
+        return errors
+    if sector_ids is None:
+        from validate import load_sector_ids
+
+        sector_ids = load_sector_ids()
+    for x in secs:
+        if not isinstance(x, dict) or x.get("sector") not in sector_ids:
+            errors.append(f"sektorn {x!r} finns inte i data/sectors.json")
+        elif x.get("direction") not in DIRECTIONS or not str(x.get("reason") or "").strip():
+            errors.append(f"sektorn {x['sector']!r} ska ha riktning (positiv, negativ, blandad) och motivering")
+    for x in comps:
+        inst = instruments.get(x.get("ticker")) if isinstance(x, dict) else None
+        if inst is None or inst.namn != x.get("name"):
+            errors.append(f"bolaget {x!r} i avsnitt b) finns inte i instruments.csv med samma namn och ticker")
+        elif x.get("direction") not in DIRECTIONS or not str(x.get("reason") or "").strip():
+            errors.append(f"bolaget {x['ticker']!r} ska ha riktning (positiv, negativ, blandad) och motivering")
+    od = s["our_data"]
+    want = {x.get("ticker") for x in comps if isinstance(x, dict)}
+    have = {x.get("ticker") for x in od if isinstance(x, dict)}
+    if want - have:
+        errors.append(f"avsnitt c) saknar bolagen i b): {sorted(t for t in want - have if t)}")
+    for x in od:
+        if not isinstance(x, dict) or x.get("ticker") not in instruments or instruments[x["ticker"]].namn != x.get("name"):
+            errors.append(f"bolaget {x!r} i avsnitt c) finns inte i instruments.csv med samma namn och ticker")
+            continue
+        if not isinstance(x.get("diverges"), bool) or not isinstance(x.get("note"), str):
+            errors.append(f"{x['ticker']} i avsnitt c) ska ha diverges (true/false) och note")
+            continue
+        values = (data.get("companies") or {}).get(x["ticker"]) or {}
+        bad = numbers_in_data(x["note"], values, data.get("sources") or {})
+        if bad:
+            errors.append(f"{x['ticker']} i avsnitt c): talen {bad} finns inte i sidans data för bolaget")
     return errors
 
 
@@ -280,7 +457,9 @@ def cmd_check(fid: str, today: date, instruments: dict[str, Instrument] | None =
         return [f"{out} är ingen giltig JSON: {exc}"]
     meta = json.loads((work_dir / f"{fid}.meta.json").read_text(encoding="utf-8"))
     source = (work_dir / f"{fid}.txt").read_text(encoding="utf-8")
-    return check(s, meta, source, instruments or load_instruments(), today)
+    data_path = work_dir / f"{fid}.data.json"
+    data = json.loads(data_path.read_text(encoding="utf-8")) if data_path.exists() else None
+    return check(s, meta, source, instruments or load_instruments(), today, data)
 
 
 def cmd_done(fid: str, now: datetime, raw_dir: Path, hb_dir: Path = HB_DIR, work_dir: Path = WORK_DIR,
@@ -293,13 +472,21 @@ def cmd_done(fid: str, now: datetime, raw_dir: Path, hb_dir: Path = HB_DIR, work
         from backup_week import commit_files as commit
     s = json.loads((hb_dir / f"{fid}.json").read_text(encoding="utf-8"))
     s["summarized_at"] = now.isoformat(timespec="seconds")
+    # Avsnitt c): värdena ur sidans data läggs på här (inte av Claude), med källorna.
+    data_path = work_dir / f"{fid}.data.json"
+    data = json.loads(data_path.read_text(encoding="utf-8")) if data_path.exists() else {"sources": {}, "companies": {}}
+    for x in s["our_data"]:
+        vals = data["companies"].get(x["ticker"]) or {}
+        x["data"] = {k: vals.get(k) for k in DATA_FIELDS}
+    s["data_sources"] = data["sources"]
     staged = hb_dir / f"{fid}.json"
     staged.write_text(json.dumps(s, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     ok, msg = commit(raw_dir, [(staged, f"{RAW_SUBDIR}/{fid}.json")],
                      f"Handelsbanken: sammanfattning av {s['file_name']} ({s['report_date']}, manuellt tillagd)")
     if not ok:
         return False, f"kopian till rådatarepot misslyckades: {msg}"
-    for p in (staged, work_dir / f"{fid}.txt", work_dir / f"{fid}.meta.json", work_dir / f"{fid}.attempts"):
+    for p in (staged, work_dir / f"{fid}.txt", work_dir / f"{fid}.meta.json", work_dir / f"{fid}.attempts",
+              work_dir / f"{fid}.data.json"):
         p.unlink(missing_ok=True)
     return True, f"{s['file_name']}: sammanfattad ({KINDS[s['kind']]} {s['report_date']}) -> rådatarepot: {msg}"
 
