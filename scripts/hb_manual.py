@@ -69,7 +69,6 @@ DATA_FIELDS = {
     "week_rel_index_pp": "kurs mot index senaste veckan, procentenheter",
     "ytd_pct": "kursförändring i år, procent",
     "ytd_rel_index_pp": "kurs mot index i år, procentenheter",
-    "short_change_pp": "ändring i sammanlagd blankning senaste veckan, procentenheter",
     "insider_net_sek": "insyn senaste veckan, nettoköp (+) eller nettoförsäljning (−) i kronor",
     "insider_buyers": "insyn, antal personer som köpt",
     "insider_sellers": "insyn, antal personer som sålt",
@@ -222,7 +221,7 @@ def company_data(today: date, data_dir: Path = DATA_DIR) -> dict:
         for c in d.get("companies", []):
             r = row(c["ticker"], c["name"])
             r.update({"week_change_pct": c.get("change_pct"), "week_rel_index_pp": c.get("relative_pp"),
-                      "short_change_pp": c.get("short_aggregate_pp"), "insider_net_sek": c.get("insider_net_sek"),
+                      "insider_net_sek": c.get("insider_net_sek"),
                       "insider_buyers": c.get("insider_buyers"), "insider_sellers": c.get("insider_sellers")})
     val = _latest(data_dir / "valuation")
     if val:

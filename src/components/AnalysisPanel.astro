@@ -1,7 +1,8 @@
 ---
 /**
- * Fliken "Blankning & insyn": veckans största blankningsförändringar och
- * insynsaffärer för bolagen i bevakningslistan (data/analysis/<vecka>.json).
+ * Fliken "Insyn": veckans insynsaffärer för bolagen i bevakningslistan (data/analysis/<vecka>.json).
+ * Blankning räknas inte sedan 2026-11-11 (FI tillåter inte automatisk hämtning); äldre veckor som har
+ * blankning i analysfilen visar den som den var.
  */
 import type { Analysis, ShortBlock } from "../lib/data";
 import { dateRange, shortChange, shortDate } from "../lib/format";
@@ -22,24 +23,31 @@ function split(block: ShortBlock) {
   const down = block.changes.filter((c) => c.change_pp < 0).sort((a, b) => a.change_pp - b.change_pp).slice(0, n);
   return { up, down };
 }
-const positions = split(analysis.short_positions);
-const aggregate = split(analysis.short_aggregate);
+// Bara äldre veckor har blankning (short_positions, short_aggregate).
+const sp = analysis.short_positions;
+const sa = analysis.short_aggregate;
+const empty = { up: [], down: [] };
+const positions = sp ? split(sp) : empty;
+const aggregate = sa ? split(sa) : empty;
 const period = (b: ShortBlock) => (b.start_as_of && b.end_as_of ? `${shortDate(b.start_as_of)} → ${shortDate(b.end_as_of)}` : "");
 const ins = analysis.insider;
 ---
 
 <p class="intro">
-  Ur Finansinspektionens blanknings- och insynsregister, för bolagen i bevakningslistan. Förändringen avser läget vid
-  veckans slut jämfört med förra veckans slut. Uppgifterna rapporteras av innehavarna själva och granskas inte av FI
-  före publicering.
+  Ur Finansinspektionens insynsregister, för bolagen i bevakningslistan. Uppgifterna rapporteras av insynspersonerna
+  själva och granskas inte av FI före publicering.
+  {sp && " Den här veckan finns också blankningen kvar, räknad innan den togs bort 2026-11-11 (förändringen avser läget vid veckans slut jämfört med förra veckans slut)."}
 </p>
 
-<h3>Blankning, positioner över 0,5 %</h3>
 {
-  analysis.short_positions.available ? (
+  sp && <h3>Blankning, positioner över 0,5 %</h3>
+}
+{
+  sp && (
+  sp.available ? (
     <>
       <p class="period">
-        {period(analysis.short_positions)}. Innehavare som ändrat sin position visas under bolaget, största position först.
+        {period(sp)}. Innehavare som ändrat sin position visas under bolaget, största position först.
       </p>
       <div class="two-col">
         {[["Ökade mest", positions.up], ["Minskade mest", positions.down]].map(([title, list]) => (
@@ -85,15 +93,19 @@ const ins = analysis.insider;
       </div>
     </>
   ) : (
-    <p class="note">Inte tillgängligt: {analysis.short_positions.note}.</p>
+    <p class="note">Inte tillgängligt: {sp.note}.</p>
+  )
   )
 }
 
-<h3>Blankning, summa av alla positioner över 0,1 %</h3>
 {
-  analysis.short_aggregate.available ? (
+  sa && <h3>Blankning, summa av alla positioner över 0,1 %</h3>
+}
+{
+  sa && (
+  sa.available ? (
     <>
-      <p class="period">{period(analysis.short_aggregate)}</p>
+      <p class="period">{period(sa)}</p>
       <div class="two-col">
         {[["Ökade mest", aggregate.up], ["Minskade mest", aggregate.down]].map(([title, list]) => (
           <section class="list-block">
@@ -124,7 +136,8 @@ const ins = analysis.insider;
       </div>
     </>
   ) : (
-    <p class="note">Inte tillgängligt än: {analysis.short_aggregate.note}.</p>
+    <p class="note">Inte tillgängligt än: {sa.note}.</p>
+  )
   )
 }
 

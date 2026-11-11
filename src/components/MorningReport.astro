@@ -1,13 +1,12 @@
 ---
 /**
- * Morgonrapportens innehåll: dagens rapporter, nattens pressmeddelanden, insyn, blankning
- * och gårdagens kurssignaler. Allt är framräknat utan Claude (scripts/morning.py).
+ * Morgonrapportens innehåll: dagens rapporter, nattens pressmeddelanden, insyn och gårdagens
+ * kurssignaler (blankning ingår inte sedan 2026-11-11; FI tillåter inte automatisk hämtning). Allt är framräknat utan Claude (scripts/morning.py).
  * Används både på /morgon/ (rubriker på nivå 2) och överst på startsidan (nivå 3).
  */
 import { statusText, weekdayDate } from "../lib/calendar";
 import type { MorningReport } from "../lib/data";
-import { direction, shortChange, shortDate } from "../lib/format";
-import { groupByCompany, holderName } from "../lib/short";
+import { shortDate, withoutShortWarnings } from "../lib/format";
 import { ratio, sek, signedPct } from "../lib/signals";
 import type { ResultsView } from "../lib/results";
 import { loadReactionOutcomes, type AfternoonReport } from "../lib/data";
@@ -35,11 +34,8 @@ const dayTime = (iso: string) =>
 const signalLabel = { omsättning: "Hög omsättning", "52v-högsta": "Nära 52 v högsta", "52v-lägsta": "Nära 52 v lägsta" };
 const newsCount = report.news.reduce((n, c) => n + c.items.length, 0);
 const reports = report.reports_today.filter((e) => e.kind === "rapport");
-// Blankning per bolag: bolagsnamn (instruments.csv) som rubrik med total förändring, innehavarna under
-// sorterade efter positionens storlek, bolagen efter största totala förändring.
-const shortGroups = groupByCompany(report.short.positions.map((p) => ({ ...p, holder: p.holder ?? "" })));
-const pp = new Intl.NumberFormat("sv-SE", { minimumFractionDigits: 2, maximumFractionDigits: 2, signDisplay: "exceptZero" });
-const signedPp = (v: number) => `${pp.format(v)} procentenheter`;
+// Varningar om blankning visas inte (borttagen sedan 2026-11-11; äldre rapporter har kvar felen).
+const errors = withoutShortWarnings(report.errors);
 const meetings = report.reports_today.filter((e) => e.kind === "stämma");
 // Kursdatumet kommer ur datan; är det inte förra handelsdagen (Yahoo saknade gårdagens kurser) varnas det.
 const priceStale = !!report.price.expected_day && report.price.day !== report.price.expected_day;
@@ -58,7 +54,6 @@ const HB_MORGONRAPPORT_URL = "https://www.handelsbanken.se/sv/foretag/kund-hos-o
     <a href="#rapporter">Rapporter i dag <span class="n">{reports.length}</span></a>
     <a href="#nyheter">Nyheter <span class="n">{newsCount}</span></a>
     <a href="#insyn">Insyn <span class="n">{report.insider.companies.length}</span></a>
-    <a href="#blankning">Blankning <span class="n">{report.short.positions.length + report.short.aggregate.length}</span></a>
     <a href="#kurser">Kurser {report.price.day ? shortDate(report.price.day) : ""}{priceStale && " ⚠"} <span class="n">{report.price.companies.length}</span></a>
     {after && <a class="after" href={after.href}>{after.label}</a>}
   </nav>
@@ -170,64 +165,6 @@ const HB_MORGONRAPPORT_URL = "https://www.handelsbanken.se/sv/foretag/kund-hos-o
     }
   </section>
 
-  <section id="blankning" class="block">
-    <H>Blankning</H>
-    {!report.short.available && <p class:list={report.short.error ? "warn-box" : "empty"}>{report.short.note}</p>}
-    {
-      report.short.available && (
-        <>
-          <p class="note">
-            Ändringar i Finansinspektionens register mellan {shortDate(report.short.from_as_of!)} och{" "}
-            {shortDate(report.short.to_as_of!)}.
-          </p>
-          <Sub class="sub">Enskilda positioner över 0,5 %, per bolag</Sub>
-          {shortGroups.length === 0 && <p class="empty">Inga ändringar.</p>}
-          <ul class="rows short-groups">
-            {shortGroups.map((c) => (
-              <li>
-                <div class="short-head">
-                  <span>
-                    <strong>{c.name}</strong> <span class="muted">{c.ticker}</span>
-                  </span>
-                  <span class:list={["num", "chg", c.change_pp > 0 ? "up" : "down"]}>
-                    <span class="dir">{direction(c.change_pp)}</span> {signedPp(c.change_pp)}
-                  </span>
-                </div>
-                <ul class="holders">
-                  {c.holders.map((h) => {
-                    const s = shortChange(h.start_pct, h.end_pct, h.change_pp, { threshold: 0.5, newHolder: true });
-                    return (
-                      <li>
-                        {holderName(h.holder)}: <span class="dir">{s.dir}</span> {s.text}
-                      </li>
-                    );
-                  })}
-                </ul>
-              </li>
-            ))}
-          </ul>
-          <Sub class="sub">Sammanlagd blankning, ändrad minst 0,2 procentenheter</Sub>
-          {report.short.aggregate.length === 0 && <p class="empty">Inga ändringar.</p>}
-          <ul class="rows">
-            {report.short.aggregate.map((c) => {
-              const s = shortChange(c.start_pct, c.end_pct, c.change_pp, { threshold: 0.1 });
-              return (
-                <li>
-                  <span>
-                    <strong>{c.name}</strong> <span class="muted">{c.ticker}</span>
-                  </span>
-                  <span class:list={["num", "chg", c.change_pp > 0 ? "up" : "down"]}>
-                    <span class="dir">{s.dir}</span> {s.text}
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
-        </>
-      )
-    }
-  </section>
-
   <section id="kurser" class="block">
     <H>Kurser {report.price.day ? weekdayDate(report.price.day).toLowerCase() : "– inga kurser"}</H>
     {
@@ -283,11 +220,11 @@ const HB_MORGONRAPPORT_URL = "https://www.handelsbanken.se/sv/foretag/kund-hos-o
   </section>
 
   {
-    report.errors.length > 0 && (
+    errors.length > 0 && (
       <details class="errors">
-        <summary>Fel vid hämtningen ({report.errors.length})</summary>
+        <summary>Fel vid hämtningen ({errors.length})</summary>
         <ul>
-          {report.errors.map((e) => (
+          {errors.map((e) => (
             <li>{e}</li>
           ))}
         </ul>
@@ -380,29 +317,6 @@ const HB_MORGONRAPPORT_URL = "https://www.handelsbanken.se/sv/foretag/kund-hos-o
   .num {
     font-variant-numeric: tabular-nums;
     text-align: right;
-  }
-  /* Blankning per bolag: rubrikrad med total förändring, innehavarna under. */
-  .short-groups li {
-    display: block;
-  }
-  .short-head {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: space-between;
-    gap: 2px 12px;
-  }
-  ul.holders {
-    list-style: none;
-    margin: 2px 0 0;
-    padding: 0;
-  }
-  ul.holders li {
-    display: block;
-    padding: 1px 0;
-    border: 0;
-    font-size: 0.8125rem;
-    color: var(--muted);
-    font-variant-numeric: tabular-nums;
   }
   .chg {
     font-weight: 600;

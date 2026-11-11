@@ -24,13 +24,13 @@ test("Handelsbanken: senaste per rapporttyp, så länge den är aktuell", () => 
 test("Handelsbanken: tabellen Vad vår data visar och riktningen", () => {
   const sd = (iso: string) => ({ "2099-11-20": "20 nov" } as Record<string, string>)[iso] ?? iso;
   const d = {
-    week_change_pct: 1.2, week_rel_index_pp: 0.8, ytd_pct: 3.5, ytd_rel_index_pp: -4.21, short_change_pp: 0.35,
+    week_change_pct: 1.2, week_rel_index_pp: 0.8, ytd_pct: 3.5, ytd_rel_index_pp: -4.21,
     insider_net_sek: -1250000, insider_buyers: 0, insider_sellers: 1, pe_now: 14.2, pe_change_pct: -8, next_report: "2099-11-20",
   };
-  assert.deepEqual(dataCells(d, sd), ["+0,8 pe", "−4,2 pe", "+0,35 pe", "−1,3 mkr netto", "−8,0 %", "20 nov"]);
-  assert.deepEqual(dataCells(undefined, sd), ["–", "–", "–", "–", "–", "–"]);
+  assert.deepEqual(dataCells(d, sd), ["+0,8 pe", "−4,2 pe", "−1,3 mkr netto", "−8,0 %", "20 nov"]);
+  assert.deepEqual(dataCells(undefined, sd), ["–", "–", "–", "–", "–"]);
   const empty = { ...d, week_rel_index_pp: null, insider_net_sek: null, next_report: null };
-  assert.deepEqual(dataCells(empty, sd).filter((_, i) => [0, 3, 5].includes(i)), ["–", "–", "–"]);
+  assert.deepEqual(dataCells(empty, sd).filter((_, i) => [0, 2, 4].includes(i)), ["–", "–", "–"]);
   assert.deepEqual(directionText("negativ"), { text: "negativ", cls: "neg" });
   assert.deepEqual(directionText("blandad"), { text: "blandad", cls: "" });
   for (const c of dataCells(d, sd)) assert.ok(!/köp|sälj/i.test(c));

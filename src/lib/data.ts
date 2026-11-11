@@ -40,7 +40,8 @@ export interface MorningReport {
   reports_today: (CalendarEvent & { kind: "rapport" | "stämma" })[];
   news: { ticker: string; name: string; report_today: boolean; items: { published: string; title: string; url: string; source: string; quote?: string; summary?: string; manual?: boolean }[] }[];
   insider: { threshold_sek: number; days: string[]; days_missing: string[]; companies: InsiderCompany[] };
-  short: { available: boolean; error?: boolean; note: string | null; from_as_of: string | null; to_as_of: string | null; positions: MorningChange[]; aggregate: MorningChange[] };
+  /** Bara i äldre morgonrapporter (blankning räknas inte sedan 2026-11-11). */
+  short?: { available: boolean; error?: boolean; note: string | null; from_as_of: string | null; to_as_of: string | null; positions: MorningChange[]; aggregate: MorningChange[] };
   price: {
     /** Dagsdatans eget datum (scripts/signals.py data_day), aldrig ett antaget. */
     day: string | null;
@@ -86,7 +87,8 @@ export interface SwingRow {
   report_published: string | null;
   days_since_report: number | null;
   report_verdict: string | null;
-  short_pct: number | null;
+  /** Bara i äldre swingfiler (blankning räknas inte sedan 2026-11-11). */
+  short_pct?: number | null;
   /** Pullback i trend (scripts/pullback.py): tillståndet och nivåerna vid träff; saknas i äldre filer.
    *  bollinger: läget mot Bollingerbanden, gårdagens stängning eller (checked_at satt) senaste kontrollen i dag.
    *  today: status i dag ur senaste Bollingerkontrollen (saknas före dagens första kontroll). */
@@ -360,7 +362,7 @@ export function loadLatestSwing(): SwingView | null {
       as_of: string | null;
       expected_day?: string;
       coverage?: { with_day: number; with_expected: number; of: number };
-      short_as_of: string | null;
+      short_as_of?: string | null;
       thresholds: SwingView["thresholds"];
       labels: Record<string, string>;
       ranking_criteria?: Record<string, string>;
@@ -403,7 +405,7 @@ export function loadLatestSwing(): SwingView | null {
       asOf: raw.as_of,
       expectedDay: raw.expected_day ?? null,
       coverage: raw.coverage ?? null,
-      shortAsOf: raw.short_as_of,
+      shortAsOf: raw.short_as_of ?? null,
       thresholds: raw.thresholds,
       rankingCriteria: raw.ranking_criteria ?? {},
       bbrekylCriteria: raw.bbrekyl_criteria ?? {},
@@ -649,7 +651,8 @@ export interface SignalsView {
   thresholds: {
     volume_ratio: number;
     near_52w_pct: number;
-    short_aggregate_pp: number;
+    /** Bara i äldre filer (blankningssignalen, till 2026-11-11). */
+    short_aggregate_pp?: number;
     big_move_pp: number;
     pe_up_pct: number;
     /** Blankningssignalen bara vid ändrad sammanlagd blankning (saknas i äldre filer). */
@@ -862,8 +865,9 @@ export interface InsiderCompany {
 export interface Analysis {
   week: string;
   top_n: number;
-  short_positions: ShortBlock;
-  short_aggregate: ShortBlock;
+  /** Bara i äldre analysfiler (blankning räknas inte sedan 2026-11-11); sidan visar dem som de var. */
+  short_positions?: ShortBlock;
+  short_aggregate?: ShortBlock;
   insider: {
     threshold_sek: number;
     cluster_min_persons: number;
@@ -880,7 +884,7 @@ export function loadAnalysis(week: string): Analysis | null {
   try {
     return readJson<Analysis>(path);
   } catch (err) {
-    console.warn(`[veckans-finans] kunde inte läsa ${path}, visar sidan utan blankning/insyn:`, err);
+    console.warn(`[veckans-finans] kunde inte läsa ${path}, visar sidan utan insyn:`, err);
     return null;
   }
 }

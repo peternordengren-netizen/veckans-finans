@@ -38,7 +38,8 @@ export interface HbCompanyData {
   week_rel_index_pp: number | null;
   ytd_pct: number | null;
   ytd_rel_index_pp: number | null;
-  short_change_pp: number | null;
+  /** Bara i äldre sammanfattningar (blankning räknas inte sedan 2026-11-11). */
+  short_change_pp?: number | null;
   insider_net_sek: number | null;
   insider_buyers: number | null;
   insider_sellers: number | null;
@@ -53,15 +54,14 @@ const fmt = (v: number, d: number) =>
 const signed = (v: number | null, d: number, unit: string) =>
   v === null ? "–" : `${v > 0 ? "+" : v < 0 ? MINUS : ""}${fmt(v, d)} ${unit}`;
 
-/** Cellerna i tabellen "Vad vår data visar": kurs mot index (vecka, i år), blankning, insyn, P/E i år, nästa rapport. */
+/** Cellerna i tabellen "Vad vår data visar": kurs mot index (vecka, i år), insyn, P/E i år, nästa rapport. */
 export function dataCells(d: HbCompanyData | undefined, shortDate: (iso: string) => string): string[] {
-  if (!d) return ["–", "–", "–", "–", "–", "–"];
+  if (!d) return ["–", "–", "–", "–", "–"];
   // Insyn: nettobeloppet senaste veckan (förvärv minus avyttringar), i miljoner kronor.
   const insider = d.insider_net_sek === null ? "–" : `${signed(d.insider_net_sek / 1e6, 1, "mkr")} netto`;
   return [
     signed(d.week_rel_index_pp, 1, "pe"),
     signed(d.ytd_rel_index_pp, 1, "pe"),
-    signed(d.short_change_pp, 2, "pe"),
     insider,
     signed(d.pe_change_pct, 1, "%"),
     d.next_report ? shortDate(d.next_report) : "–",

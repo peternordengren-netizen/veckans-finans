@@ -5,7 +5,7 @@
   "description": "Skrivs deterministiskt av scripts/registers.py till data/analysis/<vecka>.json.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "week", "period", "generated_at", "top_n", "short_positions", "short_aggregate", "insider"],
+  "required": ["schema_version", "week", "period", "generated_at", "top_n", "insider"],
   "properties": {
     "schema_version": { "const": 1 },
     "week": { "type": "string", "pattern": "^[0-9]{4}-W(0[1-9]|[1-4][0-9]|5[0-3])$" },

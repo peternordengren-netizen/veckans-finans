@@ -1,5 +1,6 @@
 """Morgonrapport för en handelsdag, utan Claude: dagens rapporter, nattens pressmeddelanden,
-insyn och blankning sedan förra handelsdagen och gårdagens kurssignaler.
+insyn sedan förra handelsdagen och gårdagens kurssignaler. Blankning ingår inte sedan 2026-11-11 (FI tillåter
+inte automatisk hämtning); äldre rapporter har kvar fältet "short".
 
 Skriver data/morning/<datum>.json (schema/morning.schema.json). Körs vardagar 08:10 av
 scripts/run_morning.ps1, så att rapporter som släpps 07:00–08:00 kommer med före börsöppning.
@@ -23,8 +24,6 @@ Innehåll:
 - reports_today: kalenderns rapporter och stämmor i dag
 - news: icke-rutinmässiga pressmeddelanden för bolag i listan sedan förra handelsdagen 17:30
 - insider: insyn (samma filter som registers.py) publicerad sedan förra rapporten
-- short: ändrade blankningspositioner över 0,5 % mellan registrets ögonblicksbilder, och
-  ändringar i sammanlagd blankning på minst SHORT_AGGREGATE_DAILY_PP procentenheter
 - price: bolag med hög omsättning eller nära 52-veckorshögsta/-lägsta under gårdagens
   handelsdag (trösklar som signals.THRESHOLDS, men för en enda dag)
 
@@ -50,7 +49,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import report_calendar  # noqa: E402
-from registers import _aggregate_by_ticker, insyn_summary, snapshot_at  # noqa: E402
+from registers import insyn_summary  # noqa: E402
 from signals import THRESHOLDS, BarFetcher, data_day, price_stats, week_change, yahoo_bars  # noqa: E402
 from prices import INDEX_TICKER  # noqa: E402
 from validate import DATA_DIR, RAW_DIR, Instrument, listed, load_instruments, validate_morning  # noqa: E402
@@ -61,7 +60,6 @@ MORNING_DIR = DATA_DIR / "morning"
 MORNING_RAW = MORNING_DIR / "raw"
 MORNING_MFN_LIMIT = 500
 NEWS_FROM = time(17, 30)  # nattens nyheter räknas från förra handelsdagens stängning
-SHORT_AGGREGATE_DAILY_PP = 0.2  # på en dag är ändringarna mindre än över en vecka
 KEEP_RAW_WEEKS = 3  # data/morning/raw/ rensas från äldre veckor
 
 
@@ -179,64 +177,6 @@ def insider_since(raw_dirs: list[Path], days: list[str], instruments: dict[str, 
             "companies": s["companies"]}
 
 
-def short_since(raw_dirs: list[Path], prev_as_of: date, as_of: date, instruments: dict[str, Instrument]) -> dict:
-    """Ändringar mellan registrets ögonblicksbilder (senaste ≤ prev_as_of mot senaste ≤ as_of)."""
-    paths = _fi_files(raw_dirs, "blankning")
-    snaps = [json.loads(paths[d].read_text(encoding="utf-8")) for d in sorted(paths)]
-    # Läget vid as_of; finns bara en senare bild (manuell nedladdning med dagens ändringar) räknas
-    # läget fram ur den (registers.snapshot_at).
-    this = snapshot_at(snaps, as_of)
-    prev_key = max((d for d in paths if d <= prev_as_of.isoformat()), default=None)
-    this_key = this["as_of"] if this else None
-    empty = {"from_as_of": prev_key, "to_as_of": this_key, "positions": [], "aggregate": []}
-    if this_key is None or prev_key is None or this_key == prev_key:
-        return {"available": False, "note": "ingen ny ögonblicksbild av blankningsregistret sedan förra rapporten",
-                **empty}
-    prev = json.loads(paths[prev_key].read_text(encoding="utf-8"))
-    isin_to_ticker = {isin: t for t, i in instruments.items() for isin in i.isin}
-
-    def state(snap: dict) -> dict[tuple[str, str], float]:
-        return {(r["holder"], r["isin"]): r["pct"] for r in snap["current"] if r["pct"]}
-
-    before, after = state(prev), state(this)
-    positions = []
-    for key in set(before) | set(after):
-        ticker = isin_to_ticker.get(key[1])
-        b, a = before.get(key, 0.0), after.get(key, 0.0)
-        if ticker and abs(a - b) > 1e-9:
-            positions.append({"ticker": ticker, "name": instruments[ticker].namn, "holder": key[0],
-                              "start_pct": round(b, 2), "end_pct": round(a, 2), "change_pp": round(a - b, 2)})
-    positions.sort(key=lambda p: (-abs(p["change_pp"]), p["name"], p["holder"]))
-    agg_b = _aggregate_by_ticker(prev, instruments, isin_to_ticker)
-    agg_a = _aggregate_by_ticker(this, instruments, isin_to_ticker)
-    aggregate = []
-    for t in set(agg_a) | set(agg_b):
-        s, e = round(agg_b.get(t, 0.0), 2), round(agg_a.get(t, 0.0), 2)
-        if abs(e - s) >= SHORT_AGGREGATE_DAILY_PP - 1e-9:
-            aggregate.append({"ticker": t, "name": instruments[t].namn, "start_pct": s, "end_pct": e,
-                              "change_pp": round(e - s, 2)})
-    aggregate.sort(key=lambda c: (-abs(c["change_pp"]), c["name"]))
-    return {"available": True, "note": None, "from_as_of": prev_key, "to_as_of": this_key,
-            "positions": positions, "aggregate": aggregate}
-
-
-BLANKNING_PAGE = "https://www.fi.se/sv/vara-register/blankningsregistret/"  # som fi_fetch.BLANKNING_PAGE
-
-
-def short_checked(short: dict, prev_business_day: date) -> dict:
-    """Saknas registrets ögonblicksbild för förra handelsdagen är det ett hämtningsfel, inte "inga
-    ändringar": blankningsdelen markeras som fel (visas som varning) i stället för 0 positioner."""
-    latest = short["to_as_of"]
-    if latest is not None and latest >= prev_business_day.isoformat():
-        return {**short, "error": False}
-    since = f"senaste ögonblicksbild {latest}" if latest else "ingen ögonblicksbild finns"
-    return {**short, "available": False, "error": True, "positions": [], "aggregate": [],
-            "note": f"Blankningsregistret saknas ({since}, {prev_business_day} saknas). Ändringarna visas inte. "
-                    f"FI tillåter inte längre skriptad hämtning: ladda ner \"Aktuella positioner\" och "
-                    f"\"Aggregerade positioner\" på {BLANKNING_PAGE} och spara dem i data/fi_manual/. "
-                    "Nästa morgonkörning läser dem, eller kör direkt: python scripts/fi_fetch.py --las-in"}
-
-
 # --- Kurser ------------------------------------------------------------------
 
 
@@ -304,7 +244,7 @@ def build(today: date, now: datetime, instruments: dict[str, Instrument], raw_di
         for e in (calendar or {}).get("events", []) if e["date"] == today.isoformat()
     ]
     reporting = {e["ticker"] for e in reports_today if e["kind"] == "rapport"}
-    # Insyn och blankning: publiceringsdagar sedan förra rapporten (förra handelsdagen t.o.m. i går).
+    # Insyn: publiceringsdagar sedan förra rapporten (förra handelsdagen t.o.m. i går).
     days = [(prev + timedelta(days=i)).isoformat() for i in range((today - prev).days)]
     return {
         "schema_version": 1,
@@ -314,8 +254,6 @@ def build(today: date, now: datetime, instruments: dict[str, Instrument], raw_di
         "reports_today": reports_today,
         "news": overnight_news(raw_dirs, instruments, since, now, reporting),
         "insider": insider_since(raw_dirs, days, instruments),
-        "short": short_checked(short_since(raw_dirs, prev - timedelta(days=1), today - timedelta(days=1), instruments),
-                               prev),
         "price": yesterday_prices(instruments, today, fetch),
         "policy_decision": latest_policy_decision(raw_dirs, today),
     }
@@ -360,13 +298,6 @@ def fetch_local(today: date) -> list[str]:
         # 29/10 2026 medan insynen fungerade, och morgonrapporten visade då "0 positioner").
         errors += [f"FI {name}: {msg}" for name, msg in fi_fetch.last_errors.items()] or \
             ["fi_fetch.py: fel vid hämtning från FI"]
-    # Blankning ur manuellt nedladdade filer: till data/raw/ och det privata repot, så att veckans
-    # analys och signaler ser den.
-    if fi_fetch.last_written:
-        ok, msg = fi_fetch.backup_written(MORNING_RAW)
-        print(f"[blankning] säkerhetskopia: {msg}")
-        if not ok:
-            errors.append(f"blankning: säkerhetskopian till data/raw misslyckades: {msg}")
     errors += _prune_morning_raw(today)
     return errors
 
@@ -417,8 +348,6 @@ def main(argv: list[str] | None = None, fetch_bars: BarFetcher = yahoo_bars,
 
     data = build(today, now, instruments, raw_dirs, calendar, fetch_once)
     data["errors"] = errors + calendar_errors(calendar)
-    if data["short"]["error"]:
-        data["errors"].append(f"blankning: {data['short']['note']}")
     data["retry"] = retry_reasons(data, errors, today)
     add_price_error(data, today)
     res = validate_morning(data, instruments)
@@ -432,8 +361,7 @@ def main(argv: list[str] | None = None, fetch_bars: BarFetcher = yahoo_bars,
     tmp.replace(out)
     print(f"Morgonrapport {today}: {len(data['reports_today'])} rapporter/stämmor i dag, "
           f"{sum(len(c['items']) for c in data['news'])} nyheter för {len(data['news'])} bolag, "
-          f"insyn {len(data['insider']['companies'])} bolag, blankning "
-          f"{len(data['short']['positions'])} positioner/{len(data['short']['aggregate'])} aggregat, "
+          f"insyn {len(data['insider']['companies'])} bolag, "
           f"kurssignaler {len(data['price']['companies'])} bolag, {len(data['errors'])} fel -> {out}")
     write_swing(today, now, instruments, fetch_once)
     if data["retry"]:
@@ -513,7 +441,7 @@ def write_swing(today: date, now: datetime, instruments: dict[str, Instrument], 
     try:
         tickers = [i.yahoo_ticker for i in swing.priced(instruments, today).values()]
         bars = fetch([*tickers, INDEX_TICKER], today - timedelta(days=swing.HISTORY_DAYS), today - timedelta(days=1))
-        data = swing.build(today, now, instruments, bars, swing.latest_reports(today), swing.short_levels(today, instruments))
+        data = swing.build(today, now, instruments, bars, swing.latest_reports(today))
         out = swing.write(data, instruments)
         if out:
             print(swing.summary(data, out))

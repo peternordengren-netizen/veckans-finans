@@ -18,6 +18,9 @@ const rows = defaultOrder(signals.rows);
 const flagged = rows.filter((r) => r.signals.length > 0).length;
 const strong = rows.filter((r) => isStrong(r.signals, reportedSet.has(r.ticker))).length;
 const t = signals.thresholds;
+// Blankning finns bara i äldre veckor (till 2026-11-11, med blankningströskeln i filen): då visas kolumnen och
+// signalen som de var. Den räknas inte i "Starka signaler".
+const hasShort = t.short_aggregate_pp !== undefined;
 const n = (v: number) => new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 2 }).format(v);
 const toneOrder = { positiv: 3, blandad: 2, neutral: 1, negativ: 0 };
 
@@ -33,19 +36,19 @@ const columns = [
   { key: "high", label: "Från 52 v högsta", type: "num" },
   { key: "low", label: "Från 52 v lägsta", type: "num" },
   { key: "insider", label: "Insyn netto", type: "num" },
-  { key: "short", label: "Blankning", type: "num" },
-] as const;
+  ...(hasShort ? [{ key: "short", label: "Blankning", type: "num" }] : []),
+] as { key: string; label: string; type: string; title?: string }[];
 const v = (x: number | null) => (x === null ? "" : String(x));
 const DEFAULT_SORT = "count";
 ---
 
 <div class="signals" data-signals>
   <p class="lead">
-    Alla {rows.length} bolag i bevakningslistan, med veckans kurs, omsättning och 52-veckorsläge samt nyhetston, insyn och
-    blankning. Klicka på en kolumnrubrik för att sortera.
+    Alla {rows.length} bolag i bevakningslistan, med veckans kurs, omsättning och 52-veckorsläge samt nyhetston och
+    insyn{hasShort && " (den här veckan också blankning)"}. Klicka på en kolumnrubrik för att sortera.
   </p>
   {
-    signals.shortUntil && (
+    hasShort && signals.shortUntil && (
       <p class="warn-box">
         Blankningen bygger bara på FI:s register t.o.m. {dayMonth(signals.shortUntil)}, inte hela veckan: FI tillåter inte
         längre skriptad hämtning, och nyare filer har inte laddats ner (se morgonrapporten). Blankningssignalerna märks
@@ -60,12 +63,16 @@ const DEFAULT_SORT = "count";
         <strong>Insynsköp / Insynsförsäljning:</strong> insynspersoner har köpt eller sålt för mer än 100 000 kr under
         veckan; etiketten följer nettot (står det bara "Insyn" tar köp och försäljningar ut varandra).
       </li>
-      <li>
-        <strong>Blankning:</strong>{" "}
-        {t.short_only_aggregate
-          ? `den sammanlagda blankningen har ändrats med minst ${n(t.short_aggregate_pp)} procentenheter.`
-          : `en enskild position över 0,5 % har ändrats, eller den sammanlagda blankningen har ändrats med minst ${n(t.short_aggregate_pp)} procentenheter.`}
-      </li>
+      {
+        hasShort && t.short_aggregate_pp !== undefined && (
+          <li>
+            <strong>Blankning</strong> (bara äldre veckor, räknas inte sedan 2026-11-11):{" "}
+            {t.short_only_aggregate
+              ? `den sammanlagda blankningen har ändrats med minst ${n(t.short_aggregate_pp)} procentenheter.`
+              : `en enskild position över 0,5 % har ändrats, eller den sammanlagda blankningen har ändrats med minst ${n(t.short_aggregate_pp)} procentenheter.`}
+          </li>
+        )
+      }
       <li><strong>Avviker mot index:</strong> nyhetens ton och kursen mot index går åt olika håll.</li>
       <li>
         <strong>Stor rörelse mot index:</strong> veckans kurs skiljer sig mer än ±{n(t.big_move_pp)} % från index, oavsett
@@ -85,8 +92,8 @@ const DEFAULT_SORT = "count";
       </li>
     </ul>
     <p>
-      <strong>Starka signaler</strong> (förvalt): minst två signaler, eller minst en av insyn, blankning, avviker mot
-      index, nära 52 v högsta/lägsta och P/E +30 % i år. För ett bolag som rapporterat under veckan räknas en stor
+      <strong>Starka signaler</strong> (förvalt): minst två signaler, eller minst en av insyn, avviker mot index, nära
+      52 v högsta/lägsta och P/E +30 % i år. Blankning räknas inte, inte heller i äldre veckor där den finns kvar. För ett bolag som rapporterat under veckan räknas en stor
       rörelse mot index inte – det är rapportreaktionen, som visas under Rapporterade bolag.
     </p>
     <p>Signalerna är mekaniska och säger inget om varför något hänt. De är inga köp- eller säljsignaler.</p>
@@ -162,14 +169,16 @@ const DEFAULT_SORT = "count";
                 >
                   {sek(r.insider_net_sek)}
                 </td>
-                <td
-                  class="num"
-                  data-v={v(s)}
-                  title={[r.short_positions_pp !== null ? "enskilda positioner över 0,5 %" : s !== null ? "sammanlagd blankning" : null,
-                    s !== null && signals.shortUntil ? `t.o.m. ${dayMonth(signals.shortUntil)}` : null].filter(Boolean).join(", ") || undefined}
-                >
-                  {signedPct(s, 2)}
-                </td>
+                {hasShort && (
+                  <td
+                    class="num"
+                    data-v={v(s)}
+                    title={[r.short_positions_pp != null ? "enskilda positioner över 0,5 %" : s !== null ? "sammanlagd blankning" : null,
+                      s !== null && signals.shortUntil ? `t.o.m. ${dayMonth(signals.shortUntil)}` : null].filter(Boolean).join(", ") || undefined}
+                  >
+                    {signedPct(s, 2)}
+                  </td>
+                )}
               </tr>
             );
           })
@@ -179,8 +188,7 @@ const DEFAULT_SORT = "count";
   </div>
   </div>
   <p class="note">
-    "Mot index" jämför med OMX Stockholm PI och visas bara för aktier i kronor. Blankning visar förändringen i andel av
-    aktierna.
+    "Mot index" jämför med OMX Stockholm PI och visas bara för aktier i kronor.{hasShort && " Blankning visar förändringen i andel av aktierna."}
   </p>
 </div>
 

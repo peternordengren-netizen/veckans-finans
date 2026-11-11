@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from morning import (  # noqa: E402
-    build, insider_since, is_business_day, overnight_news, previous_business_day, short_since,
+    build, insider_since, is_business_day, overnight_news, previous_business_day,
 )
 from signals import Bar  # noqa: E402
 from validate import Instrument, validate_morning  # noqa: E402
@@ -80,29 +80,6 @@ def test_insyn_sedan_forra_handelsdagen(tmp_path):
     assert ins["days_missing"] == ["2026-10-17", "2026-10-18"]
 
 
-def _snap(as_of, current, aggregate):
-    return {"as_of": as_of, "current": current, "aggregate": aggregate}
-
-
-def test_blankning_mellan_ogonblicksbilder(tmp_path):
-    raw = tmp_path / "raw"
-    pos = lambda holder, isin, pct: {"holder": holder, "issuer": "x", "isin": isin, "pct": pct, "date": "2026-10-15"}  # noqa: E731
-    write_json(raw / "2026-W42" / "fi" / "blankning-2026-10-15.json", _snap(
-        "2026-10-15", [pos("Fond A", "SE0000000011", 0.6)],
-        [{"issuer": "Alfaverken AB", "pct": 1.0}, {"issuer": "Betabolaget AB", "pct": 0.5}]))
-    write_json(raw / "2026-W42" / "fi" / "blankning-2026-10-18.json", _snap(
-        "2026-10-18", [pos("Fond B", "SE0000000029", 0.7)],
-        [{"issuer": "Alfaverken AB", "pct": 1.1}, {"issuer": "Betabolaget AB", "pct": 1.0}]))
-    s = short_since([raw], date(2026, 10, 15), date(2026, 10, 18), INSTRUMENTS)
-    assert s["available"] and (s["from_as_of"], s["to_as_of"]) == ("2026-10-15", "2026-10-18")
-    assert {(p["ticker"], p["holder"], p["change_pp"]) for p in s["positions"]} == {
-        ("ALFA", "Fond A", -0.6), ("BETA", "Fond B", 0.7)}
-    # Alfaverken +0,1 under tröskeln 0,2; Betabolaget +0,5.
-    assert [(a["ticker"], a["change_pp"]) for a in s["aggregate"]] == [("BETA", 0.5)]
-    same = short_since([raw], date(2026, 10, 18), date(2026, 10, 18), INSTRUMENTS)
-    assert same["available"] is False
-
-
 def _bars(last_volume, closes):
     start = date(2026, 9, 1)
     days = [start + timedelta(days=i) for i in range(60) if (start + timedelta(days=i)).weekday() < 5]
@@ -131,7 +108,15 @@ def test_hela_rapporten_validerar(tmp_path):
     [alfa] = data["price"]["companies"]
     assert (alfa["ticker"], alfa["signals"], alfa["relative_pp"]) == ("ALFA", ["omsättning", "52v-högsta"], 9.0)
     assert data["news"][0]["report_today"] is True
+    assert "short" not in data  # blankning räknas inte sedan 2026-11-11
     assert validate_morning(data, INSTRUMENTS).errors == []
+    # En äldre rapport med blankning validerar fortfarande, och en felräknad förändring fångas.
+    old = {**data, "short": {"available": True, "error": False, "note": None, "from_as_of": "2026-10-15",
+                             "to_as_of": "2026-10-16", "positions": [], "aggregate": [
+                                 {"ticker": "BETA", "name": "Betabolaget", "start_pct": 0.5, "end_pct": 1.0, "change_pp": 0.5}]}}
+    assert validate_morning(old, INSTRUMENTS).errors == []
+    old["short"]["aggregate"][0]["change_pp"] = 0.4
+    assert any("short.aggregate" in e for e in validate_morning(old, INSTRUMENTS).errors)
 
     data["price"]["companies"][0]["signals"] = ["omsättning"]
     data["news"][0]["items"][0]["published"] = "2026-10-15T09:00:00+02:00"
@@ -221,23 +206,11 @@ def test_saknade_kurser_eller_natverk_gors_om():
     assert retry_reasons(data("2026-10-23"), ["fi_fetch.py: fel vid hämtning från FI"], monday) == []
 
 
-def test_saknad_blankningsbild_ar_fel_inte_noll_positioner():
-    """Saknas registrets ögonblicksbild för förra handelsdagen (FI gav 404 från 29/10 2026) är det ett
-    fel som visas som varning, inte "inga ändringar"."""
-    from morning import short_checked
+def test_morgonrapporten_har_ingen_blankning():
+    """Blankning räknas inte sedan 2026-11-11 (FI tillåter inte automatisk hämtning)."""
+    import morning
 
-    base = {"available": True, "note": None, "from_as_of": "2026-10-29", "to_as_of": "2026-11-01",
-            "positions": [{"x": 1}], "aggregate": []}
-    friday = date(2026, 10, 30)
-    assert short_checked(base, friday) == {**base, "error": False}  # söndagens bild räcker för fredagen
-    stale = short_checked({**base, "available": False, "from_as_of": "2026-10-27", "to_as_of": "2026-10-27",
-                           "positions": []}, friday)
-    assert stale["error"] and not stale["available"] and stale["positions"] == []
-    assert "Blankningsregistret saknas" in stale["note"] and "2026-10-27" in stale["note"] and "2026-10-30" in stale["note"]
-    # Instruktionen: var filerna laddas ner och var de ska sparas.
-    assert "data/fi_manual/" in stale["note"] and "Aktuella positioner" in stale["note"] and "--las-in" in stale["note"]
-    none = short_checked({**base, "to_as_of": None, "from_as_of": None}, friday)
-    assert none["error"] and "ingen ögonblicksbild" in none["note"]
+    assert not hasattr(morning, "short_since") and not hasattr(morning, "short_checked")
 
 
 def test_ingen_handelsdag_ger_ingen_fil(tmp_path, monkeypatch, capsys):

@@ -313,13 +313,13 @@ const morningTime = morning
             <button
               type="button"
               role="tab"
-              id="tab-blankning-insyn"
-              aria-controls="sektor-blankning-insyn"
+              id="tab-insyn"
+              aria-controls="sektor-insyn"
               aria-selected={view.sectors.length === 0 ? "true" : "false"}
               tabindex={view.sectors.length === 0 ? 0 : -1}
-              data-sector="blankning-insyn"
+              data-sector="insyn"
             >
-              Blankning & insyn
+              Insyn
             </button>
           )
         }
@@ -442,8 +442,8 @@ const morningTime = morning
 
       {
         view.analysis && (
-          <section class="sector" id="sektor-blankning-insyn" role="tabpanel" aria-labelledby="tab-blankning-insyn" tabindex="0">
-            <h2>Blankning & insyn</h2>
+          <section class="sector" id="sektor-insyn" role="tabpanel" aria-labelledby="tab-insyn" tabindex="0">
+            <h2>Insyn</h2>
             <AnalysisPanel analysis={view.analysis} />
           </section>
         )

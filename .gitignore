@@ -31,7 +31,8 @@ dist/
 
 # Loggar från schemalagda körningar (server och veckosammanfattning)
 logs/
-data/fi_manual/*.ods
+# FI:s blankningsfiler laddades ner hit för hand till 2026-11-11 (läses inte längre).
+data/fi_manual/
 # Handelsbanken-rapporter som laddas ner för hand, och arbetsfilerna när de sammanfattas: aldrig i något repo
 # (bara sammanfattningen, i rådatarepot).
 data/hb_manual/

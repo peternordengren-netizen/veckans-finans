@@ -13,7 +13,7 @@ Lägesmått per bolag (senaste handelsdagen, justerad stängning; högsta/lägst
 - ATR(14) i procent av kursen
 - omsättning mot snittet för de 20 handelsdagarna före
 - handelsdagar sedan senaste rapporten (ur rapportutfallen, data/results/) och utfallet mot förväntan
-- sammanlagd blankning ur senaste ögonblicksbilden av FI:s register, där den finns
+- (blankning ingår inte sedan 2026-11-11; äldre filer har short_pct och short_as_of)
 
 Etiketter (LABELS, trösklar i THRESHOLDS):
 - "utbrott-omsattning" / "utbrott": stängning över 20-dagarshögsta (högsta under de 20 dagarna före),
@@ -76,11 +76,10 @@ def previous_business_day(d: date) -> date:
     while d.weekday() >= 5 or d in non_business_days(d.year):
         d -= timedelta(days=1)
     return d
-from validate import DATA_DIR, RAW_DIR, Instrument, listed, load_instruments, validate_swing  # noqa: E402
+from validate import DATA_DIR, Instrument, listed, load_instruments, validate_swing  # noqa: E402
 
 STOCKHOLM = ZoneInfo("Europe/Stockholm")
 SWING_DIR = DATA_DIR / "swing"
-MORNING_RAW = DATA_DIR / "morning" / "raw"
 RESULTS_DIR = DATA_DIR / "results"
 HISTORY_DAYS = 400  # samma hämtning som morgonrapporten
 MIN_BARS = 51
@@ -223,7 +222,7 @@ def report_label(days_since: int | None, verdict: str | None, th: dict = THRESHO
     return {"över": "efter-rapport-over", "under": "efter-rapport-under"}.get(verdict or "", "efter-rapport")
 
 
-# --- Rapporter och blankning ---------------------------------------------------------
+# --- Rapporter ---------------------------------------------------------------------
 
 
 def reaction_day(published: datetime) -> date:
@@ -253,25 +252,6 @@ def latest_reports(today: date, results_dir: Path = RESULTS_DIR) -> dict[str, di
     return out
 
 
-def short_levels(today: date, instruments: dict[str, Instrument],
-                 raw_dirs: tuple[Path, ...] = (RAW_DIR, MORNING_RAW)) -> tuple[str | None, dict[str, float]]:
-    """Sammanlagd blankning per bolag ur senaste ögonblicksbilden före today: (datum, {ticker: procent})."""
-    from registers import _aggregate_by_ticker
-
-    files = {}
-    for raw in raw_dirs:
-        for p in raw.glob("*/fi/blankning-*.json"):
-            d = p.stem.removeprefix("blankning-")
-            if d < today.isoformat():
-                files[d] = p
-    if not files:
-        return None, {}
-    day = max(files)
-    snap = json.loads(files[day].read_text(encoding="utf-8"))
-    isin_to_ticker = {isin: t for t, i in instruments.items() for isin in i.isin}
-    return day, {t: round(v, 2) for t, v in _aggregate_by_ticker(snap, instruments, isin_to_ticker).items()}
-
-
 # --- Sammanställning -------------------------------------------------------------------
 
 
@@ -281,8 +261,7 @@ def priced(instruments: dict[str, Instrument], today: date) -> dict[str, Instrum
 
 
 def build(today: date, now: datetime, instruments: dict[str, Instrument], bars: dict[str, list[Bar]],
-          reports: dict[str, dict], shorts: tuple[str | None, dict[str, float]]) -> dict:
-    short_day, short_pct = shorts
+          reports: dict[str, dict]) -> dict:
     active = priced(instruments, today)
     delisted = [{"ticker": t, "name": i.namn, "last_day": i.avnoterad.isoformat(), "source": i.avnoterad_kalla}
                 for t, i in sorted(instruments.items(), key=lambda x: x[1].namn) if t not in active]
@@ -351,7 +330,6 @@ def build(today: date, now: datetime, instruments: dict[str, Instrument], bars: 
             "report_published": rep["published"] if rep else None,
             "days_since_report": days_since,
             "report_verdict": rep["verdict"] if rep else None,
-            "short_pct": short_pct.get(t),
             "pullback": pb,
             "bbrekyl": bb,
             "momentum": mom,
@@ -383,7 +361,6 @@ def build(today: date, now: datetime, instruments: dict[str, Instrument], bars: 
         "bbrekyl_criteria": dict(bbrekyl.CRITERIA),
         "labels": dict(LABELS),  # en kopia: filen får inte dela modulens dict
         "strategies": {k: {**v, "labels": list(v["labels"])} for k, v in STRATEGIES.items()},  # kopia, som labels
-        "short_as_of": short_day,
         "companies": companies,
         "missing": sorted(missing, key=lambda m: m["name"]),
         "delisted": delisted,
@@ -450,7 +427,7 @@ def main(argv: list[str] | None = None, fetch: BarFetcher = yahoo_bars, now: dat
     instruments = load_instruments()
     tickers = [i.yahoo_ticker for i in priced(instruments, today).values()]
     bars = fetch([*tickers, INDEX_TICKER], today - timedelta(days=HISTORY_DAYS), today - timedelta(days=1))
-    data = build(today, now, instruments, bars, latest_reports(today), short_levels(today, instruments))
+    data = build(today, now, instruments, bars, latest_reports(today))
     out = write(data, instruments)
     if out is None:
         return 1

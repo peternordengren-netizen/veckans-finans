@@ -38,8 +38,9 @@ export interface SignalRow {
   insider_net_sek: number | null;
   insider_buyers: number;
   insider_sellers: number;
-  short_positions_pp: number | null;
-  short_aggregate_pp: number | null;
+  /** Bara i äldre filer (blankning räknas inte sedan 2026-11-11). */
+  short_positions_pp?: number | null;
+  short_aggregate_pp?: number | null;
   signals: Signal[];
 }
 
@@ -65,7 +66,7 @@ export function sek(value: number | null): string {
 
 /** Blankningsförändring: enskilda positioner över 0,5 % går före aggregatet. */
 export function shortChange(row: Pick<SignalRow, "short_positions_pp" | "short_aggregate_pp">): number | null {
-  return row.short_positions_pp ?? row.short_aggregate_pp;
+  return row.short_positions_pp ?? row.short_aggregate_pp ?? null;
 }
 
 /**
@@ -99,9 +100,10 @@ export function shortUntil(shortAsOf: string | null, weekEnd: string): string | 
   return shortAsOf !== null && shortAsOf < weekEnd ? shortAsOf : null;
 }
 
-/** Signaler som ensamma räcker för "Starka signaler": de säger något utöver en rapportreaktion. */
+/** Signaler som ensamma räcker för "Starka signaler": de säger något utöver en rapportreaktion. Blankning räknas
+ *  inte (sedan 2026-11-11), inte heller i äldre veckor där signalen finns kvar. */
 export const STRONG_SIGNALS: ReadonlySet<Signal> = new Set<Signal>([
-  "insyn", "avviker", "52v-högsta", "52v-lägsta", "pe-upp", "blankning",
+  "insyn", "avviker", "52v-högsta", "52v-lägsta", "pe-upp",
 ]);
 
 /**
@@ -110,7 +112,8 @@ export const STRONG_SIGNALS: ReadonlySet<Signal> = new Set<Signal>([
  * kursreaktionen och rapportutfallen. Vecka 43: 163 bolag med signal, varav 102 med en enda.
  */
 export function isStrong(signals: readonly Signal[], reportedThisWeek: boolean): boolean {
-  const counted = reportedThisWeek ? signals.filter((s) => s !== "stor-rörelse") : signals;
+  // Blankningen räknas aldrig (äldre veckor visar signalen men den gör inte bolaget starkt).
+  const counted = signals.filter((s) => s !== "blankning" && !(reportedThisWeek && s === "stor-rörelse"));
   return counted.length >= 2 || counted.some((s) => STRONG_SIGNALS.has(s));
 }
 

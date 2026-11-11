@@ -112,7 +112,7 @@ via Cision), kan läggas in för hand med `scripts/add_raw_item.py`:
   kurs- och swingberäkningarna (morgonrapportens kurser, kurssignaler, Kurs mot vinst, Bollingerkontrollen, Swing och
   dess historik) efter sista handelsdagen. I dag: Humana (sista handelsdag 2026-10-27, Ambeas uppköp).
   `isin` innehåller alla bolagets aktieslag, åtskilda med `|`. Värdena kommer från samma Nasdaq-hämtning (2026-10-05)
-  och används för att koppla FI:s blankningsregister och insynsregister till listan. Flera alias
+  och används för att koppla FI:s insynsregister (och tidigare blankningsregistret) till listan. Flera alias
   separeras med `|`. Underhålls manuellt. `sektor` är ett id ur `sectors.json` och kan vara tom. Den styr var en
   nyhet placeras och vilka bolag som får kopplas *indirekt*: ett indirekt bolag måste tillhöra nyhetens sektor eller
   en sektor i dess `sector_impacts`, vilket valideringen kontrollerar.
@@ -170,58 +170,41 @@ Körs lokalt efter `/sammanfatta-veckan`:
   och en befintlig fil lämnas orörd. Sidan fungerar i båda fallen.
 - `--mock --out <fil>` läser mockveckan. Den kurerade mockkursfilen skrivs aldrig över.
 
-### Blankning och insyn (`scripts/fi_fetch.py`, `scripts/registers.py`)
+### Insyn (`scripts/fi_fetch.py`, `scripts/registers.py`)
 
 `fi_fetch.py` körs en gång per dygn (06:37 svensk tid) i det privata repots Actions, mallen ligger i
-[`deploy/raw-repo/.github/workflows/fi.yml`](deploy/raw-repo/.github/workflows/fi.yml). Varje körning gör tre anrop
-till Finansinspektionen. Adresserna kommer från knapparna på FI:s egna sidor och kontrollerades 2026-10-12.
+[`deploy/raw-repo/.github/workflows/fi.yml`](deploy/raw-repo/.github/workflows/fi.yml), och i morgonkörningen. Varje
+körning gör ett anrop till Finansinspektionens insynsregister:
 
 | Fil | Adress | Innehåll |
 |---|---|---|
-| `<vecka>/fi/blankning-<datum>.json` | `https://www.fi.se/BlankningsRegister/GetBlankningsregisterAggregat` och `…/GetAktuellFile` (ODS) | Summa per emittent av alla positioner över 0,1 %, och enskilda positioner över 0,5 % med innehavare och ISIN |
 | `<vecka>/fi/insyn-<datum>.json` | `https://marknadssok.fi.se/Publiceringsklient/sv-SE/Search/Search?…&button=export` (CSV, UTF-16) | Insynstransaktioner publicerade det datumet |
-| `fi-historik/blankning-historik-<datum>.json` | `…/GetHistFile`, hämtad en gång med `--history` | Historiska positioner över 0,5 % sedan 2025 |
 
-Data dateras till gårdagen, så att lördagsmorgonens bild hamnar i fredagens vecka.
+Data dateras till gårdagen, så att lördagsmorgonens bild hamnar i fredagens vecka. Misslyckas hämtningen blir
+Actions-körningen röd med `::error::`, och morgonrapporten listar felet under "Fel vid hämtningen".
 
-**Fel räknas, också delvisa.** Misslyckas en del (t.ex. blankningen) men inte den andra blir exit-koden 2. Det som
-hämtades committas ändå, men Actions-körningen blir röd med `::error::`. Morgonrapporten listar felet under "Fel
-vid hämtningen". Saknas registrets ögonblicksbild för förra handelsdagen visas blankningsdelen som en varning
-("Blankningsregistret kunde inte hämtas från FI …") i stället för som 0 positioner.
-
-**Sedan 2026-10-29 avvisar FI skriptade nedladdningar av blankningsregistret.** Adresserna ovan är oförändrade;
-FI:s egna knappar anropar fortfarande samma `/BlankningsRegister/…`, kontrollerat 2026-11-02. Från webbläsaren
-svarar de 200, men från skript, också GitHub Actions, svarar de 404, oavsett User-Agent, Referer och cookies.
-Spärren kringgås inte.
-
-Därför hämtas blankningen inte längre, utan läses ur filer som du laddar ner själv:
-1. Ladda ner "Aktuella positioner" och "Aggregerade positioner" med knapparna på
-   [FI:s sida](https://www.fi.se/sv/vara-register/blankningsregistret/). "Historiska positioner" är valfri.
-2. Spara filerna i [`data/fi_manual/`](data/fi_manual/LÄS_MIG.txt). `*.ods` committas aldrig till det publika repot.
-3. Nästa morgonkörning läser dem, eller kör direkt `python scripts/fi_fetch.py --las-in`.
-
-Den senast sparade filen av varje sort läses. Datumet är filens eget, det senaste positionsdatumet i filen (FI:s
-filer har inget annat datum). Ögonblicksbilden och historiken kopieras till `data/raw/` och pushas till det privata
-repot, där veckans analys och signaler läser dem. Actions hämtar bara insynen (`--utan-blankning`).
-
-Saknas en ögonblicksbild för förra handelsdagen visar morgonrapporten en varning med instruktionen. När
-blankningsunderlaget slutar före veckans slut märks veckans blankningssignaler "Blankning t.o.m. <dag>"
-(`short_as_of` i signalfilen), med en förklaring ovanför signaltabellen.
+**Blankning ingår inte (borttaget 2026-11-11).** FI avvisar sedan 2026-10-29 skriptade nedladdningar av
+blankningsregistret, och FI tillåter inte automatisk hämtning. Den manuella vägen via `data/fi_manual/` är också
+borttagen. Ingen ny blankning räknas: inte i morgonrapporten, veckoanalysen, signalerna, Swing eller
+Handelsbanken-sammanfattningarna, och morgonrapporten varnar inte längre för saknade FI-filer.
+- Äldre filer har kvar sin blankning: `short` i morgonrapporter, `short_positions` och `short_aggregate` i
+  analysfiler, `short_*` och signalen "blankning" i signalfiler, och `short_pct` i swingfiler.
+- Gamla veckor visar blankningen som den var, i fliken Insyn och i signaltabellen, och valideringen kontrollerar
+  den där den finns.
+- "Starka signaler" räknas utan blankning, också för gamla veckor.
+- Blankningsfilerna i rådatarepot (`<vecka>/fi/blankning-*.json`, `fi-historik/`) ligger kvar.
+- Actions-jobbet skickar fortfarande `--utan-blankning`, som inte gör något längre.
 
 `registers.py <vecka>` räknar deterministiskt fram `data/analysis/<vecka>.json` (git-ignorerad) för bolagen i
 `instruments.csv`, kopplade via `isin`:
-- **Blankning över 0,5 %:** läget per innehavare vid veckans slut jämfört med förra veckans slut, ur historikfilen
-  och de dagliga ögonblicksbilderna.
-- **Blankning, aggregat:** bara från egna ögonblicksbilder. Den första jämförelsen blir alltså veckan efter att
-  jobbet startat.
 - **Insyn:** förvärv och avyttring av aktier i SEK för mer än 100 000 kr, utom transaktioner kopplade till
   aktieprogram och reviderade poster. Bolag där minst två insynspersoner köpt, respektive sålt, markeras.
   Om ett bolag är målbolag för ett uppköpsbud eller en avnotering, med `bid_target` i veckofilen, visas dess
   försäljningar som "under pågående uppköpsbud". Det kan till exempel vara anslutning till budet och inget fristående
   säljbeslut.
 
-Valideringen kontrollerar att siffrorna hänger ihop: förändring = slut − start, netto = köp − sälj, värde = volym × pris,
-tröskeln och markeringarna.
+Valideringen kontrollerar att siffrorna hänger ihop: netto = köp − sälj, värde = volym × pris, tröskeln och
+markeringarna (och för äldre filers blankning: förändring = slut − start).
 
 ### Rapportkalender (`scripts/report_calendar.py`)
 
@@ -381,13 +364,13 @@ Veckokörningen kör `valuation.py` före `signals.py`, eftersom signalen "P/E +
 `signals.py <vecka>` skriver `data/signals/<vecka>.json` (git-ignorerad) för alla bolag i `instruments.csv`.
 Veckans sida visar den under fliken **Signaler**, en sorterbar tabell där filtret "bara bolag med signal denna vecka"
 är förvalt. Kursdatan hämtas i ett enda batchanrop till Yahoo (yfinance) för hela listan och jämförelseindexet. Ton
-kommer ur veckofilen och insyn och blankning ur analysfilen. Veckokörningen skapar filen efter sammanfattningen och
+kommer ur veckofilen och insyn ur analysfilen. Veckokörningen skapar filen efter sammanfattningen och
 säkerhetskopierar den med `backup_week.py`. Om du kör `/sammanfatta-veckan` manuellt kör du `signals.py` efteråt.
 
 | Signal | Villkor |
 |---|---|
 | Insyn | insynstransaktioner över 100 000 kr under veckan (från `registers.py`) |
-| Blankning | ändrad position över 0,5 %, eller sammanlagd blankning ändrad minst 0,5 procentenheter |
+| Blankning | bara äldre veckor (till 2026-11-11): ändrad sammanlagd blankning minst 0,5 procentenheter; räknas inte som stark |
 | Avviker mot index | nyhetens ton och kursen mot index går åt olika håll (samma regel som på aktiekorten) |
 | Stor rörelse mot index | veckans kurs skiljer sig mer än ±5 % från index (bara aktier i kronor) |
 | P/E +30 % i år | P/E har stigit minst 30 % sedan årets början (ur Kurs mot vinst) |
@@ -396,7 +379,9 @@ säkerhetskopierar den med `backup_week.py`. Om du kör `/sammanfatta-veckan` ma
 
 Hög omsättning räknas på veckans snitt, inte på största dagen. I W42 gav största dagen 74 av 266 bolag och
 veckosnittet 20. Trösklarna sparas i filen, och valideringen räknar om signalerna från värdena. Jämförelsen mot index
-görs bara för `.ST`-tickers, som antas vara i kronor.
+görs bara för `.ST`-tickers, som antas vara i kronor. "Starka signaler" är minst två signaler, eller minst en av insyn,
+avviker mot index, nära 52 v högsta/lägsta och P/E +30 % i år; blankning räknas inte (sedan 2026-11-11, också i gamla
+veckor).
 
 ### Handelsbanken: rapporter som laddas ner för hand (`scripts/hb_manual.py`, `scripts/run_hb.ps1`)
 
@@ -447,8 +432,6 @@ eller före 08:10, står det så under rubriken med datum. Varje dags rapport fi
 - **Pressmeddelanden** för bolag i listan sedan förra handelsdagen kl. 17:30, utan rutinmeddelanden. Bolag som
   rapporterar i dag står först.
 - **Insyn** publicerad sedan förra handelsdagen, med samma filter som veckoanalysen.
-- **Blankning:** ändrade positioner över 0,5 % och ändringar i sammanlagd blankning på minst 0,2 procentenheter, mellan
-  registrets ögonblicksbilder.
 - **Kurser** (dagsdatans datum): bolag med minst 2 gånger snittomsättningen eller högst 2 % från
   52-veckorshögsta/-lägsta.
 
@@ -485,7 +468,6 @@ dagsdata, utan extra hämtning, och skrivs till `data/swing/<datum>.json`, som �
 - ATR(14) i procent av kursen
 - omsättning mot snittet för de 20 dagarna före
 - handelsdagar sedan senaste rapporten, med utfall mot förväntan
-- sammanlagd blankning enligt Finansinspektionen, där den finns
 
 **Etiketterna** beskriver vad som hänt, och valideringen underkänner ord som uppmanar till köp eller försäljning:
 - utbrott över 20-dagarshögsta, med eller utan hög omsättning (≥ 2×)
@@ -640,7 +622,7 @@ bättre än index efter 5 dagar i 48,3 % av fallen, mot 47,1 % för alla dagar.
 #### Strategin "Pullback i trend" (`scripts/pullback.py`)
 
 Strategin är ett val under "Strategi" i flikens rullista. Den visar bolagen med någon av strategins två etiketter och
-strategins kolumner. Mått som strategin inte använder (RSI, omsättning, blankning) döljs då, så att tabellen ryms.
+strategins kolumner. Mått som strategin inte använder (RSI, omsättning) döljs då, så att tabellen ryms.
 Reglerna gäller förra handelsdagen, med kurser justerade som övriga mått. Öppningskursen hämtas i samma batchanrop som
 resten av dagsdatan.
 
@@ -788,8 +770,6 @@ av dem. Bakgrund: 6 och 9/11 2026 körde morgonen halvfärdig kod ur arbetskopia
   `setup_drift.ps1` flyttar en äldre uppsättning åt rätt håll.
 - **Spårad data** (`instruments.csv`, `sectors.json` med flera) kommer från main och gäller för körningarna först när
   den pushats.
-- **FI-filer** som laddas ner för hand sparas som förut i arbetskopians `data\fi_manual`. Driftkopian läser dem
-  därifrån (`VF_FI_MANUAL_DIR`).
 - **Sidan:** servern (VeckansFinansServer) serverar driftkopians `dist\`. Ett bygge i arbetskopian påverkar inte
   sidan.
 - **Uppsättning:** kör `powershell -NoProfile -File scripts\setup_drift.ps1` och sedan `scripts\install_tasks.ps1`,
@@ -918,7 +898,7 @@ Arbetsgång varje vecka, efter att veckan är slut. Kör kommandona i repots rot
 2. Kör `/sammanfatta-veckan` i Claude Code. Kommandot gör följande:
    - skriver och validerar `data/weeks/<vecka>.json`
    - hämtar kurser till `data/prices/<vecka>.json`
-   - räknar fram blankning och insyn till `data/analysis/<vecka>.json` med `registers.py`
+   - räknar fram insyn till `data/analysis/<vecka>.json` med `registers.py`
    - **säkerhetskopierar** de tre filerna till det privata repot, under `weeks/`, `prices/` och `analysis/` i
      `veckans-finans-raw`, med pull, commit och push
 3. Om du vill hämta kurserna igen senare:

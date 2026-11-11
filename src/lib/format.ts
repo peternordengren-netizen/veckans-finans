@@ -90,3 +90,11 @@ export function shortRange(
   const to = end === 0 ? t : `${pct(end)} %`;
   return `${from} → ${to} av aktierna (${nf(1, 2, true).format(change)})`;
 }
+
+/**
+ * Fellistan i morgon- och eftermiddagsrapporten utan varningar om blankning (saknade FI-filer, säkerhetskopian).
+ * Blankningen är borttagen sedan 2026-11-11, men äldre rapporter har kvar felen i filen.
+ */
+export function withoutShortWarnings(errors: readonly string[]): string[] {
+  return errors.filter((e) => !/^(blankning|FI blankning|FI historik)\b/i.test(e));
+}

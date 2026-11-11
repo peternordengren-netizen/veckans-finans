@@ -73,9 +73,13 @@ test("starka signaler: minst två, eller en stark; stor rörelse räknas inte f�
   assert.equal(isStrong(["stor-rörelse"], false), false); // en ensam svag signal
   assert.equal(isStrong(["omsättning"], false), false);
   assert.equal(isStrong(["stor-rörelse", "omsättning"], false), true); // två signaler
-  for (const s of ["insyn", "avviker", "52v-högsta", "52v-lägsta", "pe-upp", "blankning"] as const) {
+  for (const s of ["insyn", "avviker", "52v-högsta", "52v-lägsta", "pe-upp"] as const) {
     assert.equal(isStrong([s], false), true, s);
   }
+  // Blankning räknas inte (sedan 2026-11-11), varken ensam eller som en av två, också i gamla veckor.
+  assert.equal(isStrong(["blankning"], false), false);
+  assert.equal(isStrong(["blankning", "omsättning"], false), false);
+  assert.equal(isStrong(["blankning", "omsättning", "stor-rörelse"], false), true);
   // Rapporterade i veckan: den stora rörelsen är rapportreaktionen och räknas inte.
   assert.equal(isStrong(["stor-rörelse", "omsättning"], true), false);
   assert.equal(isStrong(["stor-rörelse", "insyn"], true), true);

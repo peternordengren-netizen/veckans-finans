@@ -120,14 +120,14 @@ def good_summary(meta):
         },
         "our_data": [{"ticker": "ALFA", "name": "Alfaverken Fastigheter", "diverges": False,
                       "note": "Kursen har gått 4,2 procentenheter sämre än index i år trots den positiva bilden, "
-                              "och blankningen ökade 0,35 procentenheter. Nästa rapport 2099-11-20."}],
+                              "och insyn visar en avyttring på 1,25 miljoner kronor. Nästa rapport 2099-11-20."}],
         "label": "manuellt tillagd", "source_url": hb_manual.SOURCE_URLS["fastighetsrapport"],
     }
 
 
 DATA = {"sources": {"signals": "2099-W45", "valuation": "2099-W45", "calendar_from": "2099-11-11"},
         "companies": {"ALFA": {"name": "Alfaverken Fastigheter", "week_change_pct": 1.2, "week_rel_index_pp": 0.8,
-                               "ytd_pct": 3.5, "ytd_rel_index_pp": -4.21, "short_change_pp": 0.35,
+                               "ytd_pct": 3.5, "ytd_rel_index_pp": -4.21,
                                "insider_net_sek": -1250000, "insider_buyers": 0, "insider_sellers": 1, "pe_now": 14.2,
                                "pe_change_pct": -8.0, "next_report": "2099-11-20"}}}
 SECTORS = {"fastigheter", "industri"}
@@ -247,7 +247,7 @@ def test_bolagsdata_ur_sidans_filer(tmp_path):
     (tmp_path / "signals" / "2099-W44.json").write_text(json.dumps({"week": "2099-W44", "companies": [
         {"ticker": "ALFA", "name": "Alfaverken Fastigheter", "change_pct": 9.9, "relative_pp": 9.9}]}), encoding="utf-8")
     (tmp_path / "signals" / "2099-W45.json").write_text(json.dumps({"week": "2099-W45", "companies": [
-        {"ticker": "ALFA", "name": "Alfaverken Fastigheter", "change_pct": 1.2, "relative_pp": 0.8, "short_aggregate_pp": 0.35,
+        {"ticker": "ALFA", "name": "Alfaverken Fastigheter", "change_pct": 1.2, "relative_pp": 0.8,
          "insider_net_sek": -1250000, "insider_buyers": 0, "insider_sellers": 1}]}), encoding="utf-8")
     (tmp_path / "valuation" / "2099-W45.json").write_text(json.dumps({"week": "2099-W45", "companies": [
         {"ticker": "ALFA", "name": "Alfaverken Fastigheter", "ytd_pct": 3.5, "rel_index_pp": -4.21, "pe_now": 14.2,

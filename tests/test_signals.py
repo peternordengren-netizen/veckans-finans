@@ -91,27 +91,15 @@ def test_varden_och_signaler():
     # −6 mot index: stor rörelse även nedåt.
     assert beta["relative_pp"] == -6.0 and "stor-rörelse" in beta["signals"]
     assert "insyn" in beta["signals"] and "52v-lägsta" in beta["signals"]
-    assert "blankning" not in beta["signals"]  # aggregatet ändrat 0,2 < 0,5
     gama = c["GAMA"]
-    assert gama["signals"] == ["blankning"] and gama["tone"] is None  # indirekt berörd ger ingen ton
+    # Blankningen i analysfilen (äldre form) läses inte: ingen signal, inga blankningsfält (sedan 2026-11-11).
+    assert gama["signals"] == [] and gama["tone"] is None  # indirekt berörd ger ingen ton
+    assert "short_aggregate_pp" not in gama and "short_as_of" not in data
+    assert "short_aggregate_pp" not in data["thresholds"]
     dkkx = c["DKKX"]
     assert dkkx["change_pct"] == 3.0 and dkkx["relative_pp"] is None and dkkx["signals"] == []
     assert c["SAKN"]["change_pct"] is None and data["errors"] == ["SAKN.ST: ingen kursdata för veckan"]
     assert validate_signals(data, WEEK, INSTRUMENTS).errors == []
-
-
-def test_blankningsunderlagets_sista_dag_sparas():
-    """short_as_of: sidan märker blankningssignalen "t.o.m. <dag>" när underlaget slutar före veckans slut."""
-    from signals import short_as_of
-
-    assert short_as_of(None) is None
-    agg = {"short_aggregate": {"available": True, "end_as_of": "2026-10-27"},
-           "short_positions": {"available": False, "end_as_of": "2026-11-01"}}
-    assert short_as_of(agg) == "2026-10-27"
-    assert short_as_of({"short_aggregate": {"available": False}, "short_positions": {"available": True,
-                                                                                      "end_as_of": "2026-11-01"}}) == "2026-11-01"
-    data = build(WEEK, INSTRUMENTS, None, None, fake_fetch, date(2026, 10, 19), NOW)
-    assert data["short_as_of"] is None and validate_signals(data, WEEK, INSTRUMENTS).errors == []
 
 
 def test_utan_vecko_och_analysfil():
@@ -141,7 +129,7 @@ def test_sammanvagd_ton():
 
 def test_validering_raknar_om_signalerna():
     data = build(WEEK, INSTRUMENTS, WEEK_DATA, ANALYSIS, fake_fetch, date(2026, 10, 19), NOW)
-    by_ticker(data)["GAMA"]["signals"] = ["blankning", "omsättning"]
+    by_ticker(data)["GAMA"]["signals"] = ["insyn", "omsättning"]
     errors = validate_signals(data, WEEK, INSTRUMENTS).errors
     assert any("Gammagruppen" in e and "stämmer inte med värdena" in e for e in errors)
 
@@ -177,18 +165,20 @@ def test_pe_upp_fran_kurs_mot_vinst():
     assert validate_signals(data, WEEK, INSTRUMENTS).errors == []
 
 
-def test_blankning_bara_vid_andrad_sammanlagd_blankning():
-    """Nya filer: blankningssignalen kräver att den sammanlagda blankningen ändrats minst 0,5 procentenheter.
-    Äldre filer (utan short_only_aggregate) räknade också en ändrad enskild position över 0,5 %."""
+def test_blankning_bara_i_aldre_filer():
+    """Nya filer har ingen blankning (sedan 2026-11-11). Äldre filer räknas som förut med sina egna trösklar:
+    sammanlagd blankning ändrad minst 0,5 procentenheter, och utan short_only_aggregate också en ändrad position."""
     from signals import signals_for
 
     base = {"insider_net_sek": None, "short_positions_pp": None, "short_aggregate_pp": None, "tone": None,
             "volume_ratio": None, "from_high_pct": None, "from_low_pct": None, "relative_pp": None}
-    assert THRESHOLDS["short_only_aggregate"] is True
-    assert signals_for({**base, "short_positions_pp": 0.3, "short_aggregate_pp": 0.2}, THRESHOLDS) == []
-    assert signals_for({**base, "short_positions_pp": 0.3, "short_aggregate_pp": 0.5}, THRESHOLDS) == ["blankning"]
-    assert signals_for({**base, "short_aggregate_pp": -0.6}, THRESHOLDS) == ["blankning"]
-    old = {k: v for k, v in THRESHOLDS.items() if k != "short_only_aggregate"}
+    assert "short_aggregate_pp" not in THRESHOLDS and "short_only_aggregate" not in THRESHOLDS
+    assert signals_for({**base, "short_aggregate_pp": -0.6}, THRESHOLDS) == []  # nya filer: aldrig
+    newer = {**THRESHOLDS, "short_aggregate_pp": 0.5, "short_only_aggregate": True}  # filer 2026-10-29 – 11-10
+    assert signals_for({**base, "short_positions_pp": 0.3, "short_aggregate_pp": 0.2}, newer) == []
+    assert signals_for({**base, "short_positions_pp": 0.3, "short_aggregate_pp": 0.5}, newer) == ["blankning"]
+    assert signals_for({**base, "short_aggregate_pp": -0.6}, newer) == ["blankning"]
+    old = {k: v for k, v in newer.items() if k != "short_only_aggregate"}
     assert signals_for({**base, "short_positions_pp": 0.3, "short_aggregate_pp": 0.2}, old) == ["blankning"]
 
 

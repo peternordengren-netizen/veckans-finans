@@ -1,16 +1,19 @@
 """Signalöversikt per bolag för en vecka: kurs mot index, omsättning, 52-veckorsläge,
-nyhetston, insyn och blankning för alla bolag i instruments.csv.
+nyhetston och insyn för alla bolag i instruments.csv.
 
 Skriver data/signals/<vecka>.json (schema/signals.schema.json).
 
 Kursdata hämtas med ett enda batchanrop till Yahoo (yfinance.download) för hela listan
-plus jämförelseindexet. Ton kommer ur veckofilen (direkt berörda bolag), insyn och
-blankning ur analysfilen (scripts/registers.py). Båda är valfria.
+plus jämförelseindexet. Ton kommer ur veckofilen (direkt berörda bolag), insyn ur analysfilen
+(scripts/registers.py). Båda är valfria.
+
+Blankning ingår inte sedan 2026-11-11 (FI tillåter inte automatisk hämtning av blankningsregistret). Äldre
+filer har kvar short_positions_pp, short_aggregate_pp, short_as_of och blankningströsklarna; valideringen
+räknar deras signal "blankning" som förut (signals_for), nya filer har den aldrig.
 
 Signaler (trösklarna i THRESHOLDS, sparas i filen så att valideringen kan räkna om):
 - "insyn": insynstransaktioner över registers.py:s tröskel under veckan
-- "blankning": den sammanlagda blankningen ändrad minst short_aggregate_pp procentenheter
-  (short_only_aggregate; äldre filer räknade också varje ändrad enskild position över 0,5 %)
+- "blankning" (bara äldre filer): den sammanlagda blankningen ändrad minst short_aggregate_pp procentenheter
 - "avviker": nyhetens ton och kursen mot index går åt olika håll (samma regel som
   sidans "avviker mot index", src/lib/tone.ts)
 - "pe-upp": P/E har stigit minst pe_up_pct % i år (ur data/valuation/<vecka>.json, scripts/valuation.py;
@@ -52,8 +55,8 @@ from retry import retry_missing  # noqa: E402
 from validate import DATA_DIR, Instrument, iso_week_period, listed, load_instruments, validate_signals  # noqa: E402
 
 STOCKHOLM = ZoneInfo("Europe/Stockholm")
-THRESHOLDS = {"volume_ratio": 2.0, "near_52w_pct": 2.0, "short_aggregate_pp": 0.5, "big_move_pp": 5.0,
-              "pe_up_pct": 30.0, "short_only_aggregate": True}
+# Blankningströsklarna (short_aggregate_pp, short_only_aggregate) finns bara i äldre filer (till 2026-11-11).
+THRESHOLDS = {"volume_ratio": 2.0, "near_52w_pct": 2.0, "big_move_pp": 5.0, "pe_up_pct": 30.0}
 VOLUME_BASE_DAYS = 20
 HISTORY_DAYS = 400  # 52 veckor plus marginal för omsättningssnittet före veckan
 SEK_SUFFIX = ".ST"
@@ -243,13 +246,15 @@ def signals_for(c: dict, thresholds: dict) -> list[str]:
     out = []
     if c["insider_net_sek"] is not None:
         out.append("insyn")
-    # Blankning: den sammanlagda blankningen har ändrats minst short_aggregate_pp. Äldre filer (utan
-    # short_only_aggregate) räknade också varje ändrad enskild position över 0,5 % – det gav vecka 43
-    # signal för 46 bolag mot 15 med en verklig förändring i den sammanlagda blankningen.
-    aggregate = c["short_aggregate_pp"] is not None and abs(c["short_aggregate_pp"]) >= thresholds["short_aggregate_pp"]
-    positions = c["short_positions_pp"] is not None and not thresholds.get("short_only_aggregate", False)
-    if aggregate or positions:
-        out.append("blankning")
+    # Blankning, bara i äldre filer (med short_aggregate_pp i trösklarna): den sammanlagda blankningen har
+    # ändrats minst short_aggregate_pp. Filer utan short_only_aggregate räknade också varje ändrad enskild
+    # position över 0,5 %. Nya filer (från 2026-11-11) har ingen blankning.
+    if "short_aggregate_pp" in thresholds:
+        agg, pos = c.get("short_aggregate_pp"), c.get("short_positions_pp")
+        aggregate = agg is not None and abs(agg) >= thresholds["short_aggregate_pp"]
+        positions = pos is not None and not thresholds.get("short_only_aggregate", False)
+        if aggregate or positions:
+            out.append("blankning")
     if diverges(c["tone"], c["relative_pp"]):
         out.append("avviker")
     if c["relative_pp"] is not None and abs(c["relative_pp"]) > thresholds["big_move_pp"]:
@@ -276,12 +281,6 @@ def build(week: str, instruments: dict[str, Instrument], week_data: dict | None,
     news = news_by_ticker(week_data)
 
     insider = {c["ticker"]: c for c in ((analysis or {}).get("insider") or {}).get("companies", [])}
-    positions: dict[str, float] = {}
-    if ((analysis or {}).get("short_positions") or {}).get("available"):
-        positions = {c["ticker"]: c["change_pp"] for c in analysis["short_positions"]["changes"]}
-    aggregate: dict[str, float] = {}
-    if ((analysis or {}).get("short_aggregate") or {}).get("available"):
-        aggregate = {c["ticker"]: c["change_pp"] for c in analysis["short_aggregate"]["changes"]}
 
     pe_change = {c["ticker"]: c["pe_change_pct"] for c in (valuation or {}).get("companies", [])}
     companies, errors = [], []
@@ -312,8 +311,6 @@ def build(week: str, instruments: dict[str, Instrument], week_data: dict | None,
             "insider_net_sek": ins["net_value_sek"] if ins else None,
             "insider_buyers": len(ins["buyers"]) if ins else 0,
             "insider_sellers": len(ins["sellers"]) if ins else 0,
-            "short_positions_pp": positions.get(inst.ticker),
-            "short_aggregate_pp": aggregate.get(inst.ticker),
             "pe_change_pct": pe_change.get(inst.ticker),
         }
         c["signals"] = signals_for(c, THRESHOLDS)
@@ -326,24 +323,12 @@ def build(week: str, instruments: dict[str, Instrument], week_data: dict | None,
         "generated_at": now.isoformat(timespec="seconds"),
         "thresholds": THRESHOLDS,
         "index": {"ticker": INDEX_TICKER, "name": INDEX_NAME, "change_pct": index_change} if index_change is not None else None,
-        # Dagen blankningsunderlaget gäller t.o.m. (analysens ögonblicksbild). Före veckans slut visar sidan
-        # "blankning t.o.m. <dag>", så att signalen inte ser aktuell ut (FI-hämtningen stoppades 29/10 2026).
-        "short_as_of": short_as_of(analysis),
         "companies": companies,
         "errors": errors,
     }
     if (week_data or {}).get("mock"):
         out["mock"] = True
     return out
-
-
-def short_as_of(analysis: dict | None) -> str | None:
-    """Senaste dag som blankningsunderlaget (aggregatet, annars positionerna) täcker, eller None."""
-    for key in ("short_aggregate", "short_positions"):
-        block = (analysis or {}).get(key) or {}
-        if block.get("available") and block.get("end_as_of"):
-            return block["end_as_of"]
-    return None
 
 
 def _read(path: Path) -> dict | None:

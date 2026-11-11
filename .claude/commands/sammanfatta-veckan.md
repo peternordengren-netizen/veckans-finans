@@ -145,10 +145,10 @@ Görs även om valideringen blev **EJ GODKÄND**, så att arbetet inte går för
 
 1. **Kurser:** kör `.venv/Scripts/python scripts/prices.py <vecka>`. Skriptet är fail-soft. Exit-kod 1 betyder att
    ingen kurs kunde hämtas och ingen kursfil skrevs. Fortsätt då utan kursfil, och nämn det i slutrapporten.
-1b. **Blankning och insyn:** kör `.venv/Scripts/python scripts/registers.py <vecka>`. Analysen räknas fram
-   deterministiskt ur FI-datan i `data/raw/`. Du skriver eller ändrar ingenting i den. Den hamnar i
-   `data/analysis/<vecka>.json`. Ta med i slutrapporten vad skriptet skriver ut, alltså antal bolag med
-   blankningsförändring, om aggregatet är tillgängligt och vilka insynsdagar som saknas.
+1b. **Insyn:** kör `.venv/Scripts/python scripts/registers.py <vecka>`. Analysen räknas fram deterministiskt ur
+   FI-datan i `data/raw/`. Du skriver eller ändrar ingenting i den. Den hamnar i `data/analysis/<vecka>.json`. Ta med
+   i slutrapporten vad skriptet skriver ut, alltså antal bolag med insyn och vilka insynsdagar som saknas. Blankning
+   räknas inte längre (FI tillåter inte automatisk hämtning).
 2. **Säkerhetskopia till det privata repot** `data/raw/` (veckans-finans-raw): kör
    `.venv/Scripts/python scripts/backup_week.py <vecka>`. Skriptet gör alla git-steg själv. Det stannar om
    `data/raw/` har oincheckade ändringar, kör `pull --rebase` och kopierar vecko-, kurs- och analysfilen till
@@ -170,6 +170,6 @@ Kort, i chatten:
 - valideringens resultat: OK efter hur många körningar, eller **EJ GODKÄND** med alla kvarvarande fel listade
 - eventuella varningar från valideringen
 - kurser: antal hämtade och antal fel, eller att ingen kursfil skrevs
-- blankning och insyn: det som `registers.py` skrev ut
+- insyn: det som `registers.py` skrev ut
 - säkerhetskopia: commit-hash som pushats till veckans-finans-raw, "oförändrad sedan förra kopian", eller varför den
   inte gick igenom

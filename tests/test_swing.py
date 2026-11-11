@@ -74,10 +74,10 @@ def test_build_och_validering():
     # Rapport på fredagskvällen efter stängning -> reaktion nästa handelsdag; här på sista dagen.
     reports = {"ALFA": {"published": datetime.combine(last, datetime.min.time(), TZ).replace(hour=7).isoformat(),
                         "verdict": "över"}}
-    data = swing.build(today, datetime.now(TZ), INSTRUMENTS, bars, reports, ("2026-10-27", {"ALFA": 1.25}))
+    data = swing.build(today, datetime.now(TZ), INSTRUMENTS, bars, reports)
     assert [c["ticker"] for c in data["companies"]] == ["ALFA"]
     a = data["companies"][0]
-    assert a["days_since_report"] == 0 and a["short_pct"] == 1.25
+    assert a["days_since_report"] == 0 and "short_pct" not in a  # blankning räknas inte sedan 2026-11-11
     assert "efter-rapport-over" in a["labels"] and "trend-upp" in a["labels"]
     assert validate_swing(data, INSTRUMENTS).errors == []
     a["labels"] = ["utbrott"]
@@ -211,7 +211,7 @@ def test_swing_bygger_och_validerar_pullback():
     bars = {"ALFA.ST": make_ohlc_trend_with_pullback()}
     bars["BETA.ST"] = make_bars([100.0] * 60, end=bars["ALFA.ST"][-1].day)
     today = bars["ALFA.ST"][-1].day + timedelta(days=1)
-    data = swing.build(today, datetime.now(TZ), INSTRUMENTS, bars, {}, (None, {}))
+    data = swing.build(today, datetime.now(TZ), INSTRUMENTS, bars, {})
     a = next(c for c in data["companies"] if c["ticker"] == "ALFA")
     assert "rekyl-vandsignal" in a["labels"], a["pullback"]
     lv = a["pullback"]["levels"]
@@ -322,7 +322,7 @@ def test_korsning_valideras_och_finns_i_historiken():
     bars = {"ALFA.ST": make_bars(closes[:j + 2])}
     bars["BETA.ST"] = make_bars([100.0] * 60, end=bars["ALFA.ST"][-1].day)
     today = bars["ALFA.ST"][-1].day + timedelta(days=1)
-    data = swing.build(today, datetime.now(TZ), INSTRUMENTS, bars, {}, (None, {}))
+    data = swing.build(today, datetime.now(TZ), INSTRUMENTS, bars, {})
     a = next(c for c in data["companies"] if c["ticker"] == "ALFA")
     assert "golden-cross" in a["labels"] and a["ma_cross_days"] == 1
     assert data["labels"]["golden-cross"] == "Golden cross" and data["labels"]["death-cross"] == "Death cross"
@@ -343,7 +343,7 @@ def test_swing_galler_dagsdatans_datum_inte_enstaka_bolags():
     last = alfa[-1].day
     beta = make_bars([100.0 + i * 0.2 for i in range(69)], end=alfa[-2].day)  # saknar sista dagen
     today = last + timedelta(days=1 if last.weekday() < 4 else 3)
-    data = swing.build(today, datetime.now(TZ), INSTRUMENTS, {"ALFA.ST": alfa, "BETA.ST": beta}, {}, (None, {}))
+    data = swing.build(today, datetime.now(TZ), INSTRUMENTS, {"ALFA.ST": alfa, "BETA.ST": beta}, {})
     assert data["as_of"] == alfa[-2].day.isoformat() and data["expected_day"] == last.isoformat()
     assert data["coverage"] == {"with_day": 2, "with_expected": 1, "of": 2}
     assert {c["day"] for c in data["companies"]} == {alfa[-2].day.isoformat()}  # Alfaverken utan sista dagen
@@ -366,7 +366,7 @@ def test_bolag_utan_kurser_och_avnoterade_visas_i_filen():
     assert set(swing.priced(instruments, today)) == {"ALFA", "BETA", "DELTA"}
     bars = {"ALFA.ST": alfa, "BETA.ST": make_bars([100.0] * 20, end=last),
             "GAMMA.ST": make_bars([100.0] * 70, end=last - timedelta(days=10))}
-    data = swing.build(today, datetime.now(TZ), instruments, bars, {}, (None, {}))
+    data = swing.build(today, datetime.now(TZ), instruments, bars, {})
     assert [c["ticker"] for c in data["companies"]] == ["ALFA"]
     assert data["missing"] == [{"ticker": "BETA", "name": "Betabolaget", "reason": "short_history", "bars": 20},
                                {"ticker": "DELTA", "name": "Deltaverken", "reason": "no_data", "bars": 0}]
@@ -386,7 +386,7 @@ def test_ett_enda_r_motstandet_i_strategins_r():
     räknat på strategins R (referens minus strategins stopp)."""
     bars = make_ohlc_trend_with_pullback()
     last = bars[-1].day
-    data = swing.build(last + timedelta(days=1), datetime.now(TZ), INSTRUMENTS, {"ALFA.ST": bars}, {}, (None, {}))
+    data = swing.build(last + timedelta(days=1), datetime.now(TZ), INSTRUMENTS, {"ALFA.ST": bars}, {})
     a = data["companies"][0]
     assert "resistance_r" not in a["sr"]
     lv, m = a["pullback"]["levels"], a["pullback"]["rank"]["measures"]

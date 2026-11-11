@@ -6,6 +6,7 @@
  */
 import { loadReactionOutcomes, type AfternoonReport } from "../lib/data";
 import type { ResultsView } from "../lib/results";
+import { withoutShortWarnings } from "../lib/format";
 import ReactionTable from "./ReactionTable.astro";
 import ResultsPanel from "./ResultsPanel.astro";
 
@@ -15,6 +16,8 @@ interface Props {
   results: ResultsView | null;
 }
 const { report, results } = Astro.props;
+// Varningar om blankning visas inte (borttagen sedan 2026-11-11; äldre rapporter har kvar felen).
+const errors = withoutShortWarnings(report.errors);
 ---
 
 <div class="afternoon">
@@ -30,11 +33,11 @@ const { report, results } = Astro.props;
   }
 
   {
-    report.errors.length > 0 && (
+    errors.length > 0 && (
       <details class="errors">
-        <summary>Fel vid hämtningen ({report.errors.length})</summary>
+        <summary>Fel vid hämtningen ({errors.length})</summary>
         <ul>
-          {report.errors.map((e) => (
+          {errors.map((e) => (
             <li>{e}</li>
           ))}
         </ul>

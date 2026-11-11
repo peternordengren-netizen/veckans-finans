@@ -33,8 +33,8 @@ Sammanfattningen har tre avsnitt:
   riktning `positiv`, `negativ` eller `blandad` och en kort motivering. Det är din tolkning, inte Handelsbankens, och
   märks så. Ta bara med bolag där kopplingen till rapporten är tydlig.
 - c) **Vad vår data visar** (`our_data`): en rad per bolag i b) (fler får tas med). `note` beskriver kort vad sidans
-  värden visar för bolaget (kurs mot index senaste veckan och i år, blankningsändring, insyn, P/E-förändring i år,
-  kommande rapport) och pekar ut om rapportens bild och marknadens rörelse går isär (`diverges`: true/false).
+  värden visar för bolaget (kurs mot index senaste veckan och i år, insyn, P/E-förändring i år, kommande rapport;
+  blankning ingår inte) och pekar ut om rapportens bild och marknadens rörelse går isär (`diverges`: true/false).
   Regeln för `diverges` (kontrolleras): riktningen i b) är `positiv` men kursen ligger minst 5 procentenheter under
   index i år (`ytd_rel_index_pp` ≤ −5) eller minst 3 under senaste veckan (`week_rel_index_pp` ≤ −3), eller
   `negativ` och lika mycket över index. `blandad` och bolag som inte står i b) är false. Går den isär ska note säga

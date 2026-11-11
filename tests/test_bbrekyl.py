@@ -188,7 +188,7 @@ def test_swing_bygger_och_validerar_strategin():
     prev_day = bars[-7].day
     rep = {"ALFA": {"published": datetime.combine(prev_day, datetime.min.time(), TZ).replace(hour=18).isoformat(),
                     "verdict": "över"}}
-    data = swing.build(today, datetime.now(TZ), inst, {"ALFA.ST": bars}, rep, (None, {}))
+    data = swing.build(today, datetime.now(TZ), inst, {"ALFA.ST": bars}, rep)
     a = data["companies"][0]
     bb = a["bbrekyl"]
     assert bb["levels"] is not None, bb["state"]

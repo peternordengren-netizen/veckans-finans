@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { dateRange, direction, pct, relativeToIndex, shortChange, shortDate, shortRange } from "../src/lib/format.ts";
+import { dateRange, direction, pct, relativeToIndex, shortChange, shortDate, shortRange, withoutShortWarnings } from "../src/lib/format.ts";
 
 test("ny innehavare får bara pilen, inte 'ökad'", () => {
   const c = shortChange(0, 1.05, 1.05, { threshold: 0.5, newHolder: true });
@@ -77,4 +77,9 @@ test("ingen text innehåller pe eller procentenheter", () => {
   const texts = [relativeToIndex(-1.2), relativeToIndex(0.3), shortRange(1, 2, 1, { threshold: 0.5 }),
     shortRange(0, 0.7, 0.7, { threshold: 0.5, newHolder: true })];
   for (const t of texts) assert.doesNotMatch(t, /\bpe\b|procentenhet/);
+});
+
+test("fellistan utan varningar om blankning", () => {
+  const errors = ["blankning: Blankningsregistret saknas", "FI blankning: 404", "FI insyn: timeout", "kurser saknas för 2099-11-10"];
+  assert.deepEqual(withoutShortWarnings(errors), ["FI insyn: timeout", "kurser saknas för 2099-11-10"]);
 });

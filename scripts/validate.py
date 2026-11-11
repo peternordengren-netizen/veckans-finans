@@ -823,8 +823,9 @@ def validate_prices(data: dict, expected_week: str | None) -> Result:
 
 
 def validate_analysis(data: dict, expected_week: str | None) -> Result:
-    """Blanknings- och insynsanalysen (scripts/registers.py): schema plus att siffrorna
-    hänger ihop, så att en handredigerad eller trasig fil inte visas."""
+    """Insynsanalysen (scripts/registers.py): schema plus att siffrorna hänger ihop, så att en handredigerad
+    eller trasig fil inte visas. Blankningen (short_positions, short_aggregate) finns bara i äldre filer
+    (till 2026-11-11) och kontrolleras där den finns."""
     res = Result()
     res.errors += _schema_errors(_schema_validator("analysis.schema.json"), data)
     if res.errors:
@@ -836,7 +837,7 @@ def validate_analysis(data: dict, expected_week: str | None) -> Result:
     if data["period"] != {"start": start.isoformat(), "end": end.isoformat()}:
         res.errors.append(f"period ska vara {start}–{end} för {week}")
 
-    for block in ("short_positions", "short_aggregate"):
+    for block in [k for k in ("short_positions", "short_aggregate") if k in data]:
         b = data[block]
         if not b["available"] and (b["changes"] or not b["note"]):
             res.errors.append(f"{block}: ej tillgänglig ska ha en förklaring och inga förändringar")
@@ -1438,7 +1439,8 @@ def validate_morning(data: dict, instruments: dict[str, Instrument]) -> Result:
         known(c["ticker"], c["name"], "insider")
         if c["net_value_sek"] != c["buy_value_sek"] - c["sell_value_sek"]:
             res.errors.append(f"insider: {c['name']}: netto ≠ köp − sälj")
-    for key in ("positions", "aggregate"):
+    # Blankning finns bara i äldre morgonrapporter (till 2026-11-11).
+    for key in ("positions", "aggregate") if "short" in data else ():
         for c in data["short"][key]:
             known(c["ticker"], c["name"], f"short.{key}")
             if abs(c["end_pct"] - c["start_pct"] - c["change_pp"]) > 0.011:

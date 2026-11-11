@@ -47,7 +47,6 @@ const columns = [
   { key: "atr", label: "ATR(14)", type: "num", nopb: true, title: "Genomsnittlig daglig rörelse, i procent av kursen" },
   { key: "volume", label: "Omsättning", type: "num", nopb: true, title: "Senaste dagen mot snittet för de 20 dagarna före" },
   { key: "report", label: "Sedan rapport", type: "num", nopb: true },
-  { key: "short", label: "Blankning", type: "num", nopb: true, title: "Sammanlagd blankning enligt Finansinspektionen" },
   { key: "support", label: "Närmaste stöd", type: "num", title: "Närmaste stöd under gårdagens stängning och avståndet dit" },
   { key: "resistance", label: "Närmaste motstånd", type: "num", title: "Närmaste motstånd över gårdagens stängning och avståndet dit" },
   // Strategin Pullback i trend: visas bara när strategin är vald i rullistan.
@@ -115,9 +114,6 @@ const rankHist = pbHist?.ranking ?? null;
       <li>
         <strong>Efter rapport:</strong> rapport inom {t.report_days} handelsdagar (reaktionsdagen räknas som dag 0), med
         utfallet mot förväntan för vinst per aktie där det finns.
-      </li>
-      <li>
-        <strong>Blankning:</strong> sammanlagd blankning enligt Finansinspektionens register{swing.shortAsOf ? ` ${shortDate(swing.shortAsOf)}` : ""}.
       </li>
     </ul>
     {
@@ -447,7 +443,6 @@ const rankHist = pbHist?.ranking ?? null;
                 <td class="num col-nopb" data-v={v(r.atr_pct)}>{r.atr_pct === null ? "–" : `${num(r.atr_pct)} %`}</td>
                 <td class="num col-nopb" data-v={v(r.volume_ratio)}>{r.volume_ratio === null ? "–" : `${num(r.volume_ratio)}×`}</td>
                 <td class="num report col-nopb" data-v={v(r.days_since_report)}>{reportText(r.days_since_report, r.report_verdict)}</td>
-                <td class="num col-nopb" data-v={v(r.short_pct)}>{r.short_pct === null ? "–" : `${num(r.short_pct, 2)} %`}</td>
                 {(["support", "resistance"] as const).map((side) => {
                   const l = r.sr?.[side] ?? null;
                   const inside = srInsideText(l, side);
