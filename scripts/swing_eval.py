@@ -21,9 +21,11 @@ uppmaning och säger inget säkert om hur det går nästa gång.
    nedtrend: under båda, annars blandad) och svängningar (lugna under VOL_CALM_MAX % volatilitet, annars stora).
    Marknadstecken (larm): andelen över 50 MA ändrad mer än BREADTH_ALERT_PP procentenheter på en vecka (5
    handelsdagar), en sektors omsättning minst SECTOR_VOLUME_ALERT gånger snittet, ett nytt läge mot dagen före, och
-   "Sektor i rörelse" (sector_moves): minst SECTOR_MOVE_MIN (3) bolag i sektorn minst SECTOR_MOVE_PP (3) procentenheter
-   bättre än index samma dag, eller sektorns relativa styrka de senaste 5 dagarna (snittet av bolagens utveckling mot
-   index) vände från negativ dagen före till positiv; med bolagen.
+   "Sektor i rörelse" (sector_moves): minst SECTOR_MOVE_SHARE (25 %) av sektorns bolag, och minst SECTOR_MOVE_MIN (3),
+   gick minst SECTOR_MOVE_PP (3) procentenheter bättre än index samma dag, eller sektorns relativa styrka de senaste 5
+   dagarna (snittet av bolagens utveckling mot index) vände från negativ dagen före till minst SECTOR_TURN_MIN_PP (1)
+   procentenhet över index; högst SECTOR_MOVE_TOP (2) sektorer, de med störst snittrörelse mot index samma dag; med
+   bolagen.
    "Kortsiktigt översåld i upptrend" (oversold): bolag i listan med RSI(2) under OVERSOLD_RSI2 (10, swingfilens rsi2)
    och kurs över 200 dagars MA, med marknadsläget och de lägen mönstret prövats i hittills.
 2. Uppföljning efter 1–5 handelsdagar (HORIZONS) med samma hämtning som morgonens swingfil: rörelse
@@ -95,9 +97,11 @@ SIMILAR_DAYS, SIMILAR_MIN, SIMILAR_JACCARD = 28, 3, 0.6
 BREADTH_ALERT_PP = 10.0
 SECTOR_VOLUME_ALERT = 2.0
 VOL_CALM_MAX = 20.0
-SECTOR_MOVE_MIN, SECTOR_MOVE_PP = 3, 3.0
+SECTOR_MOVE_MIN, SECTOR_MOVE_PP, SECTOR_MOVE_SHARE = 3, 3.0, 0.25
+SECTOR_TURN_MIN_PP = 1.0  # vändningen räknas bara när 5-dagarsstyrkan dessutom är minst så här över index
+SECTOR_MOVE_TOP = 2  # högst så många sektorer (de med störst rörelse mot index samma dag)
 OVERSOLD_RSI2 = 10.0
-MARKET_VERSION = 2  # 2: sektor i rörelse (äldre marknadslägen räknas om när kurserna finns)
+MARKET_VERSION = 3  # 2: sektor i rörelse; 3: skärpt (25 %, vändning minst 1 pe, högst två sektorer)
 MARKET_DAYS = 252  # 52 veckor
 # Fönstren för mönstren: (nyckel, text, kalenderdagar bakåt från den senaste signaldagen; None = hela perioden).
 WINDOWS = (("2v", "Senaste 2 veckorna", 14), ("6v", "Senaste 6 veckorna", 42), ("lage", "Samma marknadsläge", None),
@@ -363,13 +367,18 @@ def market_state(bars: dict, sector_of: dict[str, str | None], d: date, sectors:
     moves = []
     for x in secs:
         g = by_sector[x["sector"]]
+        n_sec = len(g["day"])
         up = sorted((m for m in g["day"] if m[1] >= SECTOR_MOVE_PP), key=lambda m: -m[1])
-        turned = x["rs5_prev_pp"] < 0 < x["rs5_pp"]
-        if len(up) >= SECTOR_MOVE_MIN or turned:
-            shown = up if len(up) >= SECTOR_MOVE_MIN else sorted(g["day"], key=lambda m: -m[1])[:3]
-            moves.append({"sector": x["sector"], "name": x["name"], "day_up": len(up) >= SECTOR_MOVE_MIN,
-                          "turned": turned, "rs5_pp": x["rs5_pp"], "rs5_prev_pp": x["rs5_prev_pp"],
+        day_up = len(up) >= max(SECTOR_MOVE_MIN, math.ceil(SECTOR_MOVE_SHARE * n_sec))
+        turned = x["rs5_prev_pp"] < 0 and x["rs5_pp"] >= SECTOR_TURN_MIN_PP
+        if day_up or turned:
+            shown = up[:5] if day_up else sorted(g["day"], key=lambda m: -m[1])[:3]
+            moves.append({"sector": x["sector"], "name": x["name"], "day_up": day_up, "turned": turned,
+                          "up_count": len(up), "sector_companies": n_sec,
+                          "day_pp": round(sum(m[1] for m in g["day"]) / n_sec, 2),
+                          "rs5_pp": x["rs5_pp"], "rs5_prev_pp": x["rs5_prev_pp"],
                           "companies": [{"name": n, "vs_index_pp": v} for n, v in shown]})
+    moves = sorted(moves, key=lambda m: -m["day_pp"])[:SECTOR_MOVE_TOP]
     change = round(br - br_prev, 1) if br is not None and br_prev is not None else None
     one = lambda x: f"{x:.1f}".replace(".", ",").replace("-", "−")  # noqa: E731
     signs = []
@@ -384,7 +393,8 @@ def market_state(bars: dict, sector_of: dict[str, str | None], d: date, sectors:
                         for c_ in mv["companies"])
         why = []
         if mv["day_up"]:
-            why.append(f"{len(mv['companies'])} bolag minst {one(SECTOR_MOVE_PP)} procentenheter bättre än index")
+            why.append(f"{mv['up_count']} av {mv['sector_companies']} bolag minst {one(SECTOR_MOVE_PP)} procentenheter "
+                       "bättre än index")
         if mv["turned"]:
             why.append(f"relativ styrka 5 dagar vände från {one(mv['rs5_prev_pp'])} till +{one(mv['rs5_pp'])} "
                        "procentenheter")
@@ -691,6 +701,8 @@ def summary(snaps: list[dict], now: datetime) -> dict:
                        "similar_days": SIMILAR_DAYS, "similar_min": SIMILAR_MIN, "similar_jaccard": SIMILAR_JACCARD,
                        "breadth_alert_pp": BREADTH_ALERT_PP, "sector_volume_alert": SECTOR_VOLUME_ALERT,
                        "sector_move_min": SECTOR_MOVE_MIN, "sector_move_pp": SECTOR_MOVE_PP,
+                       "sector_move_share": SECTOR_MOVE_SHARE, "sector_turn_min_pp": SECTOR_TURN_MIN_PP,
+                       "sector_move_top": SECTOR_MOVE_TOP,
                        "oversold_rsi2": OVERSOLD_RSI2,
                        "vol_calm_max": VOL_CALM_MAX, **FEATURE_THRESHOLDS},
         "feature_texts": texts,

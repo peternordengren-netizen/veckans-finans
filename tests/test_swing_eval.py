@@ -338,7 +338,7 @@ def test_sektor_i_rorelse_och_vandning():
     assert [x["sector"] for x in mv] == ["fastigheter"] and mv[0]["day_up"] and mv[0]["turned"]  # −1 → +4 pe på 5 dagar
     assert [c["name"] for c in mv[0]["companies"]] == ["Fastaverken", "Fastbolaget", "Fastgruppen"]
     sign = next(x for x in m["signs"] if x["kind"] == "sektor")
-    assert sign["text"].startswith("Sektor i rörelse, Fastigheter: 3 bolag minst 3,0 procentenheter bättre än index")
+    assert sign["text"].startswith("Sektor i rörelse, Fastigheter: 3 av 3 bolag minst 3,0 procentenheter bättre än index")
     assert "Fastaverken +5,0" in sign["text"] and m["version"] == se.MARKET_VERSION
     two = {INDEX_TICKER: bars[INDEX_TICKER], "F0.ST": bars["F0.ST"], "F1.ST": mk(flat), "F2.ST": mk([100.0] * n)}
     m2 = se.market_state(two, sector_of, end, {}, names)
@@ -368,3 +368,30 @@ def test_kortsiktigt_oversald_i_upptrend():
     n_ = se.alerts_notice(summ, "2026-11-11")
     assert ("Kortsiktigt översåld i upptrend: Alfaverken (läge nu: upptrend, lugna svängningar; mönstret prövat "
             "hittills i: upptrend, lugna svängningar).") in n_["notice"]
+
+
+
+def test_sektor_i_rorelse_skarpt():
+    """25 % av sektorn (och minst tre), vändning bara med minst 1 pe, högst två sektorer (störst rörelse samma dag)."""
+    end = date(2026, 11, 10)
+    n = 210
+    days, d = [], end
+    while len(days) < n:
+        if d.weekday() < 5:
+            days.append(d)
+        d -= timedelta(days=1)
+    days.sort()
+    mk = lambda last: [Bar(dd, 100.0, 100.0, 100.0, 100.0, 1000.0, 100.0) for dd in days[:-1]] +         [Bar(days[-1], last, last, last, last, 1000.0, last)]  # noqa: E731
+    bars, sector_of = {INDEX_TICKER: [Bar(dd, 1000.0, 1000.0, 1000.0, 1000.0, 1.0, 1000.0) for dd in days]}, {}
+    # Industri: 3 av 14 upp 4 % (21 %, under 25 %): inget larm. Fastigheter, Hälsovård, Teknik: 3 av 4 upp 4 %;
+    # Teknik har dessutom ett fjärde bolag upp 8 % och rör sig mest.
+    for sec, lasts in [("industri", [104.0] * 3 + [100.0] * 11), ("fastigheter", [104.0] * 3 + [100.0]),
+                       ("halsovard", [104.0] * 3 + [100.0]), ("teknik", [104.0] * 3 + [108.0])]:
+        for k, last in enumerate(lasts):
+            bars[f"{sec}{k}.ST"] = mk(last)
+            sector_of[f"{sec}{k}.ST"] = sec
+    m = se.market_state(bars, sector_of, end, {})
+    mv = m["sector_moves"]
+    assert len(mv) == 2 and mv[0]["sector"] == "teknik" and mv[0]["up_count"] == 4 and mv[0]["sector_companies"] == 4
+    assert "industri" not in [x["sector"] for x in mv]
+    assert all(not x["turned"] for x in mv)  # 5-dagarsstyrkan var 0 dagen före, inte negativ

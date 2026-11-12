@@ -821,9 +821,10 @@ och 60 handelsdagar från signaldagens stängning. Dagens bevakningslista använ
      lyckades.
    - *Marknadstecken*: andelen bolag över 50 MA ändrad mer än 10 procentenheter på en vecka, en sektors omsättning
      minst 2× snittet, eller ett nytt marknadsläge mot dagen före.
-   - *Sektor i rörelse* (bland marknadstecknen): minst tre bolag i samma sektor minst 3 procentenheter bättre än
-     index samma dag, eller sektorns relativa styrka de senaste 5 dagarna (snittet av bolagens utveckling mot index)
-     vänder från negativ dagen före till positiv; med bolagen.
+   - *Sektor i rörelse* (bland marknadstecknen): minst 25 % av sektorns bolag, och minst tre, minst 3
+     procentenheter bättre än index samma dag, eller sektorns relativa styrka de senaste 5 dagarna (snittet av
+     bolagens utveckling mot index) vänder från negativ dagen före till minst 1 procentenhet över index. Högst de två
+     sektorer som rörde sig mest mot index samma dag, med bolagen.
    - *Kortsiktigt översåld i upptrend*: bolag i listan med RSI(2) under 10 och kursen över 200 dagars MA, med
      marknadsläget nu och de lägen där RSI(2) under 10 hittills prövats i underlaget (andel lyckade uppgångar).
 8. **Måndagar** (veckans första handelsdag): `run_swing_note.ps1` (från `run_morning.ps1`) låter Claude
