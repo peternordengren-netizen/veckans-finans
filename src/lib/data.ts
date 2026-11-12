@@ -890,8 +890,15 @@ export interface SwingEvalMarket {
   trend: string; volatility: string; regime: string; regime_text: string; prev_regime: string;
   breadth: { above_ma50_pct: number | null; week_ago_pct: number | null; change_pp: number | null; companies: number };
   new_highs: number; new_lows: number;
-  sectors: { sector: string; name: string; companies: number; rs20_pp: number; volume_ratio: number | null }[];
+  sectors: { sector: string; name: string; companies: number; rs20_pp: number; volume_ratio: number | null;
+    rs5_pp?: number; rs5_prev_pp?: number }[];
+  /** Sektor i rörelse (saknas i äldre marknadslägen). */
+  sector_moves?: SwingEvalSectorMove[];
   signs: { kind: string; text: string }[];
+}
+export interface SwingEvalSectorMove {
+  sector: string; name: string; day_up: boolean; turned: boolean; rs5_pp: number; rs5_prev_pp: number;
+  companies: { name: string; vs_index_pp: number }[];
 }
 export interface SwingEvalRate { cases: number; successes: number; share: number | null; ci: [number, number] | null }
 export interface SwingEvalPatterns { horizon: number; cases: number; top_n: number; weeks: string[]; features: SwingEvalPattern[] }
@@ -901,9 +908,12 @@ export interface SwingEval {
   generated_at: string;
   period: { start: string | null; end: string | null };
   snapshots: number; entries: number;
+  /** Signaldagar med full femdagarsuppföljning och antal uppgångar (ett fall per uppgång) som mönstren bygger på. */
+  full_days: string[]; episodes: number;
   thresholds: { top_share: number; top_n: number; hold_weeks: number; min_feature_cases: number; horizons: number[];
     success_pp: number; success_days: number; similar_days: number; similar_min: number;
     similar_jaccard: number; breadth_alert_pp: number; sector_volume_alert: number; vol_calm_max: number;
+    sector_move_min: number; sector_move_pp: number; oversold_rsi2: number;
     volume_high: number; volume_low: number; rsi_high: number; rsi_low: number; stoch_high: number; stoch_low: number;
     support_r: number; resistance_r: number };
   feature_texts: Record<string, string>;
@@ -916,7 +926,7 @@ export interface SwingEval {
   patterns: Record<string, { text: string; regime: string | null; days: string[] } & Record<string, SwingEvalPatterns>>;
   /** Lyckade fall, nyast först. */
   successes: (SwingEvalCase & { day: string; max_vs_index_pp: number | null; max_high_r: number | null;
-    follow: Record<string, SwingEvalFollow> })[];
+    episode_days: string[]; success_day: string | null; follow: Record<string, SwingEvalFollow> })[];
   success_recent: { since: string; all: SwingEvalRate; by_regime: Record<string, SwingEvalRate>;
     by_strategy: Record<string, SwingEvalRate> };
   /** Alla avgjorda fall: [signaldag, strategier, starka signaler, sektor, läge, "lyckad" | "ej"]. */
@@ -924,7 +934,10 @@ export interface SwingEval {
   alerts: { swing_date: string | null; day: string | null;
     similar: { ticker: string; name: string; strategies: string[]; matches: number; similar_cases: number;
       similar_successes: number; examples: string[] }[];
-    market: { kind: string; text: string }[] };
+    market: { kind: string; text: string }[];
+    sector_moves: SwingEvalSectorMove[];
+    oversold: { companies: { ticker: string; name: string; sector: string | null; rsi2: number; vs_ma200_pct: number }[];
+      regime: string | null; regime_text: string | null; tried: Record<string, SwingEvalRate> } };
   note: string;
   /** Claudes senaste veckotext (data/raw/swing_eval/notes/<vecka>.json), märkt som tolkning. */
   weekly?: { week: string; label: string; text: string } | null;
@@ -937,7 +950,7 @@ export function loadSwingEval(): SwingEval | null {
   if (IS_MOCK || !existsSync(path)) return null;
   try {
     const out = readJson<SwingEval>(path);
-    if ((out.schema_version ?? 1) < 3) return null; // äldre format: byggs om vid nästa morgonkörning
+    if ((out.schema_version ?? 1) < 4) return null; // äldre format: byggs om vid nästa morgonkörning
     const notes = join(dir, "notes");
     const latest = existsSync(notes)
       ? readdirSync(notes).filter((f) => /^\d{4}-W\d{2}\.json$/.test(f)).sort().pop()

@@ -92,12 +92,35 @@ const LIB_MAX = 300;
           </p>
         </details>
         {
-          (ev.alerts.market.length > 0 || ev.alerts.similar.length > 0) && (
+          (ev.alerts.market.length > 0 || ev.alerts.similar.length > 0 || ev.alerts.oversold.companies.length > 0) && (
             <div class="alerts">
               {ev.alerts.market.length > 0 && (
                 <>
                   <p class="alerts-head"><strong>Marknadstecken</strong> (också i notisen 09:20 och 13:20)</p>
                   <ul>{ev.alerts.market.map((a) => <li>{a.text}.</li>)}</ul>
+                </>
+              )}
+              {ev.alerts.oversold.companies.length > 0 && (
+                <>
+                  <p class="alerts-head">
+                    <strong>Kortsiktigt översåld i upptrend</strong>: RSI(2) under {num(th.oversold_rsi2)} och kursen över
+                    200 dagars MA. Marknadsläget nu: {(ev.alerts.oversold.regime_text ?? "–").toLowerCase()}.
+                  </p>
+                  <ul>
+                    {ev.alerts.oversold.companies.map((c) => (
+                      <li>
+                        <strong>{c.name}</strong>: RSI(2) {num(c.rsi2)}, {signedPct(c.vs_ma200_pct)} mot 200 dagars MA
+                        {c.sector && ` (${evalName(`sektor:${c.sector}`, texts)})`}
+                      </li>
+                    ))}
+                  </ul>
+                  <p class="note">
+                    {Object.keys(ev.alerts.oversold.tried).length === 0
+                      ? "Mönstret RSI(2) under 10 har inte prövats i underlaget än."
+                      : `Mönstret RSI(2) under 10 har hittills bara prövats i ${Object.entries(ev.alerts.oversold.tried)
+                          .map(([k, r]) => `${regimeName(k).toLowerCase()} (${r.successes} av ${r.cases} uppgångar lyckades, kandidater och starka signaler)`)
+                          .join("; ")}. Det säger inget om andra marknadslägen.`}
+                  </p>
                 </>
               )}
               {ev.alerts.similar.length > 0 && (
@@ -188,8 +211,10 @@ const LIB_MAX = 300;
     <p class="note">
       Kännetecken bland de {topPct} % med störst rörelse mot index (de bästa) jämfört med övriga, för kännetecken med minst
       {" "}{th.min_feature_cases} fall, med antal och 95 % konfidensintervall (Wilson): spannet som andelen med stor
-      sannolikhet ligger inom givet antalet fall. Senaste veckorna och dagar med samma marknadsläge som nu visas först;
-      hela perioden ({ev.entries} sparade fall, {day(ev.period.start)} – {day(ev.period.end)}) är bakgrund. Ett mönster har
+      sannolikhet ligger inom givet antalet fall. Bara signaldagar med full femdagarsuppföljning ({ev.full_days.length}
+      {" "}dagar) och ett fall per uppgång: samma bolag inom 5 handelsdagar räknas en gång, med den första dagens
+      kännetecken ({ev.episodes} uppgångar av {ev.entries} sparade fall). Senaste veckorna och dagar med samma
+      marknadsläge som nu visas först; hela perioden ({day(ev.period.start)} – {day(ev.period.end)}) är bakgrund. Ett mönster har
       hållit en vecka när andelen bland de {topPct} % var högre än bland övriga i veckans fall; ✓ efter {th.hold_weeks}{" "}
       veckor i rad. {ev.note}
     </p>
@@ -275,11 +300,13 @@ const LIB_MAX = 300;
     <p class="note">
       Fall som vid någon stängning inom {th.success_days} handelsdagar låg minst {num(th.success_pp)} procentenheter
       över index, oavsett R, med kännetecken och marknadsläge. Högsta high i strategins R visas som information men
-      avgör inte. Alla fall sparas, så andelen lyckade kan jämföras med alla avgjorda fall (femte dagen uppföljd eller
-      redan lyckade). Det säger inget om hur det går nästa gång.
+      avgör inte. Ett fall per uppgång: samma bolag inom 5 handelsdagar från första signaldagen räknas en gång, med den
+      första dagens kännetecken, och uppgången är lyckad om någon av dagarna blev det. Bara signaldagar med full
+      femdagarsuppföljning, så att lyckade och övriga avgörs på samma villkor. Alla uppgångar sparas, så andelen
+      lyckade kan jämföras med alla. Det säger inget om hur det går nästa gång.
     </p>
     <p class="rates">
-      Senaste {Math.round(th.similar_days / 7)} veckorna: {rate(ev.success_recent.all)} lyckades.
+      Senaste {Math.round(th.similar_days / 7)} veckorna: {rate(ev.success_recent.all)} av uppgångarna lyckades.
       {STRATS.filter((k) => ev.success_recent.by_strategy[k]?.cases).map((k) => (
         <span class="sub">{strategyName(k)}: {rate(ev.success_recent.by_strategy[k])}</span>
       ))}
@@ -317,7 +344,7 @@ const LIB_MAX = 300;
       <table class="hist">
         <thead>
           <tr>
-            <th scope="col">Signaldag</th>
+            <th scope="col">Signaldagar</th>
             <th scope="col">Bolag</th>
             <th scope="col" class="num">Högst mot index</th>
             <th scope="col" class="num">Mot index 5 d</th>
@@ -333,7 +360,10 @@ const LIB_MAX = 300;
             return (
               <tr data-lib-row data-strategies={c.strategies.join(" ")} data-strong={c.strong ? "1" : "0"}
                 data-sector={c.sector ?? ""} data-regime={c.regime ?? ""}>
-                <td>{day(c.day)}</td>
+                <td>
+                  {day(c.day)}
+                  {c.episode_days.length > 1 && <span class="sub">+ {c.episode_days.slice(1).map((d) => shortDate(d)).join(", ")}</span>}
+                </td>
                 <th scope="row"><span class="name">{c.name}</span> <span class="ticker">{c.ticker}</span></th>
                 <td class="num">{ppText(c.max_vs_index_pp)}</td>
                 <td class="num">{last && last === c.follow[String(th.success_days)] ? ppText(last.vs_index_pp) : "–"}</td>

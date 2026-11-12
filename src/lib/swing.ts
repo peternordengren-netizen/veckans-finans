@@ -365,7 +365,7 @@ export function caseMatches(c: { strategies: string[]; strong: boolean; sector: 
   return f.regime === "" || c.regime === f.regime;
 }
 
-/** Lyckade och avgjorda fall för ett filter, ur utvärderingens cases_index. */
+/** Lyckade och avgjorda uppgångar för ett filter, ur utvärderingens cases_index. */
 export function successCount(index: readonly [string, string[], boolean, string | null, string | null, string][],
   f: CaseFilter): { successes: number; cases: number } {
   let successes = 0;

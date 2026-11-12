@@ -802,6 +802,10 @@ och 60 handelsdagar från signaldagens stängning. Dagens bevakningslista använ
 3. **Uppföljning** efter 1–5 handelsdagar: rörelse (justerad stängning), rörelse mot index i procentenheter, högsta
    high i R från signaldagens stängning och snittomsättningen mot de 20 dagarna före signaldagen.
 4. **Gårdagens bästa rörelser**: topp 10 mot index efter 1 dag, med kännetecken.
+   **Underlaget för mönster och lyckade fall** (sedan 2026-11-12): bara signaldagar med full femdagarsuppföljning
+   (annars avgörs lyckade fall tidigare än övriga), och ett fall per uppgång: samma bolag på signaldagar inom 5
+   handelsdagar från uppgångens första signaldag räknas en gång, med den första dagens kännetecken; uppgången är
+   lyckad om någon av dagarna blev det.
 5. **Mönster**: för varje kännetecken med minst 10 fall, andelen bland de 20 % med störst rörelse mot index jämfört
    med övriga, efter 3 och 5 dagar, med antal och 95 % konfidensintervall (Wilson). Först de senaste 2 och 6 veckorna
    och dagar med samma läge som nu; hela perioden som bakgrund (väljs i rullistan). ✓ när mönstret hållit 4 veckor i
@@ -817,6 +821,11 @@ och 60 handelsdagar från signaldagens stängning. Dagens bevakningslista använ
      lyckades.
    - *Marknadstecken*: andelen bolag över 50 MA ändrad mer än 10 procentenheter på en vecka, en sektors omsättning
      minst 2× snittet, eller ett nytt marknadsläge mot dagen före.
+   - *Sektor i rörelse* (bland marknadstecknen): minst tre bolag i samma sektor minst 3 procentenheter bättre än
+     index samma dag, eller sektorns relativa styrka de senaste 5 dagarna (snittet av bolagens utveckling mot index)
+     vänder från negativ dagen före till positiv; med bolagen.
+   - *Kortsiktigt översåld i upptrend*: bolag i listan med RSI(2) under 10 och kursen över 200 dagars MA, med
+     marknadsläget nu och de lägen där RSI(2) under 10 hittills prövats i underlaget (andel lyckade uppgångar).
 8. **Måndagar** (veckans första handelsdag): `run_swing_note.ps1` (från `run_morning.ps1`) låter Claude
    (`/swing-utvardering`, Sonnet, läget dontAsk, skriver bara i `data/swing_eval/`) skriva 5–8 meningar märkta
    "Claudes tolkning" om marknadsläget, vilka lägen och fall som lyckats de senaste veckorna och vad som ändrats.

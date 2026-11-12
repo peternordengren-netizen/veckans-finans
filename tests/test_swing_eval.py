@@ -292,3 +292,79 @@ def test_fonster_for_monster():
     assert len(se._window_rows(rows_, "6v", 42, "2026-11-10", None)) == 3
     assert [r["day"] for r in se._window_rows(rows_, "lage", None, "2026-11-10", "ned-orolig")] == ["2026-10-01"]
     assert len(se._window_rows(rows_, "alla", None, "2026-11-10", None)) == 3
+
+
+def test_ett_fall_per_uppgang_och_bara_fulla_dagar():
+    feats = ["strategi:pullback"]
+    a1 = case("Alfaverken", "2026-11-02", feats, False)
+    a2 = case("Alfaverken", "2026-11-03", feats, True)  # samma uppgång (inom 5 handelsdagar)
+    a3 = case("Alfaverken", "2026-11-12", feats, False)  # ny uppgång
+    b1 = case("Betabolaget", "2026-11-02", feats, False)
+    rows_ = [{**a1, "day": "2026-11-02"}, {**a2, "day": "2026-11-03"}, {**a3, "day": "2026-11-12"},
+             {**b1, "day": "2026-11-02"}]
+    eps = se.episodes(rows_)
+    alfa = [e for e in eps if e["name"] == "Alfaverken"]
+    assert len(alfa) == 2 and alfa[0]["episode_days"] == ["2026-11-02", "2026-11-03"]
+    assert alfa[0]["status"] == "lyckad" and alfa[0]["success_day"] == "2026-11-03" and alfa[1]["status"] == "ej"
+    assert len(eps) == 3
+    # Dagar utan femdagarsuppföljning räknas inte: bara den första bilden är full.
+    snaps = [{"day": "2026-11-02", "entries": [a1, b1]},
+             {"day": "2026-11-11", "entries": [{**case("Gammagruppen", "2026-11-12", feats, True),
+                                                 "follow": {"1": {"vs_index_pp": 6.0, "max_high_r": None, "move_pct": 0,
+                                                                  "day": "2026-11-12", "volume_ratio": 1.0}}}]}]
+    assert se.complete_days(snaps) == {"2026-11-02"}
+    s = se.summary(snaps, NOW)
+    assert s["successes"] == [] and s["episodes"] == 2  # Gammagruppens tidiga 6 pe räknas inte än
+    assert s["full_days"] == ["2026-11-02"]
+
+
+def test_sektor_i_rorelse_och_vandning():
+    end = date(2026, 11, 10)
+    n = 260
+    days, d = [], end
+    while len(days) < n:
+        if d.weekday() < 5:
+            days.append(d)
+        d -= timedelta(days=1)
+    days.sort()
+    mk = lambda cs: [Bar(dd, c, c, c, c, 1000.0, c) for dd, c in zip(days, cs)]  # noqa: E731
+    flat = [100.0] * n
+    jump = [100.0] * (n - 2) + [99.0, 104.0]  # −1 % dagen före, +5 % sista dagen; index oförändrat
+    bars = {INDEX_TICKER: mk([1000.0] * n), **{f"F{k}.ST": mk(jump) for k in range(3)}, "G.ST": mk(flat)}
+    sector_of = {"F0.ST": "fastigheter", "F1.ST": "fastigheter", "F2.ST": "fastigheter", "G.ST": "industri"}
+    names = {"F0.ST": "Fastaverken", "F1.ST": "Fastbolaget", "F2.ST": "Fastgruppen", "G.ST": "Gammagruppen"}
+    m = se.market_state(bars, sector_of, end, {"fastigheter": "Fastigheter"}, names)
+    mv = m["sector_moves"]
+    assert [x["sector"] for x in mv] == ["fastigheter"] and mv[0]["day_up"] and mv[0]["turned"]  # −1 → +4 pe på 5 dagar
+    assert [c["name"] for c in mv[0]["companies"]] == ["Fastaverken", "Fastbolaget", "Fastgruppen"]
+    sign = next(x for x in m["signs"] if x["kind"] == "sektor")
+    assert sign["text"].startswith("Sektor i rörelse, Fastigheter: 3 bolag minst 3,0 procentenheter bättre än index")
+    assert "Fastaverken +5,0" in sign["text"] and m["version"] == se.MARKET_VERSION
+    two = {INDEX_TICKER: bars[INDEX_TICKER], "F0.ST": bars["F0.ST"], "F1.ST": mk(flat), "F2.ST": mk([100.0] * n)}
+    m2 = se.market_state(two, sector_of, end, {}, names)
+    assert m2["sector_moves"][0]["day_up"] is False and m2["sector_moves"][0]["turned"]  # bara vändningen
+
+
+def test_kortsiktigt_oversald_i_upptrend():
+    end = date(2026, 11, 10)
+    n = 220
+    days, d = [], end
+    while len(days) < n:
+        if d.weekday() < 5:
+            days.append(d)
+        d -= timedelta(days=1)
+    days.sort()
+    mk = lambda cs: [Bar(dd, c, c, c, c, 1000.0, c) for dd, c in zip(days, cs)]  # noqa: E731
+    bars = {"ALFA.ST": mk([100.0 + j for j in range(n)]), "BETA.ST": mk([300.0 - j for j in range(n)]),
+            INDEX_TICKER: mk([1000.0] * n)}
+    sw = {"as_of": "2026-11-10", "companies": [{"ticker": "ALFA", "name": "Alfaverken", "rsi2": 5.0},
+                                               {"ticker": "BETA", "name": "Betabolaget", "rsi2": 4.0},
+                                               {"ticker": "GAMMA", "name": "Gammagruppen", "rsi2": 50.0}]}
+    out = se.oversold(sw, bars, {"ALFA": "ALFA.ST", "BETA": "BETA.ST"})
+    assert [x["name"] for x in out] == ["Alfaverken"] and out[0]["vs_ma200_pct"] > 0  # Betabolaget under 200 MA
+    summ = {"alerts": {"swing_date": "2026-11-11", "similar": [], "market": [],
+                       "oversold": {"companies": out, "regime": "upp-lugn", "regime_text": "Upptrend, lugna svängningar",
+                                    "tried": {"upp-lugn": {"cases": 21, "successes": 7, "share": 0.33, "ci": None}}}}}
+    n_ = se.alerts_notice(summ, "2026-11-11")
+    assert ("Kortsiktigt översåld i upptrend: Alfaverken (läge nu: upptrend, lugna svängningar; mönstret prövat "
+            "hittills i: upptrend, lugna svängningar).") in n_["notice"]

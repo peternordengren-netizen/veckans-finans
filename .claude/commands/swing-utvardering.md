@@ -19,7 +19,11 @@ Kommandot körs utan att någon tittar på, med behörighetsläget `dontAsk`. Ba
      `breadth.above_ma50_pct` och en vecka tidigare `breadth.week_ago_pct`; `new_highs`/`new_lows`; sektorerna i
      `sectors` med `rs20_pp`; marknadstecknen i `signs`).
    - `market_week_ago`: samma en vecka tidigare, och `market_history` dag för dag.
-   - `success_recent`: andelen lyckade fall senaste 4 veckorna (`all`), per marknadsläge (`by_regime`, nycklarna
+   - `alerts`: dagens larm (`sector_moves`: sektorer i rörelse med bolagen; `oversold`: kortsiktigt översålda bolag i
+     upptrend, med läget och `tried`, de lägen mönstret prövats i).
+   - Mönster och lyckade fall räknar bara dagar med full femdagarsuppföljning (`full_days`) och ett fall per uppgång
+     (`episodes`); skriv "uppgångar" om dem, inte "fall per dag".
+   - `success_recent`: andelen lyckade uppgångar senaste 4 veckorna (`all`), per marknadsläge (`by_regime`, nycklarna
      förklaras i `regime_texts`) och per strategi (`by_strategy`), med `successes` av `cases` och 95 % intervall `ci`.
    - `patterns."2v"`, `"6v"` och `"lage"` (`"3"`/`"5"` dagar): kännetecken bland de 20 % största rörelserna mot index
      jämfört med övriga (`top.share`, `other.share`, `diff_pp`, `cases`).
