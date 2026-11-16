@@ -1042,7 +1042,7 @@ inaktiverad på github.com. Med git-ignorerade veckor skulle den ändå bara byg
 ## Validering
 
 Ett bolag som inte klarar valideringen stoppar aldrig en hel fil: i Bollingerkontrollen, morgonrapporten,
-swingfilen och eftermiddagen tas det bort och sparas i `skipped` med orsaken (`validate.prune_invalid`), och filen
+konsensusfilen, swingfilen och eftermiddagen tas det bort och sparas i `skipped` med orsaken (`validate.prune_invalid`), och filen
 skrivs för övriga (i swingfilen räknas rangordningen om). Bolaget står i loggen, och vid Bollingerkontrollen i notisen.
 Bara fel som inte gäller ett enskilt bolag stoppar filen.
 

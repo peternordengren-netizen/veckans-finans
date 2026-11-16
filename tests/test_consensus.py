@@ -55,6 +55,17 @@ def test_validering_snitt_utanfor_intervall_och_okant_bolag():
     assert any("instruments.csv" in e for e in errors)
 
 
+def test_ett_bolag_med_fel_stoppar_inte_konsensusfilen():
+    """Bolaget med snitt utanför intervallet hoppas över ("skipped"); filen skrivs för övriga (som 2026-11-16)."""
+    from validate import prune_invalid
+
+    data = build(date(2026, 10, 19), NOW, INSTRUMENTS, fake)
+    data["companies"][0]["eps"]["avg"] = 9.9  # ALFA
+    res, skipped = prune_invalid(data, lambda d: validate_consensus(d, INSTRUMENTS), lambda d: [d["companies"]])
+    assert res.errors == [] and [s["ticker"] for s in skipped] == ["ALFA"] and "utanför" in skipped[0]["reason"]
+    assert [c["ticker"] for c in data["companies"]] == ["DELT"] and data["skipped"] == skipped
+
+
 def test_estimate_ur_yfinance_tabell():
     df = pd.DataFrame(
         {"avg": [5.426, 6.3], "low": [5.304, 5.8], "high": [5.68, 6.7], "numberOfAnalysts": [4, 3],

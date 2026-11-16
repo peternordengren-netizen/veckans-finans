@@ -172,7 +172,13 @@ def main(argv: list[str] | None = None, get: Callable[[str], dict] = yahoo_conse
     if not data["companies"]:
         print("Ingen konsensus kunde hämtas – ingen fil skrivs.", file=sys.stderr)
         return 1
-    res = validate_consensus(data, instruments)
+    # Ett bolag som inte klarar valideringen hoppas över ("skipped", med orsaken) i stället för att stoppa filen
+    # (2026-11-16 skrevs ingen konsensusfil alls).
+    from validate import prune_invalid
+
+    res, skipped = prune_invalid(data, lambda d: validate_consensus(d, instruments), lambda d: [d["companies"]])
+    for s in skipped:
+        print(f"Konsensus: {s['name']} hoppas över (klarar inte valideringen): {s['reason']}", file=sys.stderr)
     if res.errors:
         print("Konsensusfilen klarar inte valideringen – skrivs inte:", *res.errors, sep="\n  ", file=sys.stderr)
         return 1

@@ -153,7 +153,7 @@ if ($noNetwork -and $needResults) {
 # 2. Yahoos konsensus, en bild per handelsdag; bolag som redan rapporterat märks och används inte.
 if (-not (Test-Path $Consensus) -and -not $noNetwork) {
     & cmd.exe /c ".venv\Scripts\python.exe scripts\consensus.py --backup 2>&1" |
-        Where-Object { $_ -match '^(Konsensus|Säkerhetskopia|Ingen|Konsensusfilen)' } | ForEach-Object { Log "  $_" }
+        Where-Object { $_ -match '^(Konsensus|Säkerhetskopia|Ingen|Konsensusfilen|\s)' } | ForEach-Object { Log "  $_" }
     Log "consensus.py: exit $LASTEXITCODE"
     $ran = $true
 }
