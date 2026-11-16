@@ -220,3 +220,22 @@ def test_ingen_handelsdag_ger_ingen_fil(tmp_path, monkeypatch, capsys):
     assert morning.main(["--date", "2026-10-18", "--no-fetch"]) == 0
     assert "ingen handelsdag" in capsys.readouterr().out
     assert list(tmp_path.iterdir()) == []
+
+
+def test_ett_bolag_med_fel_stoppar_inte_morgonrapporten():
+    """Ett bolag vars kurssignaler inte stämmer tas bort ur alla listor och sparas i "skipped" med orsaken."""
+    import morning
+
+    def fetch(_tickers, _start, _end):
+        return {"^OMXSPI": _bars(1000.0, [100.0] * 29 + [101.0]), "ALFA.ST": _bars(3000.0, [100.0] * 29 + [110.0]),
+                "BETA.ST": _bars(1000.0, [100.0] * 15 + [120.0] * 14 + [110.0])}
+
+    data = build(MONDAY, NOW, INSTRUMENTS, [], {"events": []}, fetch)
+    data["errors"] = []
+    by = {c["ticker"]: c for c in data["price"]["companies"]}
+    by["ALFA"]["signals"] = ["omsättning"]  # stämmer inte med värdena
+    res = morning.validate_pruned(data, INSTRUMENTS)
+    assert res.errors == []
+    assert [s["ticker"] for s in data["skipped"]] == ["ALFA"] and "signalerna" in data["skipped"][0]["reason"]
+    assert "ALFA" not in [c["ticker"] for c in data["price"]["companies"]]
+    assert validate_morning(data, INSTRUMENTS).errors == []

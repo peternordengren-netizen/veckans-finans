@@ -157,7 +157,13 @@ def main(argv: list[str] | None = None, fetch: BarFetcher = yahoo_bars, now: dat
         return 0
     instruments = load_instruments()
     data = build(today, now, instruments, fetch)
-    res = validate_afternoon(data, today.isoformat(), instruments)
+    # Ett bolag som inte klarar valideringen hoppas över ("skipped", med orsaken) i stället för att stoppa filen.
+    from validate import prune_invalid
+
+    res, skipped = prune_invalid(data, lambda d: validate_afternoon(d, today.isoformat(), instruments),
+                                 lambda d: [d["companies"]])
+    for s in skipped:
+        print(f"Eftermiddag: {s['name']} hoppas över (klarar inte valideringen): {s['reason']}", file=sys.stderr)
     if res.errors:
         print("Eftermiddagsuppdateringen klarar inte valideringen – skrivs inte:", *res.errors, sep="\n  ",
               file=sys.stderr)

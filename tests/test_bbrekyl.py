@@ -255,17 +255,45 @@ def test_omsattning_hittills_mot_normalt():
 
     stamps, vols = [], []
     for d in pd.bdate_range("2026-10-26", "2026-11-09"):  # 11 handelsdagar före i dag
-        for hhmm, v in (("09:00", 100.0), ("09:15", 50.0), ("09:30", 50.0), ("17:15", 300.0)):
+        for hhmm, v in (("09:00", 10000.0), ("09:15", 5000.0), ("09:30", 5000.0), ("17:15", 30000.0)):
             stamps.append(pd.Timestamp(f"{d.date()} {hhmm}", tz="Europe/Stockholm"))
             vols.append(v)
-    for hhmm, v in (("09:00", 200.0), ("09:15", 100.0)):  # i dag t.o.m. 09:15-stapeln
+    for hhmm, v in (("09:00", 20000.0), ("09:15", 10000.0)):  # i dag t.o.m. 09:15-stapeln
         stamps.append(pd.Timestamp(f"2026-11-10 {hhmm}", tz="Europe/Stockholm"))
         vols.append(v)
     cols = pd.MultiIndex.from_tuples([("ALFA.ST", "Volume")])
     df = pd.DataFrame([[v] for v in vols], index=pd.DatetimeIndex(stamps), columns=cols)
     vol = bollinger.volume_vs_normal(df, "ALFA.ST", date(2026, 11, 10))
-    assert vol == {"so_far": 300, "normal": 150, "ratio": 2.0, "until": "09:15", "days": 11}
+    assert vol == {"so_far": 30000, "normal": 15000, "ratio": 2.0, "until": "09:15", "days": 11}
     assert bollinger.volume_vs_normal(df, "BETA.ST", date(2026, 11, 10)) is None
     assert bollinger.volume_vs_normal(df, "ALFA.ST", date(2026, 11, 11)) is None  # inga staplar den dagen
     short = df[df.index >= pd.Timestamp("2026-11-06", tz="Europe/Stockholm")]
     assert bollinger.volume_vs_normal(short, "ALFA.ST", date(2026, 11, 10)) is None  # för få tidigare dagar
+
+
+
+def test_nastan_ingen_omsattning_tidigt_pa_morgonen():
+    """Ett bolag med nästan ingen handel före 09:15 (som K-Fast Holding 2026-11-12): det normala fram till klockslaget
+    är för lågt för en jämförelse, så ingen kvot; valideringen godtar det, och avrundningen av heltalen."""
+    import pandas as pd
+
+    stamps, vols = [], []
+    for k, d in enumerate(pd.bdate_range("2026-10-26", "2026-11-09")):
+        # Oftast ingen handel 09:00, ibland en enstaka post; hela dagen ändå normal handel.
+        for hhmm, v in (("09:00", 7.0 if k % 3 == 0 else 0.0), ("09:15", 0.0), ("17:15", 40000.0)):
+            stamps.append(pd.Timestamp(f"{d.date()} {hhmm}", tz="Europe/Stockholm"))
+            vols.append(v)
+    stamps.append(pd.Timestamp("2026-11-10 09:00", tz="Europe/Stockholm"))
+    vols.append(55.0)
+    cols = pd.MultiIndex.from_tuples([("GAMMA.ST", "Volume")])
+    df = pd.DataFrame([[v] for v in vols], index=pd.DatetimeIndex(stamps), columns=cols)
+    vol = bollinger.volume_vs_normal(df, "GAMMA.ST", date(2026, 11, 10))
+    assert vol["ratio"] is None and vol["too_low"] and vol["so_far"] == 55 and vol["normal"] == 3
+    assert bollinger.volume_errors(vol, "Gammagruppen") == []
+    # VCP: pivoten bruten men omsättningen går inte att jämföra.
+    assert bollinger.vcp_day_status("triggered", vol, 1.5) == "pivot_broken_no_vol"
+    # Avrundningen: so_far och normal är heltal, kvoten räknas på de oavrundade värdena.
+    assert bollinger.volume_errors({"so_far": 1500, "normal": 1001, "ratio": 1.5, "until": "09:15", "days": 20}, "X") == []
+    assert bollinger.volume_errors({"so_far": 1500, "normal": 1000, "ratio": 2.0, "until": "09:15", "days": 20}, "X")
+    assert bollinger.volume_errors({"so_far": 50, "normal": 20, "ratio": 2.5, "until": "09:15", "days": 20}, "X")
+    assert bollinger.volume_errors({"so_far": 50, "normal": 2000, "ratio": None, "until": "09:15", "days": 20}, "X")

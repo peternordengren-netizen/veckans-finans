@@ -6,6 +6,16 @@
   "additionalProperties": false,
   "required": ["date", "generated_at", "scopes", "price_day", "index", "companies", "errors"],
   "properties": {
+    "skipped": {
+      "type": "array",
+      "description": "Bolag som inte klarade valideringen och hoppades över (scripts/validate.prune_invalid), med orsaken; saknas när inget hoppats över.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["ticker", "name", "reason"],
+        "properties": {"ticker": {"type": "string"}, "name": {"type": "string"}, "reason": {"type": "string"}}
+      }
+    },
     "date": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
     "generated_at": { "type": "string" },
     "mock": { "const": true },

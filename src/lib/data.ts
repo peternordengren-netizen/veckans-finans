@@ -269,7 +269,8 @@ export interface PullbackToday {
   /** Kontrollen där dagens high först låg över triggernivån, eller null. */
   trigger_seen_at: string | null;
   /** Dagens omsättning hittills mot normalt vid samma tid (bara Rekyl efter Bollingerutbrott; null utan timdata). */
-  volume?: { so_far: number; normal: number; ratio: number; until: string; days: number } | null;
+  /** ratio null och too_low: för låg normal omsättning fram till klockslaget för en jämförelse. */
+  volume?: { so_far: number; normal: number; ratio: number | null; too_low?: boolean; until: string; days: number } | null;
   checked_at: string;
 }
 /** En pullback-kandidats läge mot Bollingerbanden (scripts/bollinger.py position). */

@@ -706,7 +706,9 @@ Det andra valet under "Strategi" i flikens rullista, på samma dagsdata och med 
 6. **Status i dag** vid Bollingerkontrollerna 09:20 och 13:20 (`bbrekyl` i kontrollfilen), med samma statusar som
    Pullback, och notisen tar med ändringarna. Under statusen står dagens omsättning hittills mot normalt vid samma
    tid: summan av dagens 15-minutersstaplar mot snittet för de 20 senaste handelsdagarna fram till samma klockslag
-   (ett extra batchanrop med strategins kandidater; dagens sista stapel kan vara ofullständig).
+   (ett extra batchanrop med strategins kandidater; dagens sista stapel kan vara ofullständig). Är det normala fram
+   till klockslaget under 1 000 aktier jämförs inte omsättningen, och det står "för låg omsättning för jämförelse"
+   (2026-11-12 föll kontrollen 09:20 på K-Fast Holding, som nästan inte handlats så tidigt).
 7. **Historik:** hur ofta 2R nåddes före stoppet, på samma sätt som för Pullback (`bbrekyl` i `history.json`), och
    för volymvillkoren var för sig (`bbrekyl.rules`).
 
@@ -1038,6 +1040,11 @@ GitHub Pages är avstängt. [`.github/workflows/pages.yml`](.github/workflows/pa
 inaktiverad på github.com. Med git-ignorerade veckor skulle den ändå bara bygga en tom sida.
 
 ## Validering
+
+Ett bolag som inte klarar valideringen stoppar aldrig en hel fil: i Bollingerkontrollen, morgonrapporten,
+swingfilen och eftermiddagen tas det bort och sparas i `skipped` med orsaken (`validate.prune_invalid`), och filen
+skrivs för övriga (i swingfilen räknas rangordningen om). Bolaget står i loggen, och vid Bollingerkontrollen i notisen.
+Bara fel som inte gäller ett enskilt bolag stoppar filen.
 
 ```bash
 python -m venv .venv

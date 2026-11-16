@@ -350,7 +350,7 @@ def main(argv: list[str] | None = None, fetch_bars: BarFetcher = yahoo_bars,
     data["errors"] = errors + calendar_errors(calendar)
     data["retry"] = retry_reasons(data, errors, today)
     add_price_error(data, today)
-    res = validate_morning(data, instruments)
+    res = validate_pruned(data, instruments)
     if res.errors:
         print("Morgonrapporten klarar inte valideringen – skrivs inte:", *res.errors, sep="\n  ", file=sys.stderr)
         return 1
@@ -409,7 +409,7 @@ def refresh_prices(today: date, now: datetime, fetch_bars: BarFetcher = yahoo_ba
     if data["price"]["day"] != previous_business_day(today).isoformat():
         data["retry"].append("kurser")
     add_price_error(data, today)
-    res = validate_morning(data, instruments)
+    res = validate_pruned(data, instruments)
     if res.errors:
         print("Morgonrapporten klarar inte valideringen – skrivs inte:", *res.errors, sep="\n  ", file=sys.stderr)
         return 1
@@ -421,6 +421,22 @@ def refresh_prices(today: date, now: datetime, fetch_bars: BarFetcher = yahoo_ba
           f"{previous_business_day(today)}), kurssignaler {len(data['price']['companies'])} bolag -> {out}")
     write_swing(today, now, instruments, fetch_once)
     return 2 if "kurser" in data["retry"] else 0
+
+
+def validate_pruned(data: dict, instruments: dict[str, Instrument]):
+    """Validerar morgonrapporten; ett bolag som inte klarar valideringen tas bort ur alla listor och sparas i "skipped"
+    med orsaken i stället för att stoppa rapporten (validate.prune_invalid). Bara fel som inte gäller ett enskilt bolag
+    stoppar den."""
+    from validate import prune_invalid
+
+    def lists(d: dict) -> list[list]:
+        out = [d["reports_today"], d["news"], d["insider"]["companies"], d["price"]["companies"]]
+        return out + [d["short"][k] for k in ("positions", "aggregate")] if "short" in d else out
+
+    res, skipped = prune_invalid(data, lambda d: validate_morning(d, instruments), lists)
+    for s in skipped:
+        print(f"Morgonrapport: {s['name']} hoppas över (klarar inte valideringen): {s['reason']}", file=sys.stderr)
+    return res
 
 
 def retry_reasons(data: dict, fetch_errors: list[str], today: date) -> list[str]:

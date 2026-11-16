@@ -344,14 +344,7 @@ def build(today: date, now: datetime, instruments: dict[str, Instrument], bars: 
         })
     companies.sort(key=lambda c: c["name"])
     vcp_strategy(companies, vcp_input)
-    ranked = [{**c["pullback"]["rank"], "name": c["name"], "_c": c} for c in companies if c["pullback"].get("rank")]
-    ranking.rank(ranked)
-    for e in ranked:
-        e["_c"]["pullback"]["rank"]["rank"] = e["rank"]
-    bb_ranked = [{**c["bbrekyl"]["rank"], "name": c["name"], "_c": c} for c in companies if c["bbrekyl"].get("rank")]
-    bbrekyl.rank(bb_ranked)
-    for e in bb_ranked:
-        e["_c"]["bbrekyl"]["rank"]["rank"] = e["rank"]
+    assign_ranks(companies)
     return {
         "schema_version": 1,
         "date": today.isoformat(),
@@ -374,6 +367,26 @@ def build(today: date, now: datetime, instruments: dict[str, Instrument], bars: 
         "missing": sorted(missing, key=lambda m: m["name"]),
         "delisted": delisted,
     }
+
+
+def assign_ranks(companies: list[dict]) -> None:
+    """Rangordningen 1..n i de tre strategierna bland bolagen i listan (används av build, och av write när ett bolag
+    som inte klarade valideringen tagits bort)."""
+    ranked = [{**c["pullback"]["rank"], "name": c["name"], "_c": c} for c in companies
+              if (c.get("pullback") or {}).get("rank")]
+    ranking.rank(ranked)
+    for e in ranked:
+        e["_c"]["pullback"]["rank"]["rank"] = e["rank"]
+    bb_ranked = [{**c["bbrekyl"]["rank"], "name": c["name"], "_c": c} for c in companies
+                 if (c.get("bbrekyl") or {}).get("rank")]
+    bbrekyl.rank(bb_ranked)
+    for e in bb_ranked:
+        e["_c"]["bbrekyl"]["rank"]["rank"] = e["rank"]
+    vc = [{"score": c["vcp"]["rank"]["score"], "rs_pct": c["vcp"]["state"]["rs_pct"], "name": c["name"], "_c": c}
+          for c in companies if (c.get("vcp") or {}).get("rank")]
+    vcp.rank(vc)
+    for e in vc:
+        e["_c"]["vcp"]["rank"]["rank"] = e["rank"]
 
 
 def vcp_strategy(companies: list[dict], vcp_input: dict[str, tuple]) -> None:
@@ -433,8 +446,15 @@ def bb_strategy(b: list[Bar], o: list[float], h: list[float], lo: list[float], c
 
 
 def write(data: dict, instruments: dict[str, Instrument]) -> Path | None:
-    """Validerar och skriver data/swing/<datum>.json; None (med fel på stderr) om valideringen underkänner."""
-    res = validate_swing(data, instruments)
+    """Validerar och skriver data/swing/<datum>.json; None (med fel på stderr) om valideringen underkänner. Ett bolag
+    som inte klarar valideringen hoppas över ("skipped", med orsaken; rangordningen räknas om) i stället för att
+    stoppa filen (validate.prune_invalid)."""
+    from validate import prune_invalid
+
+    res, skipped = prune_invalid(data, lambda d: validate_swing(d, instruments), lambda d: [d["companies"]],
+                                 after_remove=lambda d: assign_ranks(d["companies"]))
+    for s in skipped:
+        print(f"Swing: {s['name']} hoppas över (klarar inte valideringen): {s['reason']}", file=sys.stderr)
     if res.errors:
         print("Swing klarar inte valideringen – skrivs inte:", *res.errors[:10], sep="\n  ", file=sys.stderr)
         return None

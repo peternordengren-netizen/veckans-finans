@@ -55,6 +55,16 @@
     }
   },
   "properties": {
+    "skipped": {
+      "type": "array",
+      "description": "Bolag som inte klarade valideringen och hoppades över (scripts/validate.prune_invalid), med orsaken; saknas när inget hoppats över.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["ticker", "name", "reason"],
+        "properties": {"ticker": {"type": "string"}, "name": {"type": "string"}, "reason": {"type": "string"}}
+      }
+    },
     "schema_version": {
       "const": 1
     },

@@ -49,6 +49,10 @@ mot bandet och är ingen uppmaning.
   dagarna). Hittills = summan av dagens staplar; normalt = snittet för de VOLUME_PROFILE_DAYS senaste handelsdagarna
   av summan av staplarna som börjar senast vid samma klockslag som dagens sista stapel ("until"). Dagens sista stapel
   kan vara ofullständig, så kvoten är något låg strax efter en ny stapel. Fördröjd ca 15 minuter som övriga kurser.
+  Är det normala fram till klockslaget under MIN_NORMAL_VOLUME aktier jämförs inte: ratio null och "too_low" (sidan:
+  "för låg omsättning för jämförelse"). Valideringen godtar avrundningen av so_far och normal (heltal).
+- Ett bolag som inte klarar valideringen stoppar aldrig kontrollen: det tas bort ur avsnitten och listorna och sparas
+  i "skipped" med orsaken (validate.prune_invalid), och filen och notisen skrivs för övriga.
   Går timdatan inte att hämta saknas jämförelsen (statusen påverkas inte).
 - Ändringar sedan föregående kontroll samma dag (data/bollinger/<datum>-<hhmm>.json): "changes" och texten
   "notice" till Windows-notisen. Vid dagens första kontroll räknas alla som väntande innan.
@@ -90,6 +94,9 @@ DELAY_NOTE = "Kurserna från Yahoo är fördröjda ca 15 minuter."
 INTRADAY_DAYS = 35  # kalenderdagar med 15-minutersstaplar (minst 20 handelsdagar före i dag)
 VOLUME_PROFILE_DAYS = 20
 MIN_PROFILE_DAYS = 5
+# Under så många aktier i normal omsättning fram till klockslaget jämförs inte omsättningen hittills ("för låg
+# omsättning för jämförelse"): tidigt på morgonen i ett bolag med liten handel blir kvoten slumpmässig.
+MIN_NORMAL_VOLUME = 1000
 # Status i dag för pullback-kandidaterna (day_status), i prioritetsordning. Beskrivande, inga uppmaningar.
 TODAY_STATUS = {
     "below_stop": "Ogiltig: under stopp",
@@ -220,8 +227,8 @@ def vcp_day_status(base: str, volume: dict | None, min_ratio: float, label: str 
         return "base_broken"
     if base != "triggered":
         return base
-    if not volume:
-        return "pivot_broken_no_vol"
+    if not volume or volume.get("ratio") is None:
+        return "pivot_broken_no_vol"  # saknas, eller för låg omsättning för jämförelse
     return "pivot_broken" if volume["ratio"] >= min_ratio else "pivot_broken_low_vol"
 
 
@@ -304,8 +311,9 @@ def volume_vs_normal(df, yahoo_ticker: str, today: date, days: int = VOLUME_PROF
     if len(past) < MIN_PROFILE_DAYS:
         return None
     normal = sum(sum(v for t, v in by_day[d] if t <= until) for d in past) / len(past)
-    if normal <= 0:
-        return None
+    if normal < MIN_NORMAL_VOLUME:
+        return {"so_far": round(so_far), "normal": round(normal), "ratio": None, "too_low": True,
+                "until": until.strftime("%H:%M"), "days": len(past)}
     return {"so_far": round(so_far), "normal": round(normal), "ratio": round(so_far / normal, 2),
             "until": until.strftime("%H:%M"), "days": len(past)}
 
@@ -452,6 +460,44 @@ def momentum_errors(m: dict | None, where: str) -> list[str]:
     return errors
 
 
+def volume_errors(vol: dict | None, where: str) -> list[str]:
+    """Omsättningen hittills mot normalt: kvoten stämmer med so_far och normal (som är avrundade till heltal, så kvoten
+    får ligga mellan de avrundade gränserna), och ingen kvot under MIN_NORMAL_VOLUME."""
+    if not vol:
+        return []
+    if vol.get("ratio") is None:
+        ok = vol.get("too_low") and vol["normal"] < MIN_NORMAL_VOLUME + 0.5
+        return [] if ok else [f"{where}: omsättningen hittills saknar kvot utan att det normala är för lågt"]
+    if vol["normal"] < MIN_NORMAL_VOLUME - 0.5:
+        return [f"{where}: omsättningen hittills jämförs trots för låg normal omsättning ({vol['normal']})"]
+    lo = max(vol["so_far"] - 0.5, 0) / (vol["normal"] + 0.5)
+    hi = (vol["so_far"] + 0.5) / (vol["normal"] - 0.5)
+    if not lo - 0.006 <= vol["ratio"] <= hi + 0.006:
+        return [f"{where}: omsättningen hittills mot normalt stämmer inte med siffrorna"]
+    return []
+
+
+def prune(data: dict) -> tuple[list[str], list[dict]]:
+    """Validerar kontrollen; ett bolag som inte klarar valideringen tas bort ur strategiavsnitten och listorna och
+    sparas i "skipped" (validate.prune_invalid), och ändringarna och notiserna räknas om utan det. Returnerar (fel som
+    kvarstår, överhoppade bolag)."""
+    from validate import Result, prune_invalid
+
+    def lists(d: dict) -> list[list]:
+        return [d[k]["rows"] for k in STRATEGY_KEYS if d.get(k)] + [d["over"], d["near"]]
+
+    def after_remove(d: dict) -> None:
+        for k in STRATEGY_KEYS:
+            sec = d.get(k)
+            if sec:
+                kept = {r["ticker"] for r in sec["rows"]}
+                sec["changes"] = [c for c in sec["changes"] if c["ticker"] in kept]
+                sec["notice"] = status_notice(sec["changes"], sec["status_since"])
+
+    res, skipped = prune_invalid(data, lambda d: Result(errors=validate(d)), lists, after_remove)
+    return res.errors, skipped
+
+
 def validate(data: dict) -> list[str]:
     """Statusen räknas om ur pris och band; listorna får inte överlappa. Pullback-kandidaternas läge räknas om."""
     errors = []
@@ -468,9 +514,7 @@ def validate(data: dict) -> list[str]:
                 errors.append(f"{r['name']}: status {td['status']!r} stämmer inte med dagens kurser (väntat {expected!r})")
             if (td["trigger_seen_at"] is not None) != (td["high"] > td["trigger"]):
                 errors.append(f"{r['name']}: tiden för bruten trigger stämmer inte med dagens high mot triggernivån")
-            vol = td.get("volume")
-            if vol and abs(vol["ratio"] - vol["so_far"] / vol["normal"]) > 0.011:
-                errors.append(f"{r['name']}: omsättningen hittills mot normalt stämmer inte med siffrorna")
+            errors += volume_errors(td.get("volume"), r["name"])
     for key in ("over", "near"):
         for r in data[key]:
             if status(r["price"], r["upper"], data["thresholds"]["near_pct"]) != key:
@@ -495,7 +539,9 @@ def main(argv: list[str] | None = None, fetch: BarFetcher = yahoo_bars, now: dat
         print(f"{today} är ingen handelsdag – ingen Bollingerkontroll.")
         return 3
     data = check(today, now, load_instruments(), fetch, load_swing(today), load_previous(today, now))
-    errors = validate(data)
+    errors, skipped = prune(data)
+    for s_ in skipped:
+        print(f"Hoppar över {s_['name']} (klarar inte valideringen): {s_['reason']}", file=sys.stderr)
     if errors:
         print("Bollingerkontrollen klarar inte valideringen – skrivs inte:", *errors, sep="\n  ", file=sys.stderr)
         return 1

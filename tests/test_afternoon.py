@@ -161,3 +161,16 @@ def test_forra_handelsdagen_bara_om_filen_saknas_eller_ar_ofullstandig(tmp_path,
     assert afternoon.main(["--forra-om-saknas", "--klar"], now=monday) == 0
     friday.write_text(json.dumps({"generated_at": "2026-10-23T17:46:00+02:00", "retry": ["kurser"]}), encoding="utf-8")
     assert afternoon.main(["--forra-om-saknas", "--klar"], now=monday) == 4
+
+
+def test_ett_bolag_med_fel_stoppar_inte_eftermiddagen(tmp_path):
+    """Ett bolag som inte klarar valideringen hoppas över ("skipped") i stället för att stoppa filen."""
+    from validate import prune_invalid
+
+    data = afternoon.build(TODAY, NOW, INSTRUMENTS, fetch_today, results_dir(tmp_path), list_fn)
+    by = {c["ticker"]: c for c in data["companies"]}
+    by["ALFA"]["relative_pp"] = 5.0  # fel mot index
+    res, skipped = prune_invalid(data, lambda d: validate_afternoon(d, "2026-10-22", INSTRUMENTS),
+                                 lambda d: [d["companies"]])
+    assert res.errors == [] and [s["ticker"] for s in skipped] == ["ALFA"] and "mot index" in skipped[0]["reason"]
+    assert [c["ticker"] for c in data["companies"]] == ["GAMMA", "BETA"] and data["skipped"] == skipped

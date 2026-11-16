@@ -247,3 +247,54 @@ def test_status_pivot_bruten_med_och_utan_volym():
     assert bollinger.vcp_day_status("below_stop", {"ratio": 3.0}, 1.5) == "below_stop"
     assert bollinger.vcp_day_status("waiting", None, 1.5) == "waiting"
     assert bollinger.TODAY_STATUS["pivot_broken_low_vol"] == "Pivot bruten, låg volym"
+
+
+
+def test_ett_bolag_som_inte_klarar_valideringen_stoppar_inte_kontrollen():
+    """Bollingerkontrollen: bolaget med fel tas bort och sparas i "skipped" med orsaken; resten skrivs."""
+    end = date(2026, 11, 6)
+    alfa = vcp_closes()
+    n = len(alfa)
+    others = {t: [100 + k * 0.01 * j for j in range(n)] for k, t in enumerate(["BETA", "GAMMA", "DELTA"])}
+    inst = {t: Instrument(name, (), t, f"{t}.ST", "Stockholm") for t, name in
+            [("ALFA", "Alfaverken"), ("BETA", "Betabolaget"), ("GAMMA", "Gammagruppen"), ("DELTA", "Deltahem")]}
+    bars = {"ALFA.ST": series(end, alfa, [1000.0] * (n - 10) + [700.0] * 10),
+            **{f"{t}.ST": series(end, c) for t, c in others.items()}}
+    today = end + timedelta(days=3)
+    data = swing.build(today, datetime.now(TZ), inst, bars, {})
+    now = datetime.combine(today, datetime.min.time(), TZ).replace(hour=9, minute=20)
+    lv = next(c for c in data["companies"] if c["ticker"] == "ALFA")["vcp"]["levels"]
+    tb = Bar(today, lv["pivot"] - 1, lv["pivot"] - 1, lv["pivot"] - 0.5, lv["stop"] + 1, 500.0, lv["pivot"])
+    check = bollinger.check(today, now, inst, lambda t, s, e: {**bars, "ALFA.ST": bars["ALFA.ST"] + [tb]}, data,
+                            intraday=lambda t, d: None)
+    assert [r["ticker"] for r in check["vcp"]["rows"]] == ["ALFA"]
+    # Ett fel i omsättningen (som K-Fast Holding 2026-11-12) ska bara ta bort bolaget.
+    check["vcp"]["rows"][0]["today"]["volume"] = {"so_far": 37993, "normal": 17001, "ratio": 9.99, "until": "09:15",
+                                                  "days": 20}
+    errors, skipped = bollinger.prune(check)
+    assert errors == [] and [s["name"] for s in skipped] == ["Alfaverken"]
+    assert "omsättningen hittills" in skipped[0]["reason"] and check["skipped"] == skipped
+    assert check["vcp"]["rows"] == [] and check["vcp"]["changes"] == []
+    assert bollinger.validate(check) == []
+
+
+def test_swingfilen_hoppar_over_bolag_med_fel_och_rangordnar_om():
+    """Swingfilen: ett bolag med fel hoppas över och rangordningen räknas om för övriga (swing.write)."""
+    from validate import prune_invalid
+
+    end = date(2026, 11, 6)
+    alfa = vcp_closes()
+    n = len(alfa)
+    inst = {t: Instrument(name, (), t, f"{t}.ST", "Stockholm") for t, name in
+            [("ALFA", "Alfaverken"), ("BETA", "Betabolaget"), ("GAMMA", "Gammagruppen"), ("DELTA", "Deltahem")]}
+    bars = {"ALFA.ST": series(end, alfa, [1000.0] * (n - 10) + [700.0] * 10),
+            **{f"{t}.ST": series(end, [100 + k * 0.01 * j for j in range(n)]) for k, t in
+               enumerate(["BETA", "GAMMA", "DELTA"])}}
+    data = swing.build(end + timedelta(days=3), datetime.now(TZ), inst, bars, {})
+    a = next(c for c in data["companies"] if c["ticker"] == "ALFA")
+    a["vcp"]["levels"]["stop"] -= 1  # fel nivå
+    res, skipped = prune_invalid(data, lambda d: validate_swing(d, inst), lambda d: [d["companies"]],
+                                 after_remove=lambda d: swing.assign_ranks(d["companies"]))
+    assert res.errors == [] and [s["ticker"] for s in skipped] == ["ALFA"]
+    assert "ALFA" not in [c["ticker"] for c in data["companies"]] and data["skipped"][0]["name"] == "Alfaverken"
+    assert validate_swing(data, inst).errors == []

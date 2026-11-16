@@ -247,6 +247,45 @@ class Result:
     warnings: list[str] = field(default_factory=list)
 
 
+def _mentions(error: str, entry: dict) -> bool:
+    """Pekar felet ut bolaget? Felen skrivs "<namn>: …", "<namn> (<ticker>) …" eller "… (<ticker>) …"."""
+    name, ticker = re.escape(entry.get("name") or "\0"), re.escape(entry.get("ticker") or "\0")
+    return bool(re.search(rf"(?:^|[\s:]){name}(?::| \()", error) or re.search(rf"\({ticker}\)", error))
+
+
+def prune_invalid(data: dict, validate_fn, lists, after_remove=None, max_rounds: int = 5) -> tuple[Result, list[dict]]:
+    """Ett bolag som inte klarar valideringen ska aldrig stoppa hela filen: bolag som felen pekar ut (namn eller
+    ticker, se _mentions) tas bort ur alla listor som lists(data) returnerar och sparas med orsaken (det första felet);
+    after_remove(data) räknar om det som beror på listorna (t.ex. rangordningen); sedan valideras filen igen. Kvarstår
+    fel som inte gäller ett enskilt bolag stoppar de filen som förut. Sätter data["skipped"] när något hoppats över.
+    Returnerar (det sista valideringsresultatet, de överhoppade bolagen [{ticker, name, reason}])."""
+    skipped: list[dict] = []
+    res = validate_fn(data)
+    for _ in range(max_rounds):
+        if not res.errors:
+            break
+        entries = {e["ticker"]: e for lst in lists(data) for e in lst if e.get("ticker")}
+        hit: dict[str, list[str]] = {}
+        for err in res.errors:
+            for t, e in entries.items():
+                if _mentions(err, e):
+                    hit.setdefault(t, []).append(err)
+        if not hit:
+            break
+        for lst in lists(data):
+            lst[:] = [e for e in lst if e.get("ticker") not in hit]
+        skipped += [{"ticker": t, "name": entries[t]["name"], "reason": errs[0]} for t, errs in sorted(hit.items())]
+        if after_remove:
+            after_remove(data)
+        if "skipped" in data:
+            data.pop("skipped")
+        res = validate_fn(data)
+    if skipped:
+        data["skipped"] = skipped
+        res = validate_fn(data)
+    return res, skipped
+
+
 INSTRUMENT_TYPES = {"investmentbolag"}
 MFN_SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 # Cisions slugar kan ha dubbla och avslutande bindestreck ("meren-energy-inc-", "l-e-lundbergforetagen-ab--publ-").

@@ -127,8 +127,10 @@ export function volumeRuleLines(
 }
 
 /** Dagens omsättning hittills mot normalt vid samma tid: "omsättning hittills 1,3× normalt (t.o.m. 09:15)". */
-export function todayVolumeText(v: { ratio: number; until: string } | null | undefined): string | null {
-  return v ? `omsättning hittills ${pctFmt.format(v.ratio)}× normalt (t.o.m. ${v.until})` : null;
+export function todayVolumeText(v: { ratio: number | null; too_low?: boolean; until: string } | null | undefined): string | null {
+  if (!v) return null;
+  if (v.ratio === null) return `för låg omsättning för jämförelse (t.o.m. ${v.until})`;
+  return `omsättning hittills ${pctFmt.format(v.ratio)}× normalt (t.o.m. ${v.until})`;
 }
 
 /** RSI(14) och Stoch RSI i kolumnen Ingång: "RSI(14) 72 · Stoch RSI 85/80" (%K/%D), med varning (⚠) när RSI är över

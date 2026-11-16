@@ -139,6 +139,7 @@ test("Rekyl efter Bollingerutbrott: volymvillkoren och omsättningen i dag", () 
   assert.equal(no[3].text, "Inga upp- eller neddagar i rekylen (rangkriterium)");
   assert.equal(todayVolumeText({ ratio: 1.34, until: "09:00" }), "omsättning hittills 1,3× normalt (t.o.m. 09:00)");
   assert.equal(todayVolumeText(null), null);
+  assert.equal(todayVolumeText({ ratio: null, too_low: true, until: "09:15" }), "för låg omsättning för jämförelse (t.o.m. 09:15)");
 });
 
 test("RSI och Stoch RSI i kolumnen Ingång", () => {
