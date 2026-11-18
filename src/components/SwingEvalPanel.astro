@@ -8,7 +8,7 @@
 import type { SwingEval } from "../lib/data";
 import { shortDate } from "../lib/format";
 import { signedPct } from "../lib/signals";
-import { ciShareText, evalName, evalTraits, ppText, rText } from "../lib/swing";
+import { ciShareText, evalName, evalTraits, ppText, rText, rsiWarnText, weeklyOutcomeText } from "../lib/swing";
 
 interface Props {
   ev: SwingEval;
@@ -56,6 +56,14 @@ const LIB_MAX = 300;
           <li>
             <strong>52 veckor:</strong> {m.new_highs} bolag på årshögsta och {m.new_lows} på årslägsta.
           </li>
+          {(ev.weekly_outcomes ?? []).length > 0 && (
+            <li>
+              <strong>Kandidaternas utfall vecka för vecka</strong> (signaldagens vecka, full uppföljning, ett fall per
+              uppgång; lyckade och dåliga = minst {num(th.success_pp)} procentenheter över respektive under index inom
+              {" "}{th.success_days} dagar; pil vid mer än {num(th.arrow_pp ?? 2)} procentenheters ändring):
+              {" "}{(ev.weekly_outcomes ?? []).map((w) => weeklyOutcomeText(w)).join("; ")}.
+            </li>
+          )}
         </ul>
         <details class="sectors">
           <summary>
@@ -134,7 +142,8 @@ const LIB_MAX = 300;
                   <ul>
                     {ev.alerts.similar.map((a) => (
                       <li>
-                        <strong>{a.name}</strong> ({a.strategies.map(strategyName).join(", ")}): liknar {a.matches} bolag
+                        <strong>{a.name}</strong> ({a.strategies.map(strategyName).join(", ")})
+                        {rsiWarnText(a.rsi14, th.warn_rsi14 ?? 30) && <span class="warn"> {rsiWarnText(a.rsi14, th.warn_rsi14 ?? 30)} (oftare dåliga, utesluter inget)</span>}: liknar {a.matches} bolag
                         med lyckade fall, till exempel {a.examples.join(", ")}. Av alla {a.similar_cases} liknande fall
                         lyckades {a.similar_successes}.
                       </li>
@@ -488,6 +497,9 @@ const LIB_MAX = 300;
   }
   .flag {
     font-weight: 600;
+  }
+  .warn {
+    color: var(--neg);
   }
   .hist-wrap {
     overflow-x: auto;

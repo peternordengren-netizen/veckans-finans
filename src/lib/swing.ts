@@ -379,3 +379,25 @@ export function successCount(index: readonly [string, string[], boolean, string 
   }
   return { successes, cases };
 }
+
+/** Utvärderingens andelar (scripts/swing_eval.py _rates). */
+export interface OutcomeRates { cases: number; successes: number; bad: number; share: number | null; bad_share: number | null }
+
+const wholePct = (v: number | null) => (v === null ? "–" : `${new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 0 }).format(v * 100)} %`);
+
+/** Varningsmarkeringen vid en kandidat: "⚠ RSI(14) 28" när RSI(14) är högst gränsen, annars null. Utesluter inget. */
+export function rsiWarnText(rsi14: number | null | undefined, limit: number): string | null {
+  return rsi14 !== null && rsi14 !== undefined && rsi14 <= limit ? `⚠ RSI(14) ${Math.round(rsi14)}` : null;
+}
+
+/** Sektorns utfall senaste 4 veckorna: "sektorn 4 v: lyckade 20 % · dåliga 35 % (24 uppgångar)"; null utan fall. */
+export function sectorOutcomeText(r: OutcomeRates | null | undefined): string | null {
+  if (!r || r.cases === 0) return null;
+  return `sektorn 4 v: lyckade ${wholePct(r.share)} · dåliga ${wholePct(r.bad_share)} (${r.cases} ${r.cases === 1 ? "uppgång" : "uppgångar"})`;
+}
+
+/** En veckas utfall med pil mot veckan före: "v. 45: lyckade 14 % ↓ · dåliga 19 % ↓ (104)". */
+export function weeklyOutcomeText(w: OutcomeRates & { week: string; share_arrow: string | null; bad_arrow: string | null }): string {
+  const arrow = (a: string | null) => (a ? ` ${a}` : "");
+  return `v. ${Number(w.week.slice(-2))}: lyckade ${wholePct(w.share)}${arrow(w.share_arrow)} · dåliga ${wholePct(w.bad_share)}${arrow(w.bad_arrow)} (${w.cases})`;
+}

@@ -33,6 +33,11 @@ uppmaning och säger inget säkert om hur det går nästa gång.
 2. Uppföljning efter 1–5 handelsdagar (HORIZONS) med samma hämtning som morgonens swingfil: rörelse
    (justerad stängning), rörelse mot index (OMX Stockholm PI) i procentenheter, högsta high under dagarna i R
    (från signaldagens stängning) och snittomsättningen under dagarna mot snittet för de 20 dagarna före signaldagen.
+   Dåligt fall (bad_status): minst SUCCESS_PP (5) procentenheter under index vid någon stängning inom SUCCESS_DAYS
+   dagar (en uppgång kan vara både lyckad och dålig). Varningsmarkering vid kandidaterna och i larmet "Liknar nyligen
+   lyckade fall": RSI(14) högst WARN_RSI14 (30), oftare dåliga i utvärderingen 2026-10-28 – 11-10 (9 av 16, båda
+   veckorna); utesluter inget. Sektorns andel lyckade och dåliga senaste SIMILAR_DAYS dagarna (sector_recent) och
+   kandidaternas utfall vecka för vecka med pil (weekly_outcomes, marknadstecken i Swing och i måndagens text).
    Lyckat fall (success_status): minst SUCCESS_PP (5) procentenheter över index vid någon stängning inom SUCCESS_DAYS
    (5) handelsdagar, oavsett R (sedan 2026-11-11; R påverkade tidigare, men ett litet R gjorde 2R för lätt att nå);
    "ej" när femte dagen följts upp utan det, annars öppet. Högsta high i R visas som information.
@@ -103,6 +108,8 @@ SECTOR_MOVE_MIN, SECTOR_MOVE_PP, SECTOR_MOVE_SHARE = 3, 3.0, 0.25
 SECTOR_TURN_MIN_PP = 1.0  # vändningen räknas bara när 5-dagarsstyrkan dessutom är minst så här över index
 SECTOR_MOVE_TOP = 2  # högst så många sektorer (de med störst rörelse mot index samma dag)
 OVERSOLD_RSI2 = 10.0
+WARN_RSI14 = 30.0  # varningsmarkering, utesluter inget
+ARROW_PP = 2.0  # pil upp/ned när andelen ändrats mer än så många procentenheter mot veckan före
 BROAD_OVERSOLD_SHARE, OVERSOLD_TOP = 0.10, 5
 MARKET_VERSION = 3  # 2: sektor i rörelse; 3: skärpt (25 %, vändning minst 1 pe, högst två sektorer)
 MARKET_DAYS = 252  # 52 veckor
@@ -530,6 +537,20 @@ def success_status(e: dict) -> str | None:
     return "ej" if str(SUCCESS_DAYS) in f else None
 
 
+def bad_status(e: dict) -> str | None:
+    """"dålig" (minst SUCCESS_PP pe under index vid någon stängning inom SUCCESS_DAYS dagar), "ej" (femte dagen
+    uppföljd utan det) eller None (öppet)."""
+    f = e.get("follow") or {}
+    if any(f[str(k)]["vs_index_pp"] <= -SUCCESS_PP for k in range(1, SUCCESS_DAYS + 1) if str(k) in f):
+        return "dålig"
+    return "ej" if str(SUCCESS_DAYS) in f else None
+
+
+def rsi_warn(rsi14: float | None) -> bool:
+    """Varningsmarkeringen "RSI(14) högst 30" (WARN_RSI14)."""
+    return rsi14 is not None and rsi14 <= WARN_RSI14
+
+
 def success_info(e: dict) -> dict:
     """Det högsta mot index (procentenheter, vid stängning) och högsta high i R (information, avgör inte) inom
     SUCCESS_DAYS dagar."""
@@ -583,8 +604,10 @@ def episodes(rows: list[dict]) -> list[dict]:
                 st = [success_status(g) for g in group]
                 status = "lyckad" if "lyckad" in st else "ej" if "ej" in st else None
                 won = next((g for g, x in zip(group, st) if x == "lyckad"), None)
+                bs = [bad_status(g) for g in group]
                 out.append({**group[0], "status": status, "episode_days": [g["day"] for g in group],
-                            "success_day": won["day"] if won else None, "won": won})
+                            "success_day": won["day"] if won else None, "won": won,
+                            "bad": "dålig" in bs})
             group = [r] if r is not None else []
     return sorted(out, key=lambda r: (r["day"], r["name"]))
 
@@ -596,6 +619,38 @@ def _window_rows(rows: list[dict], key: str, days: int | None, last: str | None,
         return rows
     first = (date.fromisoformat(last) - timedelta(days=days)).isoformat()
     return [r for r in rows if r["day"] > first]
+
+
+def _rates(group: list[dict]) -> dict:
+    """Andel lyckade och dåliga (med 95 % intervall) bland avgjorda uppgångar."""
+    n = len(group)
+    k, b = sum(g["status"] == "lyckad" for g in group), sum(bool(g.get("bad")) for g in group)
+    return {"cases": n, "successes": k, "bad": b,
+            "share": round(k / n, 4) if n else None, "ci": wilson(k, n),
+            "bad_share": round(b / n, 4) if n else None, "bad_ci": wilson(b, n)}
+
+
+def _arrow(now: float | None, before: float | None) -> str | None:
+    if now is None or before is None:
+        return None
+    d = (now - before) * 100
+    return "↑" if d > ARROW_PP else "↓" if d < -ARROW_PP else "→"
+
+
+def weekly_outcomes(decided: list[dict]) -> list[dict]:
+    """Kandidaternas utfall vecka för vecka (signaldagens ISO-vecka): andel lyckade och dåliga, med pil mot veckan
+    före (↑/↓ vid mer än ARROW_PP procentenheter, annars →)."""
+    weeks: dict[str, list[dict]] = {}
+    for x in decided:
+        weeks.setdefault(_iso_week(x["day"]), []).append(x)
+    out, prev = [], None
+    for w in sorted(weeks):
+        r = {"week": w, "days": len({x["day"] for x in weeks[w]}), **_rates(weeks[w])}
+        r["share_arrow"] = _arrow(r["share"], prev and prev["share"])
+        r["bad_arrow"] = _arrow(r["bad_share"], prev and prev["bad_share"])
+        out.append(r)
+        prev = r
+    return out
 
 
 def _rate(group: list[dict]) -> dict:
@@ -652,7 +707,7 @@ def summary(snaps: list[dict], now: datetime) -> dict:
             continue
         decided_rows.append(r)
         decided.append({"day": r["day"], "strategies": r["strategies"], "strong": r["strong"], "sector": r["sector"],
-                        "regime": r.get("regime"), "status": st})
+                        "regime": r.get("regime"), "status": st, "bad": bool(r.get("bad"))})
         if st == "lyckad":
             w = r["won"]
             successes.append({k: r.get(k) for k in ("day", "ticker", "name", "sector", "strategies", "strong",
@@ -667,6 +722,10 @@ def summary(snaps: list[dict], now: datetime) -> dict:
     by_regime = {}
     for x in recent:
         by_regime.setdefault(x["regime"] or "okänt", []).append(x)
+    by_sector: dict[str, list[dict]] = {}
+    for x in recent:
+        if x["sector"]:
+            by_sector.setdefault(x["sector"], []).append(x)
     by_strategy = {k: [x for x in recent if k in x["strategies"]] for k in STRATEGY_ORDER}
     by_strategy["stark"] = [x for x in recent if x["strong"]]
     # Larmen: dagens kandidater (senaste ögonblicksbilden) som liknar minst SIMILAR_MIN nyligen lyckade fall.
@@ -681,7 +740,8 @@ def summary(snaps: list[dict], now: datetime) -> dict:
             if len(companies) >= SIMILAR_MIN:
                 similar.append({"ticker": e["ticker"], "name": e["name"], "strategies": e["strategies"],
                                 "matches": len(companies), "similar_cases": len(sim), "similar_successes": len(ok),
-                                "examples": companies[:3]})
+                                "similar_bad": sum(bool(x.get("bad")) for x in sim),
+                                "examples": companies[:3], "rsi14": e.get("rsi14"), "rsi_warn": rsi_warn(e.get("rsi14"))})
     similar.sort(key=lambda x: (-x["matches"], x["name"]))
     # Kortsiktigt översåld i upptrend: dagens bolag (senaste ögonblicksbilden), med marknadsläget och de lägen där
     # RSI(2) under 10 prövats i underlaget (uppgångar med etiketten, på dagar med full uppföljning).
@@ -716,6 +776,7 @@ def summary(snaps: list[dict], now: datetime) -> dict:
                        "sector_move_min": SECTOR_MOVE_MIN, "sector_move_pp": SECTOR_MOVE_PP,
                        "sector_move_share": SECTOR_MOVE_SHARE, "sector_turn_min_pp": SECTOR_TURN_MIN_PP,
                        "sector_move_top": SECTOR_MOVE_TOP,
+                       "warn_rsi14": WARN_RSI14, "arrow_pp": ARROW_PP,
                        "oversold_rsi2": OVERSOLD_RSI2, "broad_oversold_share": BROAD_OVERSOLD_SHARE,
                        "oversold_top": OVERSOLD_TOP,
                        "vol_calm_max": VOL_CALM_MAX, **FEATURE_THRESHOLDS},
@@ -729,6 +790,10 @@ def summary(snaps: list[dict], now: datetime) -> dict:
         "top": top,
         "patterns": pats,
         "successes": successes,
+        # Sektorns andel lyckade och dåliga senaste SIMILAR_DAYS dagarna (information vid kandidaterna i Swing).
+        "sector_recent": {"since": recent_first, "sectors": {k: _rates(v) for k, v in sorted(by_sector.items())}},
+        # Kandidaternas utfall vecka för vecka (marknadstecken i Swing och i måndagens text).
+        "weekly_outcomes": weekly_outcomes(decided),
         "success_recent": {"since": recent_first, "all": _rate(recent),
                            "by_regime": {k: _rate(v) for k, v in sorted(by_regime.items())},
                            "by_strategy": {k: _rate(v) for k, v in by_strategy.items()}},
@@ -752,7 +817,8 @@ def alerts_notice(summ: dict | None, swing_date: str | None) -> dict | None:
         return None
     parts = []
     if a.get("similar"):
-        names = ", ".join(f"{x['name']} ({x['similar_successes']} av {x['similar_cases']} liknande lyckades)"
+        names = ", ".join(f"{x['name']} ({x['similar_successes']} av {x['similar_cases']} liknande lyckades"
+                          + (f"; ⚠ RSI(14) {x['rsi14']:.0f}" if x.get("rsi_warn") else "") + ")"
                           for x in a["similar"][:6])
         more = f" och {len(a['similar']) - 6} till" if len(a["similar"]) > 6 else ""
         parts.append(f"Liknar nyligen lyckade fall: {names}{more}.")

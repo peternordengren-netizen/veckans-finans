@@ -902,6 +902,8 @@ export interface SwingEvalSectorMove {
   companies: { name: string; vs_index_pp: number }[];
 }
 export interface SwingEvalRate { cases: number; successes: number; share: number | null; ci: [number, number] | null }
+/** Andel lyckade och dåliga uppgångar (scripts/swing_eval.py _rates). */
+export interface SwingEvalRates extends SwingEvalRate { bad: number; bad_share: number | null; bad_ci: [number, number] | null }
 export interface SwingEvalPatterns { horizon: number; cases: number; top_n: number; weeks: string[]; features: SwingEvalPattern[] }
 /** Den dagliga utvärderingen i fliken Swing (data/raw/swing_eval/summary.json, scripts/swing_eval.py). */
 export interface SwingEval {
@@ -915,6 +917,8 @@ export interface SwingEval {
     success_pp: number; success_days: number; similar_days: number; similar_min: number;
     similar_jaccard: number; breadth_alert_pp: number; sector_volume_alert: number; vol_calm_max: number;
     sector_move_min: number; sector_move_pp: number; oversold_rsi2: number;
+    /** Varningsmarkeringen "RSI(14) högst" (utesluter inget) och gränsen för pilarna i veckans utfall. */
+    warn_rsi14?: number; arrow_pp?: number;
     volume_high: number; volume_low: number; rsi_high: number; rsi_low: number; stoch_high: number; stoch_low: number;
     support_r: number; resistance_r: number };
   feature_texts: Record<string, string>;
@@ -928,13 +932,17 @@ export interface SwingEval {
   /** Lyckade fall, nyast först. */
   successes: (SwingEvalCase & { day: string; max_vs_index_pp: number | null; max_high_r: number | null;
     episode_days: string[]; success_day: string | null; follow: Record<string, SwingEvalFollow> })[];
+  /** Sektorns andel lyckade och dåliga senaste 4 veckorna (saknas i äldre filer). */
+  sector_recent?: { since: string; sectors: Record<string, SwingEvalRates> };
+  /** Kandidaternas utfall vecka för vecka, med pil mot veckan före (saknas i äldre filer). */
+  weekly_outcomes?: (SwingEvalRates & { week: string; days: number; share_arrow: string | null; bad_arrow: string | null })[];
   success_recent: { since: string; all: SwingEvalRate; by_regime: Record<string, SwingEvalRate>;
     by_strategy: Record<string, SwingEvalRate> };
   /** Alla avgjorda fall: [signaldag, strategier, starka signaler, sektor, läge, "lyckad" | "ej"]. */
   cases_index: [string, string[], boolean, string | null, string | null, string][];
   alerts: { swing_date: string | null; day: string | null;
     similar: { ticker: string; name: string; strategies: string[]; matches: number; similar_cases: number;
-      similar_successes: number; examples: string[] }[];
+      similar_successes: number; examples: string[]; similar_bad?: number; rsi14?: number | null; rsi_warn?: boolean }[];
     market: { kind: string; text: string }[];
     sector_moves: SwingEvalSectorMove[];
     oversold: { companies: { ticker: string; name: string; sector: string | null; rsi2: number; vs_ma200_pct: number;

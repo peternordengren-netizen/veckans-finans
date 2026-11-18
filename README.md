@@ -839,6 +839,13 @@ och 60 handelsdagar från signaldagens stängning. Dagens bevakningslista använ
      marknadsläget nu och de lägen där RSI(2) under 10 hittills prövats i underlaget (andel lyckade uppgångar). Slår
      fler än 10 % av listan till blir det i stället marknadstecknet "Bred kortsiktig nedgång: X bolag", och bara de
      fem med högst relativ styrka (RS-percentilen) visas (2026-11-18 var det 32 bolag).
+   - *Varningsmarkering "RSI(14) högst 30"* (sedan 2026-11-18): vid kandidaterna i Swing (under bolagsnamnet) och i
+     larmet "Liknar nyligen lyckade fall", på sidan och i notisen. I utvärderingen 28 okt – 10 nov var 9 av 16 sådana
+     uppgångar dåliga (minst 5 procentenheter under index inom 5 dagar), båda veckorna. Utesluter inget.
+   - *Sektorns utfall*: andel lyckade och dåliga uppgångar i kandidatens sektor senaste 4 veckorna, under
+     bolagsnamnet för kandidaterna i de tre strategierna. Information, påverkar inte rangen.
+   - *Kandidaternas utfall vecka för vecka*: andel lyckade och dåliga per signaldagens vecka med pil mot veckan före
+     (↑ eller ↓ vid mer än 2 procentenheters ändring, annars →), i marknadsläget överst i Swing och i måndagens text.
    Vaknar datorn sent kör Bollingerkontrollen först morgonflödet klart (`run_morning.ps1` har ett lås mot en
    samtidig morgonkörning), så att en försenad kontroll alltid har dagens swingfil.
 8. **Måndagar** (veckans första handelsdag): `run_swing_note.ps1` (från `run_morning.ps1`) låter Claude

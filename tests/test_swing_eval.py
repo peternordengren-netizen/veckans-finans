@@ -416,3 +416,36 @@ def test_bred_kortsiktig_nedgang():
     s2 = se.summary(snaps, NOW)
     assert not s2["alerts"]["oversold"]["broad"] and len(s2["alerts"]["oversold"]["companies"]) == 26
     assert s2["alerts"]["market"] == []
+
+
+def test_daliga_fall_veckans_utfall_och_sektorn():
+    f = lambda k, pp: {str(k): {"vs_index_pp": pp, "max_high_r": None}}  # noqa: E731
+    assert se.bad_status({"follow": {**f(1, -1.0), **f(3, -5.5)}}) == "dålig"
+    assert se.bad_status({"follow": {**f(1, -1.0), **f(5, -4.9)}}) == "ej"
+    assert se.bad_status({"follow": {**f(1, -1.0)}}) is None
+    assert se.rsi_warn(30.0) and se.rsi_warn(12.0) and not se.rsi_warn(30.1) and not se.rsi_warn(None)
+    decided = ([{"day": "2026-10-28", "status": "lyckad", "bad": False}] * 3 + [{"day": "2026-10-28", "status": "ej", "bad": True}]
+               + [{"day": "2026-11-03", "status": "lyckad", "bad": False}] + [{"day": "2026-11-03", "status": "ej", "bad": True}] * 3)
+    w = se.weekly_outcomes(decided)
+    assert [x["week"] for x in w] == ["2026-W44", "2026-W45"]
+    assert w[0]["share"] == 0.75 and w[0]["share_arrow"] is None
+    assert w[1]["share"] == 0.25 and w[1]["share_arrow"] == "↓" and w[1]["bad_arrow"] == "↑"
+
+
+def test_rsi_varning_i_larmet_och_sektorns_utfall():
+    feats = ["strategi:pullback", "etikett:rekyl-i-trend", "stod:nara", "sektor:industri"]
+    old = [{"day": "2026-11-02", "entries": [case("Alfaverken", "2026-11-09", feats, True),
+                                             case("Betabolaget", "2026-11-09", feats, True),
+                                             case("Gammagruppen", "2026-11-09", feats, True),
+                                             {**case("Deltahem", "2026-11-09", feats, False),
+                                              "follow": {"5": {"vs_index_pp": -6.0, "max_high_r": None, "move_pct": 0,
+                                                               "day": "2026-11-09", "volume_ratio": 1.0}}}]}]
+    today = {**case("Zetaverken", "2026-11-10", feats, False), "follow": {}, "rsi14": 27.6}
+    snaps = old + [{"day": "2026-11-10", "swing_date": "2026-11-11", "entries": [today]}]
+    s = se.summary(snaps, NOW)
+    sim = s["alerts"]["similar"][0]
+    assert sim["rsi_warn"] and sim["similar_bad"] == 1
+    assert "Zetaverken (3 av 4 liknande lyckades; ⚠ RSI(14) 28)" in se.alerts_notice(s, "2026-11-11")["notice"]
+    sec = s["sector_recent"]["sectors"]["industri"]
+    assert sec["cases"] == 4 and sec["successes"] == 3 and sec["bad"] == 1 and sec["bad_share"] == 0.25
+    assert s["weekly_outcomes"][0]["week"] == "2026-W45"

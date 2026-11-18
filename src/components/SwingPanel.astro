@@ -4,7 +4,7 @@
  * etiketter, i en sorterbar och filtrerbar tabell med fast rubrikrad. Under tabellen historiken per etikett
  * (scripts/swing_history.py). Ett informationsverktyg: etiketterna beskriver vad som hänt, inga uppmaningar.
  */
-import type { PullbackSummary, SwingView } from "../lib/data";
+import type { PullbackSummary, SwingEval, SwingView } from "../lib/data";
 import Momentum from "./SwingMomentum.astro";
 import { shortDate } from "../lib/format";
 import { signedPct } from "../lib/signals";
@@ -12,13 +12,19 @@ import {
   MIN_CASES, altStopText, decidedShareText, labelClass, labelCounts, levelText, missingText, netText, priceText,
   reportText, resistanceRText, riskText, shareText, bollingerSourceText, chipText, pctBText, signalText,
   TODAY_STATUS, todayInvalid, todayLines, todayOrder, bbLevelText, breakoutLines, todayVolumeText, volumeRuleLines,
-  momentumText, depthsText, criteriaLines, ciShareText, rText, rankText, rankTitle, srDistText, srInsideText, srKindText, srLevelText, upperRText, vsBaseText,
+  momentumText, depthsText, criteriaLines, ciShareText, rsiWarnText, sectorOutcomeText, rText, rankText, rankTitle, srDistText, srInsideText, srKindText, srLevelText, upperRText, vsBaseText,
 } from "../lib/swing";
 
 interface Props {
   swing: SwingView;
+  /** Utvärderingen (scripts/swing_eval.py): RSI-varningen och sektorns utfall vid kandidaterna; null utan underlag. */
+  ev?: SwingEval | null;
 }
-const { swing } = Astro.props;
+const { swing, ev = null } = Astro.props;
+// Vid kandidaterna i de tre strategierna: varningsmarkeringen "RSI(14) högst 30" och sektorns andel lyckade och dåliga
+// senaste 4 veckorna ur utvärderingen. Information, utesluter inget och påverkar inte rangen.
+const warnRsi = ev?.thresholds.warn_rsi14 ?? 30;
+const strategyLabels = new Set(Object.values(swing.strategies).flatMap((s) => s.labels));
 const order = Object.keys(swing.labels);
 const counts = labelCounts(swing.rows, order);
 const withLabel = swing.rows.filter((r) => r.labels.length > 0).length;
@@ -515,6 +521,16 @@ const rankHist = pbHist?.ranking ?? null;
               >
                 <th scope="row" data-v={r.name}>
                   <span class="name">{r.name}</span> <span class="ticker">{r.ticker}</span>
+                  {r.labels.some((l) => strategyLabels.has(l)) && (() => {
+                    const warn = rsiWarnText(r.rsi14, warnRsi);
+                    const sec = ev && r.sector ? sectorOutcomeText(ev.sector_recent?.sectors[r.sector]) : null;
+                    return (
+                      <>
+                        {warn && <span class="sub cand-warn" title="Utvärderingen: RSI(14) högst 30 var oftare dåliga (minst 5 procentenheter under index inom 5 dagar). Utesluter inget.">{warn}</span>}
+                        {sec && <span class="sub cand-sector" title="Utvärderingen, senaste 4 veckorna, ett fall per uppgång: lyckade = minst 5 procentenheter över index inom 5 dagar, dåliga = minst 5 under.">{sec}</span>}
+                      </>
+                    );
+                  })()}
                 </th>
                 <td class="col-labels" data-v={r.labels.map((l) => swing.labels[l]).join(", ")}>
                   <span class="chips">
@@ -1418,6 +1434,13 @@ const rankHist = pbHist?.ranking ?? null;
     display: block;
     font-size: 0.75rem;
     color: var(--muted);
+  }
+  /* Utvärderingen vid kandidaterna: varningsmarkeringen och sektorns utfall (information). */
+  .cand-warn {
+    color: var(--neg);
+  }
+  .cand-sector {
+    font-weight: normal;
   }
   td.sr {
     min-width: 5.5rem;

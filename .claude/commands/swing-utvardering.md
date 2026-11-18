@@ -23,6 +23,10 @@ Kommandot körs utan att någon tittar på, med behörighetsläget `dontAsk`. Ba
      upptrend, med läget och `tried`, de lägen mönstret prövats i).
    - Mönster och lyckade fall räknar bara dagar med full femdagarsuppföljning (`full_days`) och ett fall per uppgång
      (`episodes`); skriv "uppgångar" om dem, inte "fall per dag".
+   - `weekly_outcomes`: kandidaternas utfall vecka för vecka (andel lyckade `share` och dåliga `bad_share`, med pil
+     `share_arrow`/`bad_arrow` mot veckan före). Dåliga = minst 5 procentenheter under index inom 5 dagar. Beskriv
+     hur det ändrats mot veckan före.
+   - `sector_recent`: sektorernas andel lyckade och dåliga senaste 4 veckorna.
    - `success_recent`: andelen lyckade uppgångar senaste 4 veckorna (`all`), per marknadsläge (`by_regime`, nycklarna
      förklaras i `regime_texts`) och per strategi (`by_strategy`), med `successes` av `cases` och 95 % intervall `ci`.
    - `patterns."2v"`, `"6v"` och `"lage"` (`"3"`/`"5"` dagar): kännetecken bland de 20 % största rörelserna mot index

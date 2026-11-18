@@ -4,7 +4,7 @@ import { test } from "node:test";
 
 import {
   decidedShareText, isPullbackLabel, labelClass, labelCounts, levelText, netText, priceText, reportText, riskText, shareText,
-  altStopText, bbLevelText, ciShareText, evalName, evalTraits, ppText, successCount, breakoutLines, criteriaLines, depthsText, momentumText, todayVolumeText, volumeRuleLines, missingText, resistanceRText, todayInvalid, todayLines, todayOrder, TODAY_STATUS,
+  altStopText, bbLevelText, ciShareText, evalName, evalTraits, ppText, successCount, rsiWarnText, sectorOutcomeText, weeklyOutcomeText, breakoutLines, criteriaLines, depthsText, momentumText, todayVolumeText, volumeRuleLines, missingText, resistanceRText, todayInvalid, todayLines, todayOrder, TODAY_STATUS,
   bollingerSourceText, chipText, pctBText, rankText, rankTitle, rText, signalText, srDistText, srInsideText, srLevelText, upperRText, vsBaseText,
 } from "../src/lib/swing.ts";
 
@@ -231,4 +231,16 @@ test("Swing-utvärderingen: filtret för lyckade fall", () => {
   assert.deepEqual(successCount(idx, { strategy: "stark", sector: "", regime: "" }), { successes: 1, cases: 2 });
   assert.deepEqual(successCount(idx, { strategy: "pullback", sector: "industri", regime: "upp-lugn" }), { successes: 1, cases: 1 });
   assert.deepEqual(successCount(idx, { strategy: "", sector: "", regime: "ned-orolig" }), { successes: 1, cases: 1 });
+});
+
+test("Swing-utvärderingen: RSI-varning, sektorns och veckans utfall", () => {
+  assert.equal(rsiWarnText(28.4, 30), "⚠ RSI(14) 28");
+  assert.equal(rsiWarnText(30, 30), "⚠ RSI(14) 30");
+  assert.equal(rsiWarnText(31, 30), null);
+  assert.equal(rsiWarnText(null, 30), null);
+  assert.equal(sectorOutcomeText({ cases: 24, successes: 5, bad: 13, share: 0.2083, bad_share: 0.5417 }),
+    "sektorn 4 v: lyckade 21 % · dåliga 54 % (24 uppgångar)");
+  assert.equal(sectorOutcomeText({ cases: 0, successes: 0, bad: 0, share: null, bad_share: null }), null);
+  assert.equal(weeklyOutcomeText({ week: "2026-W45", cases: 104, successes: 15, bad: 20, share: 0.1442, bad_share: 0.1923,
+    share_arrow: "↓", bad_arrow: "↓" }), "v. 45: lyckade 14 % ↓ · dåliga 19 % ↓ (104)");
 });
