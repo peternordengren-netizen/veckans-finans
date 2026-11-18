@@ -350,7 +350,14 @@ const morningTime = morning
         swing && (
           <section class="sector" id="sektor-swing" data-view-panel tabindex="0">
             <h2>Swing</h2>
-            {swingEval && <SwingEvalPanel ev={swingEval} />}
+            {
+              swingEval && (
+                <details class="fold">
+                  <summary>Utvärdering: marknadsläge, larm, gårdagens rörelser, mönster och lyckade fall</summary>
+                  <SwingEvalPanel ev={swingEval} />
+                </details>
+              )
+            }
             <SwingPanel swing={swing} ev={swingEval} />
           </section>
         )
@@ -816,5 +823,15 @@ const morningTime = morning
   }
   :global(button.show-all[hidden]) {
     display: none;
+  }
+  /* Utvärderingen i Swing ihopfälld under en rubrik. */
+  .fold {
+    margin: 4px 0 16px;
+  }
+  .fold > summary {
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 1.0625rem;
+    margin-bottom: 8px;
   }
 </style>

@@ -848,6 +848,8 @@ const rankHist = pbHist?.ranking ?? null;
     </div>
   </div>
 
+  <details class="fold">
+    <summary>Historik: hur ofta strategierna nått målet före stoppet tidigare</summary>
   {
     vcHist && vcHist.all && (
       <section class="history" aria-labelledby="swing-vcp">
@@ -1130,6 +1132,7 @@ const rankHist = pbHist?.ranking ?? null;
       )
     }
   </section>
+  </details>
 </div>
 
 <script>
@@ -1486,6 +1489,15 @@ const rankHist = pbHist?.ranking ?? null;
   }
   .history h3 {
     margin: 0 0 6px;
+    font-size: 1.0625rem;
+  }
+  /* Historiken ihopfälld under en rubrik, så att bara huvudtabellen syns direkt. */
+  .fold {
+    margin-top: 20px;
+  }
+  .fold > summary {
+    cursor: pointer;
+    font-weight: 600;
     font-size: 1.0625rem;
   }
 </style>
