@@ -401,3 +401,10 @@ export function weeklyOutcomeText(w: OutcomeRates & { week: string; share_arrow:
   const arrow = (a: string | null) => (a ? ` ${a}` : "");
   return `v. ${Number(w.week.slice(-2))}: lyckade ${wholePct(w.share)}${arrow(w.share_arrow)} · dåliga ${wholePct(w.bad_share)}${arrow(w.bad_arrow)} (${w.cases})`;
 }
+
+/** Rotationer: en förändring i postens enhet: "+1,2 pe", "+9,6 rp", "−3,9 %"; "–" utan värde. */
+export function rotationChangeText(v: number | null | undefined, unit: "pe" | "bp" | "pct"): string {
+  if (v === null || v === undefined) return "–";
+  const f = new Intl.NumberFormat("sv-SE", { minimumFractionDigits: 1, maximumFractionDigits: 1, signDisplay: "exceptZero" });
+  return `${f.format(v)} ${unit === "pe" ? "pe" : unit === "bp" ? "rp" : "%"}`;
+}

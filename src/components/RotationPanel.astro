@@ -1,0 +1,137 @@
+---
+/**
+ * Vyn Rotationer (scripts/rotation.py, data/rotation/<datum>.json): svenska sektorers och de globala
+ * sektor-ETF:ernas relativa styrka och omsättning, räntor, USD/SEK och råvaror, rangordnade efter hur ovanlig
+ * 5-dagarsförändringen är. Beskrivande, inga uppmaningar.
+ */
+import type { RotationView } from "../lib/data";
+import { shortDate } from "../lib/format";
+import { rotationChangeText } from "../lib/swing";
+
+interface Props {
+  rotation: RotationView;
+}
+const { rotation } = Astro.props;
+const th = rotation.thresholds;
+const rows = [...rotation.items].sort(
+  (a, b) => (b.z5 === null ? -1 : Math.abs(b.z5)) - (a.z5 === null ? -1 : Math.abs(a.z5)) || a.name.localeCompare(b.name, "sv"),
+);
+const one = new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 1 });
+const two = new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 2 });
+const ratio = (v: number | null | undefined) => (v === null || v === undefined ? "–" : `${two.format(v)}×`);
+const day = (iso: string) => `${shortDate(iso)} ${iso.slice(0, 4)}`;
+---
+
+<div class="rotation">
+  <p class="note">
+    Stängningen {day(rotation.as_of)}. Rangordnat efter hur ovanlig 5-dagarsförändringen är (z: förändringen delad med
+    det senaste årets typiska 5-dagarsförändring); de {th.top_n} första visas. Beskriver rörelser bakåt i tiden.
+  </p>
+  <div class="hist-wrap">
+    <table class="hist">
+      <thead>
+        <tr>
+          <th scope="col">Område</th>
+          <th scope="col">Post</th>
+          <th scope="col" class="num">5 dagar</th>
+          <th scope="col" class="num">20 dagar</th>
+          <th scope="col" class="num">Omsättning 5 / 20 d</th>
+          <th scope="col" class="num">Ovanlighet (z)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((r) => (
+          <tr>
+            <td>{r.group}</td>
+            <th scope="row">
+              {r.name}
+              {r.benchmark && <span class="sub">mot {r.benchmark}{r.companies && r.companies > 1 ? `, ${r.companies} bolag` : ""}</span>}
+              {r.last !== undefined && <span class="sub">senast {two.format(r.last)}{r.unit === "bp" ? " %" : ""}</span>}
+            </th>
+            <td class="num">{rotationChangeText(r.rs5_pp ?? r.chg5, r.unit)}</td>
+            <td class="num">{rotationChangeText(r.rs20_pp ?? r.chg20, r.unit)}</td>
+            <td class="num">{r.unit === "pe" ? `${ratio(r.volume5_ratio)} / ${ratio(r.volume20_ratio)}` : "–"}</td>
+            <td class="num">{r.z5 === null ? "–" : one.format(r.z5)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+  <details class="how">
+    <summary>Så räknas</summary>
+    <ul>
+      <li>
+        <strong>Svenska sektorer:</strong> snittet av bevakningslistans bolag i sektorn (justerad stängning) minus OMX
+        Stockholm PI, i procentenheter (pe), senaste 5 och 20 handelsdagarna. Omsättning: sektorns samlade omsättning per
+        dag senaste 5 respektive 20 dagarna mot snittet för de {th.volume_base_days} dagarna före.
+      </li>
+      <li>
+        <strong>Globala sektorer:</strong> de amerikanska sektor-ETF:erna (Select Sector SPDR) mot S&amp;P 500 (SPY), på
+        samma sätt. De följer den amerikanska börsen, som stänger efter den svenska.
+      </li>
+      <li>
+        <strong>Räntor och valuta:</strong> svensk och amerikansk 10-årig statsobligation (förändring i räntepunkter, rp)
+        och USD/SEK, ur Riksbankens öppna API. <strong>Råvaror:</strong> Brent och koppar (terminer) ur Yahoo, i procent.
+      </li>
+      <li>
+        <strong>Ovanlighet (z):</strong> 5-dagarsförändringen delad med standardavvikelsen för postens 5-dagarsförändringar
+        det senaste året ({th.z_year} dagar). Över 2 i absolut tal är ovanligt för posten. Tecknet följer förändringen.
+      </li>
+    </ul>
+  </details>
+</div>
+
+<style>
+  .note {
+    color: var(--muted);
+    font-size: 0.875rem;
+    max-width: 80ch;
+  }
+  .hist-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 0.875rem;
+    font-variant-numeric: tabular-nums;
+  }
+  th,
+  td {
+    padding: 6px 10px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+    vertical-align: top;
+  }
+  tbody tr:last-child > * {
+    border-bottom: 0;
+  }
+  thead th {
+    background: var(--surface-2);
+  }
+  tbody th {
+    font-weight: 600;
+    white-space: normal;
+  }
+  .num {
+    text-align: right;
+  }
+  .sub {
+    display: block;
+    font-weight: normal;
+    color: var(--muted);
+    font-size: 0.8125rem;
+  }
+  .how {
+    margin-top: 12px;
+    font-size: 0.875rem;
+    max-width: 90ch;
+  }
+  .how summary {
+    cursor: pointer;
+  }
+</style>

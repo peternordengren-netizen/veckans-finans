@@ -862,6 +862,20 @@ utan courtage. Mönstren och de lyckade fallen beskriver vad som hänt, inte vad
 
 Kräver Node 22 eller senare.
 
+**Vyer** (sedan 2026-11-18): en rullista "Vy" ersätter flikraden. Rotationer (förvald), Swing, Signaler och Rapporter
+(Rapporterade bolag), och under rubrikerna "Nyheter per sektor" och "Mer" sektorernas nyheter, Kurs mot vinst,
+Kommande vecka och Insyn. Bara vald vy visas; senast valda vy sparas i webbläsaren och står i adressfältet
+(`#sektor-<id>`). Varje tabell i vyerna visar högst 10 rader med "Visa alla (N)", också efter sortering och filter.
+Startsidans tabeller (kurssignaler, kursreaktion, Handelsbanken) är ihopfällda under "Visa tabellen". Globala drivare
+och en ny vy Rapporter (avvikelse mot förväntan) byggs efter 2026-11-23.
+
+**Rotationer** (`scripts/rotation.py`, `data/rotation/<datum>.json`, i kvällsbygget och som reserv på morgonen):
+svenska sektorers relativa styrka mot OMX Stockholm PI och omsättning mot snitt (5 och 20 dagar, samma kursdata som
+swinglistan), de amerikanska sektor-ETF:erna (XLK, XLF, XLE, XLV, XLI, XLY, XLP, XLU, XLB, XLRE, XLC) mot SPY,
+svensk och amerikansk 10-årsränta och USD/SEK ur Riksbankens öppna API (SEGVB10YC, USGVB10Y, SEKUSDPMI) och Brent
+(BZ=F) och koppar (HG=F) ur Yahoo. Rangordnat efter hur ovanlig 5-dagarsförändringen är (z mot det senaste årets
+5-dagarsförändringar); de 10 första visas. Ett batchanrop till Yahoo och ett anrop per Riksbanksserie.
+
 ```bash
 npm install
 npm run dev:mock      # utveckling mot data/mock/ – http://localhost:4321/veckans-finans/

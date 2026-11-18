@@ -185,6 +185,8 @@ const HB_MORGONRAPPORT_URL = "https://www.handelsbanken.se/sv/foretag/kund-hos-o
     {report.price.companies.length === 0 && <p class="empty">Inga kurssignaler.</p>}
     {
       report.price.companies.length > 0 && (
+        <details class="table-fold">
+        <summary>Visa tabellen ({report.price.companies.length} bolag)</summary>
         <div class="table-wrap">
           <table>
             <thead>
@@ -215,6 +217,7 @@ const HB_MORGONRAPPORT_URL = "https://www.handelsbanken.se/sv/foretag/kund-hos-o
             </tbody>
           </table>
         </div>
+        </details>
       )
     }
   </section>
@@ -441,5 +444,12 @@ const HB_MORGONRAPPORT_URL = "https://www.handelsbanken.se/sv/foretag/kund-hos-o
   .podcast {
     margin: 0 0 8px;
     font-size: 0.9rem;
+  }
+  /* Tabellen ihopfälld under "Visa tabellen" (färre synliga tabeller på startsidan). */
+  .table-fold > summary {
+    cursor: pointer;
+    font-size: 0.875rem;
+    color: var(--muted);
+    margin: 4px 0 8px;
   }
 </style>

@@ -93,6 +93,8 @@ const od = s.our_data ?? [];
     od.length > 0 && (
       <>
         <h4>Vad vår data visar</h4>
+        <details class="table-fold">
+        <summary>Visa tabellen ({od.length} bolag)</summary>
         <div class="hb-table-wrap">
           <table class="hb-table">
             <thead>
@@ -120,6 +122,7 @@ const od = s.our_data ?? [];
             </tbody>
           </table>
         </div>
+        </details>
         <p class="hb-source">
           Värdena kommer ur sidans egna filer
           {s.data_sources && ` (signaler ${s.data_sources.signals ?? "–"}, Kurs mot vinst ${s.data_sources.valuation ?? "–"}, rapportkalendern från ${shortDate(s.data_sources.calendar_from)})`}.
@@ -201,5 +204,12 @@ const od = s.our_data ?? [];
   .hb-source {
     font-size: 0.8rem;
     color: var(--muted);
+  }
+  /* Tabellen ihopfälld under "Visa tabellen" (färre synliga tabeller på startsidan). */
+  .table-fold > summary {
+    cursor: pointer;
+    font-size: 0.875rem;
+    color: var(--muted);
+    margin: 4px 0 8px;
   }
 </style>

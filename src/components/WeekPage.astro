@@ -9,6 +9,7 @@ import CalendarPanel from "./CalendarPanel.astro";
 import SignalsPanel from "./SignalsPanel.astro";
 import SwingPanel from "./SwingPanel.astro";
 import SwingEvalPanel from "./SwingEvalPanel.astro";
+import RotationPanel from "./RotationPanel.astro";
 import HbSummaryView from "./HbSummary.astro";
 import type { HbSummary as HbSummaryData } from "../lib/hb";
 import ResultsPanel from "./ResultsPanel.astro";
@@ -24,6 +25,7 @@ import {
   loadMorning,
   loadLatestSwing,
   loadSwingEval,
+  loadLatestRotation,
   loadResults,
   loadUpdateResults,
   weekLabel,
@@ -49,6 +51,8 @@ const { view, weeks, morning = null, afternoon = null, hb = [] } = Astro.props;
 const swing = view.week === weeks[0] && !view.mock ? loadLatestSwing() : null;
 // Den dagliga utvärderingen överst i Swing (data/raw/swing_eval/, scripts/swing_eval.py).
 const swingEval = swing ? loadSwingEval() : null;
+// Vyn Rotationer (data/rotation/, scripts/rotation.py), bara för senaste veckan.
+const rotation = view.week === weeks[0] && !view.mock ? loadLatestRotation() : null;
 const afternoonTime = afternoon
   ? new Date(afternoon.generated_at).toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Stockholm" })
   : null;
@@ -216,124 +220,49 @@ const morningTime = morning
         )
       }
 
-      <div class="tabs" role="tablist" aria-label="Sektorer" data-tabs data-sticky-tabs hidden>
-        {
-          view.sectors.map((s, i) => (
-            <button
-              type="button"
-              role="tab"
-              id={`tab-${s.sector.id}`}
-              aria-controls={`sektor-${s.sector.id}`}
-              aria-selected={i === 0 ? "true" : "false"}
-              tabindex={i === 0 ? 0 : -1}
-              data-sector={s.sector.id}
-            >
-              {s.sector.name}
-              <span class="count">{s.items.length}</span>
-            </button>
-          ))
-        }
-        {
-          view.results && (
-            <button
-              type="button"
-              role="tab"
-              id="tab-rapporterade"
-              aria-controls="sektor-rapporterade"
-              aria-selected="false"
-              tabindex={-1}
-              data-sector="rapporterade"
-            >
-              Rapporterade bolag
-              <span class="count">{view.results.reports.length}</span>
-            </button>
-          )
-        }
-        {
-          view.signals && (
-            <button
-              type="button"
-              role="tab"
-              id="tab-signaler"
-              aria-controls="sektor-signaler"
-              aria-selected="false"
-              tabindex={-1}
-              data-sector="signaler"
-            >
-              Signaler
-              <span class="count">{view.signals.rows.filter((r) => r.signals.length > 0).length}</span>
-            </button>
-          )
-        }
-        {
-          swing && (
-            <button
-              type="button"
-              role="tab"
-              id="tab-swing"
-              aria-controls="sektor-swing"
-              aria-selected="false"
-              tabindex={-1}
-              data-sector="swing"
-            >
-              Swing
-              <span class="count">{swing.rows.filter((r) => r.labels.some((l) => !l.startsWith("trend"))).length}</span>
-            </button>
-          )
-        }
-        {
-          view.valuation && (
-            <button
-              type="button"
-              role="tab"
-              id="tab-kurs-mot-vinst"
-              aria-controls="sektor-kurs-mot-vinst"
-              aria-selected="false"
-              tabindex={-1}
-              data-sector="kurs-mot-vinst"
-            >
-              Kurs mot vinst
-            </button>
-          )
-        }
-        {
-          view.calendar && (
-            <button
-              type="button"
-              role="tab"
-              id="tab-kommande-vecka"
-              aria-controls="sektor-kommande-vecka"
-              aria-selected="false"
-              tabindex={-1}
-              data-sector="kommande-vecka"
-            >
-              Kommande vecka
-              <span class="count">{view.calendar.events.length}</span>
-            </button>
-          )
-        }
-        {
-          view.analysis && (
-            <button
-              type="button"
-              role="tab"
-              id="tab-insyn"
-              aria-controls="sektor-insyn"
-              aria-selected={view.sectors.length === 0 ? "true" : "false"}
-              tabindex={view.sectors.length === 0 ? 0 : -1}
-              data-sector="insyn"
-            >
-              Insyn
-            </button>
-          )
-        }
+      <div class="views" data-views hidden>
+        <label class="view-label">
+          Vy
+          <select data-view-select>
+            {rotation && <option value="rotationer">Rotationer</option>}
+            {swing && <option value="swing">Swing</option>}
+            {view.signals && (
+              <option value="signaler">Signaler ({view.signals.rows.filter((r) => r.signals.length > 0).length})</option>
+            )}
+            {view.results && <option value="rapporterade">Rapporter ({view.results.reports.length})</option>}
+            {view.sectors.length > 0 && (
+              <optgroup label="Nyheter per sektor">
+                {view.sectors.map((s) => (
+                  <option value={s.sector.id}>{s.sector.name} ({s.items.length})</option>
+                ))}
+              </optgroup>
+            )}
+            {(view.valuation || view.calendar || view.analysis) && (
+              <optgroup label="Mer">
+                {view.valuation && <option value="kurs-mot-vinst">Kurs mot vinst</option>}
+                {view.calendar && <option value="kommande-vecka">Kommande vecka ({view.calendar.events.length})</option>}
+                {view.analysis && <option value="insyn">Insyn</option>}
+              </optgroup>
+            )}
+          </select>
+        </label>
+        <span class="view-hint">Bara vald vy visas; tabellerna visar högst 10 rader.</span>
       </div>
+
+      {
+        rotation && (
+          <section class="sector" id="sektor-rotationer" data-view-panel tabindex="0">
+            <h2>Rotationer</h2>
+            <RotationPanel rotation={rotation} />
+          </section>
+        )
+      }
 
       {view.sectors.length === 0 && <p class="empty">Inga nyheter den här veckan.</p>}
 
       {
         view.sectors.map((s) => (
-          <section class="sector" id={`sektor-${s.sector.id}`} role="tabpanel" aria-labelledby={`tab-${s.sector.id}`} tabindex="0">
+          <section class="sector" id={`sektor-${s.sector.id}`} data-view-panel tabindex="0">
             <h2>{s.sector.name}</h2>
             <p class="sector-summary">{s.summary}</p>
 
@@ -401,7 +330,7 @@ const morningTime = morning
 
       {
         view.results && (
-          <section class="sector" id="sektor-rapporterade" role="tabpanel" aria-labelledby="tab-rapporterade" tabindex="0">
+          <section class="sector" id="sektor-rapporterade" data-view-panel tabindex="0">
             <h2>Rapporterade bolag</h2>
             <ResultsPanel results={view.results} />
           </section>
@@ -410,7 +339,7 @@ const morningTime = morning
 
       {
         view.signals && (
-          <section class="sector" id="sektor-signaler" role="tabpanel" aria-labelledby="tab-signaler" tabindex="0">
+          <section class="sector" id="sektor-signaler" data-view-panel tabindex="0">
             <h2>Signaler</h2>
             <SignalsPanel signals={view.signals} reported={(view.results?.reports ?? []).map((r) => r.ticker)} />
           </section>
@@ -419,7 +348,7 @@ const morningTime = morning
 
       {
         swing && (
-          <section class="sector" id="sektor-swing" role="tabpanel" aria-labelledby="tab-swing" tabindex="0">
+          <section class="sector" id="sektor-swing" data-view-panel tabindex="0">
             <h2>Swing</h2>
             {swingEval && <SwingEvalPanel ev={swingEval} />}
             <SwingPanel swing={swing} ev={swingEval} />
@@ -429,7 +358,7 @@ const morningTime = morning
 
       {
         view.valuation && (
-          <section class="sector" id="sektor-kurs-mot-vinst" role="tabpanel" aria-labelledby="tab-kurs-mot-vinst" tabindex="0">
+          <section class="sector" id="sektor-kurs-mot-vinst" data-view-panel tabindex="0">
             <h2>Kurs mot vinst</h2>
             <ValuationPanel valuation={view.valuation} />
           </section>
@@ -438,7 +367,7 @@ const morningTime = morning
 
       {
         view.calendar && (
-          <section class="sector" id="sektor-kommande-vecka" role="tabpanel" aria-labelledby="tab-kommande-vecka" tabindex="0">
+          <section class="sector" id="sektor-kommande-vecka" data-view-panel tabindex="0">
             <h2>Kommande vecka</h2>
             <CalendarPanel calendar={view.calendar} />
           </section>
@@ -447,7 +376,7 @@ const morningTime = morning
 
       {
         view.analysis && (
-          <section class="sector" id="sektor-insyn" role="tabpanel" aria-labelledby="tab-insyn" tabindex="0">
+          <section class="sector" id="sektor-insyn" data-view-panel tabindex="0">
             <h2>Insyn</h2>
             <AnalysisPanel analysis={view.analysis} />
           </section>
@@ -458,61 +387,74 @@ const morningTime = morning
 </Base>
 
 <script>
-  // Flikar: visa en sektor åt gången, synka med #sektor-<id> i adressfältet.
-  const tablist = document.querySelector<HTMLElement>("[data-tabs]");
-  if (tablist) {
-    const tabs = Array.from(tablist.querySelectorAll<HTMLButtonElement>('[role="tab"]'));
-    const panels = tabs.map((t) => document.getElementById(t.getAttribute("aria-controls")!)!);
-
-    const select = (index: number, focus = false, updateHash = true) => {
-      tabs.forEach((t, i) => {
-        const active = i === index;
-        t.setAttribute("aria-selected", String(active));
-        t.tabIndex = active ? 0 : -1;
-        panels[i].hidden = !active;
-      });
-      if (focus) tabs[index].focus();
-      // Scrolla bara flikraden i sidled (mobil), aldrig hela sidan.
-      const t = tabs[index];
-      if (t.offsetLeft < tablist.scrollLeft || t.offsetLeft + t.offsetWidth > tablist.scrollLeft + tablist.clientWidth) {
-        tablist.scrollTo({ left: t.offsetLeft - 16, behavior: "smooth" });
+  // Vyer: rullistan "Vy" visar en sektion åt gången och synkar med #sektor-<id> i adressfältet; senast valda vy
+  // sparas i webbläsaren. Utan JavaScript visas alla sektioner.
+  const viewSelect = document.querySelector<HTMLSelectElement>("[data-view-select]");
+  const panels = Array.from(document.querySelectorAll<HTMLElement>("section[data-view-panel]"));
+  if (viewSelect && panels.length > 0) {
+    const ids = Array.from(viewSelect.options).map((o) => o.value);
+    const show = (id: string, updateHash = true) => {
+      panels.forEach((p) => (p.hidden = p.id !== `sektor-${id}`));
+      viewSelect.value = id;
+      if (updateHash) history.replaceState(null, "", `#sektor-${id}`);
+      try {
+        localStorage.setItem("vf-vy", id);
+      } catch {
+        /* utan lagring: inget att spara */
       }
-      if (updateHash) history.replaceState(null, "", `#sektor-${tabs[index].dataset.sector}`);
     };
-
-    tabs.forEach((t, i) => t.addEventListener("click", () => select(i)));
-    tablist.addEventListener("keydown", (e) => {
-      const current = tabs.findIndex((t) => t.getAttribute("aria-selected") === "true");
-      const keys: Record<string, number> = {
-        ArrowRight: (current + 1) % tabs.length,
-        ArrowLeft: (current - 1 + tabs.length) % tabs.length,
-        Home: 0,
-        End: tabs.length - 1,
-      };
-      if (e.key in keys) {
-        e.preventDefault();
-        select(keys[e.key], true);
-      }
-    });
-
-    // Sektorn i adressfältet, eller sektorn som innehåller en länkad nyhet.
+    // Vyn i adressfältet, eller vyn som innehåller en länkad nyhet.
     const fromHash = () => {
       const target = location.hash ? document.getElementById(decodeURIComponent(location.hash.slice(1))) : null;
-      const panel = target?.closest<HTMLElement>('[role="tabpanel"]');
-      return { target, index: panel ? Math.max(0, panels.indexOf(panel)) : 0, isPanel: target === panel };
+      const panel = target?.closest<HTMLElement>("section[data-view-panel]");
+      const id = panel ? panel.id.replace(/^sektor-/, "") : null;
+      return { target, id: id && ids.includes(id) ? id : null, isPanel: target === panel };
     };
-
+    let saved: string | null = null;
+    try {
+      saved = localStorage.getItem("vf-vy");
+    } catch {
+      saved = null;
+    }
     const start = fromHash();
-    tablist.hidden = false;
+    document.querySelector<HTMLElement>("[data-views]")!.hidden = false;
     document.documentElement.classList.add("has-tabs");
-    select(start.index, false, false);
+    show(start.id ?? (saved && ids.includes(saved) ? saved : ids[0]), false);
     if (start.target && !start.isPanel) start.target.scrollIntoView();
-
+    viewSelect.addEventListener("change", () => show(viewSelect.value));
     window.addEventListener("hashchange", () => {
       const h = fromHash();
-      select(h.index, false, false);
+      if (!h.id) return;
+      show(h.id, false);
       if (h.target && !h.isPanel) h.target.scrollIntoView();
     });
+  }
+
+  // Högst 10 rader i varje tabell i vyerna, med "Visa alla" (räknar bara rader som filtren inte dolt; sortering och
+  // filter i tabellerna fungerar som förut).
+  const LIMIT = 10;
+  for (const table of document.querySelectorAll<HTMLTableElement>("section[data-view-panel] table")) {
+    const body = table.tBodies[0];
+    if (!body || body.rows.length <= LIMIT) continue;
+    table.dataset.limit = String(LIMIT);
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "show-all";
+    const wrap = table.closest(".table-outer, .hist-wrap, .table-wrap") ?? table;
+    wrap.after(btn);
+    const update = () => {
+      const visible = Array.from(body.rows).filter((r) => !r.hidden).length;
+      const all = table.hasAttribute("data-show-all");
+      btn.hidden = visible <= LIMIT;
+      btn.textContent = all ? `Visa ${LIMIT} rader` : `Visa alla (${visible})`;
+      btn.setAttribute("aria-expanded", String(all));
+    };
+    btn.addEventListener("click", () => {
+      table.toggleAttribute("data-show-all");
+      update();
+    });
+    new MutationObserver(update).observe(body, { attributes: true, attributeFilter: ["hidden"], subtree: true });
+    update();
   }
 
   // Startsidan: säg till om morgonrapporten inte är dagens (helg, börsstängt eller före 08:10).
@@ -836,5 +778,43 @@ const morningTime = morning
     overflow: hidden;
     clip: rect(0 0 0 0);
     white-space: nowrap;
+  }
+  .views {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 16px;
+    margin: 16px 0 8px;
+  }
+  .views[hidden] {
+    display: none;
+  }
+  .view-label {
+    font-weight: 600;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .view-label select {
+    font: inherit;
+    font-weight: normal;
+    padding: 4px 8px;
+  }
+  .view-hint {
+    color: var(--muted);
+    font-size: 0.875rem;
+  }
+  :global(table[data-limit]:not([data-show-all]) > tbody > tr:nth-child(n + 11 of :not([hidden]))) {
+    display: none;
+  }
+  :global(button.show-all) {
+    margin: 8px 0 4px;
+    font: inherit;
+    font-size: 0.875rem;
+    padding: 4px 10px;
+    cursor: pointer;
+  }
+  :global(button.show-all[hidden]) {
+    display: none;
   }
 </style>

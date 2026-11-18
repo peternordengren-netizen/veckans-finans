@@ -289,3 +289,32 @@ def test_morgonen_anvander_kvallens_kurser():
                                                                                           "of": 2},
                         "index_change_pct": 1.0, "thresholds": {"volume_ratio": 2.0, "near_52w_pct": 2.0}, "companies": []})
     assert data["price"]["day"] == "2026-10-16"  # ingen kurshämtning på morgonen
+
+
+def test_rotationer_bygger_och_validerar(tmp_path):
+    """Vyn Rotationer med påhittade kurser: sektorernas relativa styrka, nivåserier och topplistan."""
+    import rotation
+
+    days = []
+    d = date(2025, 10, 1)
+    while len(days) < 300:
+        if d.weekday() < 5:
+            days.append(d)
+        d += timedelta(days=1)
+    mk = lambda cs, v=1000.0: [Bar(dd, c, c, c, c, v, c) for dd, c in zip(days, cs)]  # noqa: E731
+    flat = [100.0] * 300
+    up = [100.0] * 280 + [100.0 + k for k in range(1, 21)]  # +20 % sista 20 dagarna
+    bars = {"^OMXSPI": mk(flat), "ALFA.ST": mk(up), "BETA.ST": mk(flat), "SPY": mk(flat), "XLK": mk(up),
+            "BZ=F": mk([80.0 + (k % 7) * 0.3 for k in range(299)] + [90.0]), "HG=F": mk([5.0] * 300)}
+    insts = {"ALFA": Instrument("Alfaverken", (), "ALFA", "ALFA.ST", "Stockholm", sektor="industri"),
+             "BETA": Instrument("Betabolaget", (), "BETA", "BETA.ST", "Stockholm", sektor="bank")}
+    rb = {"SEGVB10YC": [(dd, 2.5 + (k % 5) * 0.01) for k, dd in enumerate(days)]}
+    data = rotation.build(days[-1], NOW, bars, insts, {"industri": "Industri", "bank": "Banker"}, rb, MONDAY)
+    by = {i["key"]: i for i in data["items"]}
+    assert by["se:industri"]["rs20_pp"] > 0 and by["se:bank"]["rs20_pp"] == 0
+    assert by["us:XLK"]["rs5_pp"] > 0 and by["BZ=F"]["chg5"] > 0 and by["SEGVB10YC"]["unit"] == "bp"
+    assert "HG=F" in by and by["HG=F"]["z5"] is None  # oförändrad: ingen spridning att jämföra med
+    assert rotation.validate(data) == [] and data["top"][0] == max(
+        (i for i in data["items"] if i["z5"] is not None), key=lambda i: abs(i["z5"]))["key"]
+    data["top"] = list(reversed(data["top"]))
+    assert rotation.validate(data)

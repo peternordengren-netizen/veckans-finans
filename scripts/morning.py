@@ -395,6 +395,9 @@ def main(argv: list[str] | None = None, fetch_bars: BarFetcher = yahoo_bars,
         print(f"Swing {today} finns redan från kvällens bygge.")
     else:
         write_swing(today, now, instruments, fetch_once)
+    # Rotationer: saknas kvällens fil byggs den nu (förra handelsdagens stängning).
+    if not (DATA_DIR / "rotation" / f"{today}.json").exists() and data["price"]["day"]:
+        write_rotation_for(today, date.fromisoformat(data["price"]["day"]), now, instruments, fetch_once)
     if data["retry"]:
         for e in data["errors"]:
             print(f"FEL: {e}")
@@ -512,7 +515,21 @@ def evening(today: date, now: datetime, fetch_bars: BarFetcher = yahoo_bars, eve
         print(f"Dagens kurser ({today}) saknas än hos Yahoo – Swing byggs inte; nytt försök 21:00, annars tar morgonen det.")
         return 2
     (write_swing_fn or write_swing)(target, now, instruments, fetch_once)
+    if write_swing_fn is None:
+        write_rotation_for(target, today, now, instruments, fetch_once)
     return 0
+
+
+def write_rotation_for(target: date, day: date, now: datetime, instruments: dict[str, Instrument],
+                       fetch: BarFetcher) -> None:
+    """Vyn Rotationer (scripts/rotation.py) med samma cachade kurshämtning; fel stoppar inte anroparen."""
+    import rotation
+
+    try:
+        sectors = {x["id"]: x["name"] for x in json.loads((DATA_DIR / "sectors.json").read_text(encoding="utf-8"))}
+    except (OSError, ValueError):
+        sectors = {}
+    rotation.write_rotation(target, day, now, listed(instruments, day), fetch, sectors)
 
 
 def validate_pruned(data: dict, instruments: dict[str, Instrument]):

@@ -65,6 +65,8 @@ const dayCol = mode === "today" ? "I dag" : "Dagen";
   {report.companies.length === 0 && <p class="empty">Inga rapporter från bolag i bevakningslistan sedan förra handelsdagens stängning.</p>}
   {
     reacted.length > 0 && (
+      <details class="table-fold">
+      <summary>Visa tabellen ({reacted.length} bolag)</summary>
       <div class="table-outer" data-table-outer>
       <div class="table-wrap" data-table-wrap>
         <table>
@@ -172,6 +174,7 @@ const dayCol = mode === "today" ? "I dag" : "Dagen";
         </table>
       </div>
       </div>
+      </details>
     )
   }
   {
@@ -379,5 +382,12 @@ const dayCol = mode === "today" ? "I dag" : "Dagen";
     overflow: hidden;
     clip: rect(0 0 0 0);
     white-space: nowrap;
+  }
+  /* Tabellen ihopfälld under "Visa tabellen" (färre synliga tabeller på startsidan). */
+  .table-fold > summary {
+    cursor: pointer;
+    font-size: 0.875rem;
+    color: var(--muted);
+    margin: 4px 0 8px;
   }
 </style>

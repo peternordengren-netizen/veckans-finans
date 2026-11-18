@@ -413,6 +413,37 @@ export interface SwingView {
 }
 
 /** Senaste swingfilen (data/swing/<datum>.json) med historiken, eller null. Valfri; en trasig fil visas inte. */
+/** En post i vyn Rotationer (scripts/rotation.py). */
+export interface RotationItem {
+  key: string; name: string; group: string;
+  /** "pe" (relativ styrka i procentenheter), "bp" (räntepunkter) eller "pct" (procent). */
+  unit: "pe" | "bp" | "pct";
+  benchmark?: string; companies?: number; day?: string; last?: number;
+  rs5_pp?: number; rs20_pp?: number; volume5_ratio?: number | null; volume20_ratio?: number | null;
+  chg5?: number; chg20?: number;
+  /** Hur ovanlig 5-dagarsförändringen är mot det senaste årets 5-dagarsförändringar. */
+  z5: number | null;
+}
+export interface RotationView {
+  date: string; as_of: string; generated_at: string;
+  thresholds: { horizons: number[]; volume_base_days: number; z_year: number; top_n: number };
+  items: RotationItem[]; top: string[]; errors?: string[];
+}
+
+/** Senaste rotationsfilen (data/rotation/<datum>.json), eller null. */
+export function loadLatestRotation(): RotationView | null {
+  const dir = join(DATA, "rotation");
+  if (IS_MOCK || !existsSync(dir)) return null;
+  const files = readdirSync(dir).filter((f) => f.endsWith(".json") && DATE_RE.test(f.slice(0, -5))).sort();
+  if (files.length === 0) return null;
+  try {
+    return readJson<RotationView>(join(dir, files[files.length - 1]));
+  } catch (err) {
+    console.warn(`[veckans-finans] kunde inte läsa rotationsfilen, visar sidan utan:`, err);
+    return null;
+  }
+}
+
 export function loadLatestSwing(): SwingView | null {
   if (!existsSync(SWING_DIR)) return null;
   const files = readdirSync(SWING_DIR)

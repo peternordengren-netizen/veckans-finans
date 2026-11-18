@@ -4,7 +4,7 @@ import { test } from "node:test";
 
 import {
   decidedShareText, isPullbackLabel, labelClass, labelCounts, levelText, netText, priceText, reportText, riskText, shareText,
-  altStopText, bbLevelText, ciShareText, evalName, evalTraits, ppText, successCount, rsiWarnText, sectorOutcomeText, weeklyOutcomeText, breakoutLines, criteriaLines, depthsText, momentumText, todayVolumeText, volumeRuleLines, missingText, resistanceRText, todayInvalid, todayLines, todayOrder, TODAY_STATUS,
+  altStopText, bbLevelText, ciShareText, evalName, evalTraits, ppText, successCount, rsiWarnText, sectorOutcomeText, weeklyOutcomeText, rotationChangeText, breakoutLines, criteriaLines, depthsText, momentumText, todayVolumeText, volumeRuleLines, missingText, resistanceRText, todayInvalid, todayLines, todayOrder, TODAY_STATUS,
   bollingerSourceText, chipText, pctBText, rankText, rankTitle, rText, signalText, srDistText, srInsideText, srLevelText, upperRText, vsBaseText,
 } from "../src/lib/swing.ts";
 
@@ -243,4 +243,11 @@ test("Swing-utvärderingen: RSI-varning, sektorns och veckans utfall", () => {
   assert.equal(sectorOutcomeText({ cases: 0, successes: 0, bad: 0, share: null, bad_share: null }), null);
   assert.equal(weeklyOutcomeText({ week: "2026-W45", cases: 104, successes: 15, bad: 20, share: 0.1442, bad_share: 0.1923,
     share_arrow: "↓", bad_arrow: "↓" }), "v. 45: lyckade 14 % ↓ · dåliga 19 % ↓ (104)");
+});
+
+test("Rotationer: förändringar i postens enhet", () => {
+  assert.equal(rotationChangeText(1.234, "pe"), "+1,2 pe");
+  assert.equal(rotationChangeText(9.6, "bp"), "+9,6 rp");
+  assert.equal(rotationChangeText(-3.92, "pct"), "−3,9 %");
+  assert.equal(rotationChangeText(null, "pct"), "–");
 });
