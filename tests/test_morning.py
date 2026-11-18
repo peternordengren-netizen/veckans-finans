@@ -239,3 +239,53 @@ def test_ett_bolag_med_fel_stoppar_inte_morgonrapporten():
     assert [s["ticker"] for s in data["skipped"]] == ["ALFA"] and "signalerna" in data["skipped"][0]["reason"]
     assert "ALFA" not in [c["ticker"] for c in data["price"]["companies"]]
     assert validate_morning(data, INSTRUMENTS).errors == []
+
+
+def test_kvallens_bygge_for_nasta_handelsdag(tmp_path):
+    """Fredag 18:00: kursdelen för måndagens morgonrapport och swinglistan byggs med fredagens stängning."""
+    import morning
+
+    friday = date(2026, 10, 16)
+
+    def fetch(_tickers, _start, end):
+        assert end >= friday  # fredagens stängning ingår
+        return {"^OMXSPI": _bars(1000.0, [100.0] * 29 + [101.0]), "ALFA.ST": _bars(3000.0, [100.0] * 29 + [110.0]),
+                "BETA.ST": _bars(1000.0, [100.0] * 15 + [120.0] * 14 + [110.0])}
+
+    swung = []
+    evening_dir = tmp_path / "kvall"
+    code = morning.evening(friday, datetime(2026, 10, 16, 18, 0, tzinfo=TZ), fetch, evening_dir,
+                           write_swing_fn=lambda d, *a: swung.append(d), instruments=INSTRUMENTS)
+    assert code == 0 and swung == [MONDAY]  # swinglistan för måndagen
+    saved = json.loads((evening_dir / "2026-10-19.json").read_text(encoding="utf-8"))
+    assert saved["complete"] and saved["price"]["day"] == "2026-10-16"
+    assert morning.load_evening(MONDAY, evening_dir)["day"] == "2026-10-16"  # morgonen tar den
+    assert morning.load_evening(date(2026, 10, 20), evening_dir) is None
+    # Före 17:45 eller på en helgdag: inget.
+    assert morning.evening(friday, datetime(2026, 10, 16, 17, 0, tzinfo=TZ), fetch, evening_dir,
+                           instruments=INSTRUMENTS) == 3
+    assert morning.evening(date(2026, 10, 17), datetime(2026, 10, 17, 21, 0, tzinfo=TZ), fetch, evening_dir,
+                           instruments=INSTRUMENTS) == 3
+
+
+def test_kvallens_bygge_utan_dagens_kurser(tmp_path):
+    """Saknas fredagens kurser (Yahoo har bara torsdagen) sparas kursdelen som ofullständig och Swing byggs inte."""
+    import morning
+
+    def fetch(_tickers, _start, _end):
+        return {k: v[:-1] for k, v in {"^OMXSPI": _bars(1000.0, [100.0] * 30), "ALFA.ST": _bars(1000.0, [100.0] * 30),
+                                       "BETA.ST": _bars(1000.0, [100.0] * 30)}.items()}
+
+    swung = []
+    code = morning.evening(date(2026, 10, 16), datetime(2026, 10, 16, 18, 0, tzinfo=TZ), fetch, tmp_path,
+                           write_swing_fn=lambda d, *a: swung.append(d), instruments=INSTRUMENTS)
+    assert code == 2 and swung == []
+    assert morning.load_evening(MONDAY, tmp_path) is None  # morgonen hämtar själv
+
+
+def test_morgonen_anvander_kvallens_kurser():
+    data = build(MONDAY, NOW, INSTRUMENTS, [], {"events": []}, lambda *a: (_ for _ in ()).throw(AssertionError("hämtning")),
+                 price={"day": "2026-10-16", "expected_day": "2026-10-16", "coverage": {"with_day": 2, "with_expected": 2,
+                                                                                          "of": 2},
+                        "index_change_pct": 1.0, "thresholds": {"volume_ratio": 2.0, "near_52w_pct": 2.0}, "companies": []})
+    assert data["price"]["day"] == "2026-10-16"  # ingen kurshämtning på morgonen

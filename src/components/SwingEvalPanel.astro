@@ -105,11 +105,13 @@ const LIB_MAX = 300;
                   <p class="alerts-head">
                     <strong>Kortsiktigt översåld i upptrend</strong>: RSI(2) under {num(th.oversold_rsi2)} och kursen över
                     200 dagars MA. Marknadsläget nu: {(ev.alerts.oversold.regime_text ?? "–").toLowerCase()}.
+                    {ev.alerts.oversold.broad && ` Bred nedgång: ${ev.alerts.oversold.count} av ${ev.alerts.oversold.of} bolag slog till, så bara de ${ev.alerts.oversold.companies.length} med högst relativ styrka visas.`}
                   </p>
                   <ul>
                     {ev.alerts.oversold.companies.map((c) => (
                       <li>
                         <strong>{c.name}</strong>: RSI(2) {num(c.rsi2)}, {signedPct(c.vs_ma200_pct)} mot 200 dagars MA
+                        {c.rs_pct != null && `, RS ${c.rs_pct}`}
                         {c.sector && ` (${evalName(`sektor:${c.sector}`, texts)})`}
                       </li>
                     ))}

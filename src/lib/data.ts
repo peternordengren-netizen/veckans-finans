@@ -937,7 +937,10 @@ export interface SwingEval {
       similar_successes: number; examples: string[] }[];
     market: { kind: string; text: string }[];
     sector_moves: SwingEvalSectorMove[];
-    oversold: { companies: { ticker: string; name: string; sector: string | null; rsi2: number; vs_ma200_pct: number }[];
+    oversold: { companies: { ticker: string; name: string; sector: string | null; rsi2: number; vs_ma200_pct: number;
+        rs_pct?: number | null }[];
+      /** Antal träffar och listans storlek; broad = fler än 10 % (bara de fem med högst relativ styrka visas). */
+      count?: number; of?: number | null; broad?: boolean;
       regime: string | null; regime_text: string | null; tried: Record<string, SwingEvalRate> } };
   note: string;
   /** Claudes senaste veckotext (data/raw/swing_eval/notes/<vecka>.json), märkt som tolkning. */

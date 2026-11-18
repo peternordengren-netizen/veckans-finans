@@ -395,3 +395,24 @@ def test_sektor_i_rorelse_skarpt():
     assert len(mv) == 2 and mv[0]["sector"] == "teknik" and mv[0]["up_count"] == 4 and mv[0]["sector_companies"] == 4
     assert "industri" not in [x["sector"] for x in mv]
     assert all(not x["turned"] for x in mv)  # 5-dagarsstyrkan var 0 dagen före, inte negativ
+
+
+def test_bred_kortsiktig_nedgang():
+    """Fler än 10 % av listan översåld i upptrend: marknadstecken och bara de fem med högst relativ styrka."""
+    many = [{"ticker": f"T{k}", "name": f"Bolag {k:02d}", "sector": None, "rsi2": 5.0, "vs_ma200_pct": float(k),
+             "rs_pct": k} for k in range(30)]
+    snaps = [{"day": "2026-11-17", "swing_date": "2026-11-18", "entries": [], "oversold": many, "oversold_of": 265,
+              "market": {"day": "2026-11-17", "regime": "upp-lugn", "signs": [], "new_highs": 2, "new_lows": 9,
+                         "breadth": {"above_ma50_pct": 40.0}, "index": {"vs_ma50_pct": -1.0, "vol20": 15.0}}}]
+    s = se.summary(snaps, NOW)
+    ov = s["alerts"]["oversold"]
+    assert ov["broad"] and ov["count"] == 30 and [c["rs_pct"] for c in ov["companies"]] == [29, 28, 27, 26, 25]
+    assert s["alerts"]["market"][-1]["text"].startswith("Bred kortsiktig nedgång: 30 bolag (av 265)")
+    n = se.alerts_notice(s, "2026-11-18")["notice"]
+    assert "Bred kortsiktig nedgång: 30 bolag" in n
+    assert "Kortsiktigt översåld i upptrend, de 5 med högst relativ styrka: Bolag 29, Bolag 28" in n
+    # 26 av 265 (under 10 %): som förut, alla visas och inget marknadstecken.
+    snaps[0]["oversold"] = many[:26]
+    s2 = se.summary(snaps, NOW)
+    assert not s2["alerts"]["oversold"]["broad"] and len(s2["alerts"]["oversold"]["companies"]) == 26
+    assert s2["alerts"]["market"] == []

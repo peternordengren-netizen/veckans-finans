@@ -428,6 +428,14 @@ senaste morgonrapporten överst, med veckan och flikarna under. Om den inte är 
 eller före 08:10, står det så under rubriken med datum. Varje dags rapport finns också på `/morgon/` och
 `/morgon/<datum>/`. Rapporten innehåller:
 
+**Kvällens bygge** (sedan 2026-11-18, `morning.py --kvall`, `scripts/run_evening.ps1`): efter eftermiddagskörningen
+17:45 (anropas från `run_update.ps1`), med ett nytt försök 21:00 (uppgiften VeckansFinansKvall), byggs nästa
+handelsdags kursdel (kurser och kurssignaler, `data/morning/kvall/<datum>.json`), swinglistan och utvärderingens
+uppföljning med dagens stängning, med ett batchanrop. Swinglistan skrivs bara när dagens kurser finns för minst 90 %
+av bolagen. Morgonen tar sedan nyheter, insyn, rapportkalendern, konsensus, rapportutfall och det som saknas från
+kvällen: kursdelen hämtas bara om kvällens fil saknas eller är ofullständig, och swinglistan byggs bara om den inte
+redan finns med förra handelsdagens stängning.
+
 - **Rapporter i dag** ur rapportkalendern. Kalendern för innevarande vecka skrivs om varje morgon.
 - **Pressmeddelanden** för bolag i listan sedan förra handelsdagen kl. 17:30, utan rutinmeddelanden. Bolag som
   rapporterar i dag står först.
@@ -828,7 +836,11 @@ och 60 handelsdagar från signaldagens stängning. Dagens bevakningslista använ
      bolagens utveckling mot index) vänder från negativ dagen före till minst 1 procentenhet över index. Högst de två
      sektorer som rörde sig mest mot index samma dag, med bolagen.
    - *Kortsiktigt översåld i upptrend*: bolag i listan med RSI(2) under 10 och kursen över 200 dagars MA, med
-     marknadsläget nu och de lägen där RSI(2) under 10 hittills prövats i underlaget (andel lyckade uppgångar).
+     marknadsläget nu och de lägen där RSI(2) under 10 hittills prövats i underlaget (andel lyckade uppgångar). Slår
+     fler än 10 % av listan till blir det i stället marknadstecknet "Bred kortsiktig nedgång: X bolag", och bara de
+     fem med högst relativ styrka (RS-percentilen) visas (2026-11-18 var det 32 bolag).
+   Vaknar datorn sent kör Bollingerkontrollen först morgonflödet klart (`run_morning.ps1` har ett lås mot en
+   samtidig morgonkörning), så att en försenad kontroll alltid har dagens swingfil.
 8. **Måndagar** (veckans första handelsdag): `run_swing_note.ps1` (från `run_morning.ps1`) låter Claude
    (`/swing-utvardering`, Sonnet, läget dontAsk, skriver bara i `data/swing_eval/`) skriva 5–8 meningar märkta
    "Claudes tolkning" om marknadsläget, vilka lägen och fall som lyckats de senaste veckorna och vad som ändrats.

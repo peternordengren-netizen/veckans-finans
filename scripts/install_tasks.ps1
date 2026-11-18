@@ -15,7 +15,10 @@
 #   högst en timme. Också vid inloggning och upplåsning (gör då bara något om dagens kursreaktion
 #   saknas eller är ofullständig).
 # - VeckansFinansBollinger: vardagar 09:20 och 13:20, kör scripts\run_bollinger.ps1 -Scheduled (utan Claude):
-#   Bollingerkontroll, Windows-notis och bygget. Inget på börsens stängda dagar eller utanför 09:00-17:30.
+#   Bollingerkontroll, Windows-notis och bygget. Inget på börsens stängda dagar eller utanför 09:00-17:30. Vaknar
+#   datorn sent kör skriptet först morgonflödet klart (högst 45 minuter totalt).
+# - VeckansFinansKvall: vardagar 21:00, kör scripts\run_evening.ps1 -Build: nytt försök med kvällens bygge
+#   (kurser, swinglista och utvärderingens uppföljning för nästa handelsdag) om det inte blev klart efter 17:45.
 # - Skrivbordsgenvägen "Uppdatera nu" kör scripts\run_update.ps1 -Open i ett synligt fönster.
 # Alla körs som den inloggade användaren, bara när hen är inloggad, utan förhöjd behörighet.
 # - Skrivbordsgenvägen "Veckans finans" kör scripts\open_site.ps1 dolt.
@@ -118,8 +121,9 @@ $bbMorning = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Monday, Tuesday, Wedne
 $bbMorning.StartBoundary = (Get-Date "09:20").ToString("yyyy-MM-dd'T'HH:mm:ss")
 $bbMidday = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Monday, Tuesday, Wednesday, Thursday, Friday -At "13:20"
 $bbMidday.StartBoundary = (Get-Date "13:20").ToString("yyyy-MM-dd'T'HH:mm:ss")
+# 45 minuter: vaknar datorn sent kör run_bollinger.ps1 först morgonflödet klart (rapportutfall med Claude kan ta tid).
 $bollingerSettings = New-ScheduledTaskSettingsSet -WakeToRun -StartWhenAvailable `
-    -ExecutionTimeLimit (New-TimeSpan -Minutes 15) -MultipleInstances IgnoreNew `
+    -ExecutionTimeLimit (New-TimeSpan -Minutes 45) -MultipleInstances IgnoreNew `
     -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
 $bollingerAction = HiddenAction "scripts\run_bollinger.ps1" "-Scheduled"
 
@@ -127,6 +131,18 @@ Register-ScheduledTask -TaskName "VeckansFinansBollinger" -Force `
     -Description "Veckans finans: Bollingerkontroll under handelsdagen (bolag vid eller nära övre bandet), Windows-notis och bygget av sidan. Utan Claude. Loggar i logs\bollinger\." `
     -Action $bollingerAction -Trigger @($bbMorning, $bbMidday) `
     -Principal $Principal -Settings $bollingerSettings | Out-Null
+
+# Vardagar 21:00 lokal tid: nytt försök med kvällens bygge (run_evening.ps1 gör ingenting när det redan är klart,
+# på börsens stängda dagar eller före 17:45, t.ex. när uppgiften tas igen nästa morgon). Högst 30 minuter.
+$evening = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Monday, Tuesday, Wednesday, Thursday, Friday -At "21:00"
+$evening.StartBoundary = (Get-Date "21:00").ToString("yyyy-MM-dd'T'HH:mm:ss")
+$eveningSettings = New-ScheduledTaskSettingsSet -WakeToRun -StartWhenAvailable `
+    -ExecutionTimeLimit (New-TimeSpan -Minutes 30) -MultipleInstances IgnoreNew `
+    -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
+Register-ScheduledTask -TaskName "VeckansFinansKvall" -Force `
+    -Description "Veckans finans: kvällens bygge för nästa handelsdag (kurser, swinglista, utvärderingens uppföljning), nytt försök om 17:45 inte räckte. Utan Claude. Loggar i logs\evening\." `
+    -Action (HiddenAction "scripts\run_evening.ps1" "-Build") -Trigger $evening `
+    -Principal $Principal -Settings $eveningSettings | Out-Null
 
 $shell = New-Object -ComObject WScript.Shell
 # "Uppdatera nu": samma flöde direkt, i ett synligt fönster så att förloppet syns; öppnar sidan när den är klar.

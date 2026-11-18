@@ -11,6 +11,9 @@
 #   fördröjda ca 15 minuter. Ett klick öppnar sidan. (Listorna över alla bolag vid bandet finns kvar i
 #   kontrollfilen men visas inte sedan 2026-11-11.)
 # - Bygget uppdaterar kolumnerna "Bollinger" och "Status i dag" i fliken Swing med kontrollens kurser och tid.
+# - Vaknar datorn sent (-Scheduled, dagens morgonrapport eller swingfil saknas): kör först morgonflödet klart
+#   (run_morning.ps1, som har ett lås mot en samtidig morgonkörning), så att kontrollen får dagens swingfil och
+#   kandidater. 2026-11-17 kördes en försenad kontroll 13:16 före morgonflödet och notisen sa "Ingen swingfil".
 # - Logg i logs/bollinger/<datum>.log.
 #
 # Manuellt: powershell -NoProfile -File scripts\run_bollinger.ps1
@@ -42,6 +45,16 @@ function Log([string]$Text) {
     $line = "{0:yyyy-MM-dd HH:mm:ss} {1}" -f (Get-Date), $Text
     Add-Content -Path $RunLog -Value $line -Encoding UTF8
     Write-Output $line
+}
+
+# Vaknade datorn sent: morgonflödet först (se ovan).
+$MorningFile = Join-Path $Root ("data\morning\{0:yyyy-MM-dd}.json" -f (Get-Date))
+$SwingFile = Join-Path $Root ("data\swing\{0:yyyy-MM-dd}.json" -f (Get-Date))
+if ($Scheduled -and -not ((Test-Path $MorningFile) -and (Test-Path $SwingFile))) {
+    Log "Morgonflödet är inte klart (morgonrapport eller swingfil saknas) - kör run_morning.ps1 först"
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "run_morning.ps1") |
+        ForEach-Object { Log "  $_" }
+    Log "run_morning.ps1: exit $LASTEXITCODE"
 }
 
 Log "Bollingerkontroll startar$(if ($Scheduled) { ' (schemalagd)' } else { '' })"

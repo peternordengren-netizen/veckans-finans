@@ -74,6 +74,16 @@ function Log([string]$Text) {
     Write-Output $line
 }
 
+# Ett lås: två morgonkörningar samtidigt (inloggning/upplåsning och en försenad Bollingerkontroll, som kör
+# morgonflödet först) väntar på varandra; den andra ser sedan vad som redan är gjort och tar bara det som fattas.
+$MorningLock = New-Object System.Threading.Mutex($false, "Local\VeckansFinansMorgon")
+try {
+    if (-not $MorningLock.WaitOne([TimeSpan]::FromMinutes(40))) {
+        Write-Output "En annan morgonkörning pågår fortfarande - avbryter."
+        exit 0
+    }
+} catch [System.Threading.AbandonedMutexException] { }
+
 function ResultsComplete {
     # Resultatfilen finns och saknar inga omgångar eller rapporter (en underkänd rapport listas i
     # "rejected"; ett nytt försök gör då bara om den).

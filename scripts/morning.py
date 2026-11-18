@@ -58,6 +58,9 @@ from workdays import non_business_days  # noqa: E402
 STOCKHOLM = ZoneInfo("Europe/Stockholm")
 MORNING_DIR = DATA_DIR / "morning"
 MORNING_RAW = MORNING_DIR / "raw"
+# Kvällens bygge (--kvall): kursdelen för nästa handelsdags morgonrapport, <datum>.json = morgonrapportens datum.
+EVENING_DIR = MORNING_DIR / "kvall"
+EVENING_EARLIEST = time(17, 45)  # efter eftermiddagskörningen och stängningen (17:30)
 MORNING_MFN_LIMIT = 500
 NEWS_FROM = time(17, 30)  # nattens nyheter räknas från förra handelsdagens stängning
 KEEP_RAW_WEEKS = 3  # data/morning/raw/ rensas från äldre veckor
@@ -71,6 +74,13 @@ def previous_business_day(d: date) -> date:
     d -= timedelta(days=1)
     while not is_business_day(d):
         d -= timedelta(days=1)
+    return d
+
+
+def next_business_day(d: date) -> date:
+    d += timedelta(days=1)
+    while not is_business_day(d):
+        d += timedelta(days=1)
     return d
 
 
@@ -236,7 +246,8 @@ def _price_thresholds() -> dict:
 
 
 def build(today: date, now: datetime, instruments: dict[str, Instrument], raw_dirs: list[Path],
-          calendar: dict | None, fetch: BarFetcher) -> dict:
+          calendar: dict | None, fetch: BarFetcher, price: dict | None = None) -> dict:
+    """Morgonrapporten. price: kursdelen från kvällens bygge (load_evening), annars hämtas den nu."""
     prev = previous_business_day(today)
     since = datetime.combine(prev, NEWS_FROM, STOCKHOLM)
     reports_today = [
@@ -254,7 +265,7 @@ def build(today: date, now: datetime, instruments: dict[str, Instrument], raw_di
         "reports_today": reports_today,
         "news": overnight_news(raw_dirs, instruments, since, now, reporting),
         "insider": insider_since(raw_dirs, days, instruments),
-        "price": yesterday_prices(instruments, today, fetch),
+        "price": price if price is not None else yesterday_prices(instruments, today, fetch),
         "policy_decision": latest_policy_decision(raw_dirs, today),
     }
 
@@ -312,9 +323,22 @@ def main(argv: list[str] | None = None, fetch_bars: BarFetcher = yahoo_bars,
     p.add_argument("--no-fetch", action="store_true", help="hämta inget lokalt, använd befintlig rådata")
     p.add_argument("--bara-kurser", action="store_true",
                    help="hämta bara dagsdatan igen och skriv om kursdelen och Swing (exit 2 = gårdagens kurser saknas)")
+    p.add_argument("--kvall", action="store_true",
+                   help="kvällens bygge för nästa handelsdag: kurser, kurssignaler, Swing och utvärderingens uppföljning "
+                        "(exit 0 = klart, 2 = dagens kurser saknas än, 3 = ingen handelsdag eller för tidigt)")
+    p.add_argument("--kvall-klar", action="store_true",
+                   help="exit 0 om kvällens bygge för nästa handelsdag redan är klart (för run_evening.ps1)")
     args = p.parse_args(argv)
     now = now or datetime.now(STOCKHOLM)
     today = args.date or now.date()
+    if args.kvall_klar:
+        target = next_business_day(today)
+        if load_evening(target) is not None and swing_ready(target):
+            print(target)
+            return 0
+        return 1
+    if args.kvall:
+        return evening(today, now, fetch_bars)
     if not is_business_day(today):
         print(f"{today} är ingen handelsdag – ingen morgonrapport.")
         return 0
@@ -346,7 +370,11 @@ def main(argv: list[str] | None = None, fetch_bars: BarFetcher = yahoo_bars,
             cache[key] = fetch_bars(tickers, start, end)
         return cache[key]
 
-    data = build(today, now, instruments, raw_dirs, calendar, fetch_once)
+    # Kursdelen från gårdagskvällens bygge när den är klar; annars hämtas den nu (det som saknas från kvällen).
+    evening_price = load_evening(today)
+    if evening_price is not None:
+        print(f"Kurser {previous_business_day(today)} från kvällens bygge (ingen ny kurshämtning).")
+    data = build(today, now, instruments, raw_dirs, calendar, fetch_once, evening_price)
     data["errors"] = errors + calendar_errors(calendar)
     data["retry"] = retry_reasons(data, errors, today)
     add_price_error(data, today)
@@ -363,7 +391,10 @@ def main(argv: list[str] | None = None, fetch_bars: BarFetcher = yahoo_bars,
           f"{sum(len(c['items']) for c in data['news'])} nyheter för {len(data['news'])} bolag, "
           f"insyn {len(data['insider']['companies'])} bolag, "
           f"kurssignaler {len(data['price']['companies'])} bolag, {len(data['errors'])} fel -> {out}")
-    write_swing(today, now, instruments, fetch_once)
+    if swing_ready(today):
+        print(f"Swing {today} finns redan från kvällens bygge.")
+    else:
+        write_swing(today, now, instruments, fetch_once)
     if data["retry"]:
         for e in data["errors"]:
             print(f"FEL: {e}")
@@ -421,6 +452,67 @@ def refresh_prices(today: date, now: datetime, fetch_bars: BarFetcher = yahoo_ba
           f"{previous_business_day(today)}), kurssignaler {len(data['price']['companies'])} bolag -> {out}")
     write_swing(today, now, instruments, fetch_once)
     return 2 if "kurser" in data["retry"] else 0
+
+
+def load_evening(today: date, evening_dir: Path | None = None) -> dict | None:
+    """Kursdelen från kvällens bygge för dagens morgonrapport, om den är klar och gäller förra handelsdagen."""
+    p = (evening_dir or EVENING_DIR) / f"{today}.json"
+    try:
+        d = json.loads(p.read_text(encoding="utf-8")) if p.exists() else None
+    except (OSError, ValueError):
+        return None
+    if not d or not d.get("complete") or d["price"].get("day") != previous_business_day(today).isoformat():
+        return None
+    return d["price"]
+
+
+def swing_ready(today: date, swing_dir: Path | None = None) -> bool:
+    """Finns dagens swingfil redan (från kvällens bygge) med förra handelsdagens stängning?"""
+    p = (swing_dir or DATA_DIR / "swing") / f"{today}.json"
+    try:
+        return p.exists() and json.loads(p.read_text(encoding="utf-8")).get("as_of") == previous_business_day(today).isoformat()
+    except (OSError, ValueError):
+        return False
+
+
+def evening(today: date, now: datetime, fetch_bars: BarFetcher = yahoo_bars, evening_dir: Path | None = None,
+            write_swing_fn=None, instruments: dict[str, Instrument] | None = None) -> int:
+    """--kvall: efter stängningen byggs nästa handelsdags kursdel (kurser och kurssignaler, med dagens stängning),
+    swinglistan och utvärderingens uppföljning, med ett batchanrop. Kursdelen sparas i data/morning/kvall/<nästa
+    handelsdag>.json och tas av morgonrapporten (load_evening); swingfilen skrivs bara när dagens kurser finns för
+    minst 90 % av bolagen (signals.data_day). Exit 0 = klart, 2 = dagens kurser saknas än (nytt försök 21:00, annars
+    tar morgonen det), 3 = ingen handelsdag eller före 17:45."""
+    if not is_business_day(today) or now.time() < EVENING_EARLIEST:
+        print(f"{now:%Y-%m-%d %H:%M}: ingen handelsdag eller före 17:45 – inget kvällsbygge.")
+        return 3
+    target = next_business_day(today)
+    instruments = instruments or load_instruments()
+    cache: dict = {}
+
+    def fetch_once(tickers: list[str], start: date, end: date) -> dict:
+        key = (tuple(tickers), start, end)
+        if key not in cache:
+            cache[key] = fetch_bars(tickers, start, end)
+        return cache[key]
+
+    price = yesterday_prices(instruments, target, fetch_once)
+    complete = price["day"] == today.isoformat()
+    out_dir = evening_dir or EVENING_DIR
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out = out_dir / f"{target}.json"
+    tmp = out.with_suffix(".tmp")
+    tmp.write_text(json.dumps({"date": target.isoformat(), "built_at": now.isoformat(timespec="seconds"),
+                               "complete": complete, "price": price}, ensure_ascii=False, indent=2) + "\n",
+                   encoding="utf-8")
+    tmp.replace(out)
+    cov = price["coverage"]
+    print(f"Kväll {today} för {target}: dagsdatan gäller {price['day']} ({cov['with_expected']} av {cov['of']} bolag har "
+          f"{today}), kurssignaler {len(price['companies'])} bolag -> {out}")
+    if not complete:
+        print(f"Dagens kurser ({today}) saknas än hos Yahoo – Swing byggs inte; nytt försök 21:00, annars tar morgonen det.")
+        return 2
+    (write_swing_fn or write_swing)(target, now, instruments, fetch_once)
+    return 0
 
 
 def validate_pruned(data: dict, instruments: dict[str, Instrument]):

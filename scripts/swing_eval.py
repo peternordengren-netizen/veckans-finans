@@ -27,7 +27,9 @@ uppmaning och säger inget säkert om hur det går nästa gång.
    procentenhet över index; högst SECTOR_MOVE_TOP (2) sektorer, de med störst snittrörelse mot index samma dag; med
    bolagen.
    "Kortsiktigt översåld i upptrend" (oversold): bolag i listan med RSI(2) under OVERSOLD_RSI2 (10, swingfilens rsi2)
-   och kurs över 200 dagars MA, med marknadsläget och de lägen mönstret prövats i hittills.
+   och kurs över 200 dagars MA, med marknadsläget och de lägen mönstret prövats i hittills. Slår fler än
+   BROAD_OVERSOLD_SHARE (10 %) av listan till blir det i stället marknadstecknet "Bred kortsiktig nedgång: X bolag",
+   och bara de OVERSOLD_TOP (5) med högst relativ styrka (RS-percentilen i Momentum-utbrott, scripts/vcp.py) visas.
 2. Uppföljning efter 1–5 handelsdagar (HORIZONS) med samma hämtning som morgonens swingfil: rörelse
    (justerad stängning), rörelse mot index (OMX Stockholm PI) i procentenheter, högsta high under dagarna i R
    (från signaldagens stängning) och snittomsättningen under dagarna mot snittet för de 20 dagarna före signaldagen.
@@ -101,6 +103,7 @@ SECTOR_MOVE_MIN, SECTOR_MOVE_PP, SECTOR_MOVE_SHARE = 3, 3.0, 0.25
 SECTOR_TURN_MIN_PP = 1.0  # vändningen räknas bara när 5-dagarsstyrkan dessutom är minst så här över index
 SECTOR_MOVE_TOP = 2  # högst så många sektorer (de med störst rörelse mot index samma dag)
 OVERSOLD_RSI2 = 10.0
+BROAD_OVERSOLD_SHARE, OVERSOLD_TOP = 0.10, 5
 MARKET_VERSION = 3  # 2: sektor i rörelse; 3: skärpt (25 %, vändning minst 1 pe, högst två sektorer)
 MARKET_DAYS = 252  # 52 veckor
 # Fönstren för mönstren: (nyckel, text, kalenderdagar bakåt från den senaste signaldagen; None = hela perioden).
@@ -686,9 +689,19 @@ def summary(snaps: list[dict], now: datetime) -> dict:
     for r in decided_rows:
         if "etikett:rsi2-under-10" in r["features"]:
             tried.setdefault(r.get("regime") or "okänt", []).append(r)
-    oversold = {"companies": (last or {}).get("oversold") or [], "regime": regime,
+    ov_all = (last or {}).get("oversold") or []
+    ov_of = (last or {}).get("oversold_of")
+    broad = bool(ov_of) and len(ov_all) > BROAD_OVERSOLD_SHARE * ov_of
+    # Bred nedgång: bara de med högst relativ styrka (saknas RS-percentilen i äldre bilder: avståndet över 200 MA).
+    shown = sorted(ov_all, key=lambda x: (-(x.get("rs_pct") if x.get("rs_pct") is not None else -1),
+                                          -x["vs_ma200_pct"]))[:OVERSOLD_TOP] if broad else ov_all
+    oversold = {"companies": shown, "count": len(ov_all), "of": ov_of, "broad": broad, "regime": regime,
                 "regime_text": regime_text(regime) if regime else None,
                 "tried": {k: _rate(v) for k, v in sorted(tried.items())}}
+    market_alerts = list((today or {}).get("signs", [])) if today and today["day"] == last_day else []
+    if broad:
+        market_alerts.append({"kind": "bred-nedgång", "text": f"Bred kortsiktig nedgång: {len(ov_all)} bolag "
+                              f"(av {ov_of}) med RSI(2) under {OVERSOLD_RSI2:g} och kurs över 200 dagars MA"})
     return {
         "schema_version": 4, "generated_at": now.isoformat(timespec="seconds"),
         "period": {"start": snaps[0]["day"] if snaps else None, "end": last_day},
@@ -703,7 +716,8 @@ def summary(snaps: list[dict], now: datetime) -> dict:
                        "sector_move_min": SECTOR_MOVE_MIN, "sector_move_pp": SECTOR_MOVE_PP,
                        "sector_move_share": SECTOR_MOVE_SHARE, "sector_turn_min_pp": SECTOR_TURN_MIN_PP,
                        "sector_move_top": SECTOR_MOVE_TOP,
-                       "oversold_rsi2": OVERSOLD_RSI2,
+                       "oversold_rsi2": OVERSOLD_RSI2, "broad_oversold_share": BROAD_OVERSOLD_SHARE,
+                       "oversold_top": OVERSOLD_TOP,
                        "vol_calm_max": VOL_CALM_MAX, **FEATURE_THRESHOLDS},
         "feature_texts": texts,
         "regime_texts": {f"{t}-{v}": regime_text(f"{t}-{v}") for t in TREND_TEXT for v in VOL_TEXT},
@@ -720,7 +734,7 @@ def summary(snaps: list[dict], now: datetime) -> dict:
                            "by_strategy": {k: _rate(v) for k, v in by_strategy.items()}},
         "cases_index": [[x["day"], x["strategies"], x["strong"], x["sector"], x["regime"], x["status"]] for x in decided],
         "alerts": {"swing_date": last.get("swing_date") if last else None, "day": last_day, "similar": similar,
-                   "market": (today or {}).get("signs", []) if today and today["day"] == last_day else [],
+                   "market": market_alerts,
                    "sector_moves": (today or {}).get("sector_moves", []) if today and today["day"] == last_day else [],
                    "oversold": oversold},
         "note": "Mönstren och de lyckade fallen räknar bara signaldagar med full femdagarsuppföljning och ett fall per "
@@ -749,7 +763,9 @@ def alerts_notice(summ: dict | None, swing_date: str | None) -> dict | None:
         names = ", ".join(x["name"] for x in ov["companies"][:6])
         more = f" och {len(ov['companies']) - 6} till" if len(ov["companies"]) > 6 else ""
         tried = ", ".join(regime_text(k).lower() for k in ov.get("tried", {})) or "inget läge än"
-        parts.append(f"Kortsiktigt översåld i upptrend: {names}{more} (läge nu: {(ov.get('regime_text') or '–').lower()}; "
+        head = (f"Kortsiktigt översåld i upptrend, de {len(ov['companies'])} med högst relativ styrka"
+                if ov.get("broad") else "Kortsiktigt översåld i upptrend")
+        parts.append(f"{head}: {names}{more} (läge nu: {(ov.get('regime_text') or '–').lower()}; "
                      f"mönstret prövat hittills i: {tried}).")
     return {"similar": a.get("similar", []), "market": a.get("market", []), "oversold": ov.get("companies", []),
             "notice": " ".join(parts)}
@@ -846,6 +862,7 @@ def update(swing_files: list[dict], bars: dict, instruments: dict, now: datetime
         s0 = snaps.get(sw.get("as_of"))
         if s0 is not None and "oversold" not in s0 and bars.get(INDEX_TICKER):
             s0["oversold"] = oversold(sw, bars, yahoo)
+            s0["oversold_of"] = len(sw["companies"])
     last = max((b.day for b in bars.get(INDEX_TICKER, [])), default=None)
     for s in snaps.values():
         if (s.get("market") or {}).get("version") != MARKET_VERSION:
@@ -875,7 +892,8 @@ def oversold(swing: dict, bars: dict, yahoo: dict[str, str]) -> list[dict]:
         ma200 = sum(x.adj_close for x in b[j - 199:j + 1]) / 200
         if b[j].adj_close > ma200:
             out.append({"ticker": c["ticker"], "name": c["name"], "sector": c.get("sector"), "rsi2": c["rsi2"],
-                        "vs_ma200_pct": round((b[j].adj_close / ma200 - 1) * 100, 2)})
+                        "vs_ma200_pct": round((b[j].adj_close / ma200 - 1) * 100, 2),
+                        "rs_pct": (((c.get("vcp") or {}).get("state")) or {}).get("rs_pct")})
     return sorted(out, key=lambda x: x["rsi2"])
 
 
