@@ -255,12 +255,18 @@ def case(name, day, feats, status_ok, strategies=("pullback",)):
             "features": feats, "follow": fol, "regime": "upp-lugn"}
 
 
+def others(day="2026-11-09"):
+    """Fyra fall som inte liknar kandidaterna (starka signaler, banker) och inte lyckades: drar ned genomsnittet."""
+    return [{**case(f"Etabolaget {k}", day, ["stark", "sektor:bank"], False, strategies=()), "ticker": f"ETA{k}", "strong": True,
+             "sector": "bank"} for k in range(4)]
+
+
 def test_larm_liknar_lyckade_fall_och_notis():
     feats = ["strategi:pullback", "etikett:rekyl-i-trend", "stod:nara", "sektor:industri"]
     old = [{"day": "2026-11-02", "entries": [case("Alfaverken", "2026-11-09", feats, True),
                                              case("Betabolaget", "2026-11-09", feats, True),
                                              case("Gammagruppen", "2026-11-09", feats + ["rsi:hog"], True),
-                                             case("Deltahem", "2026-11-09", feats, False)]},
+                                             case("Deltahem", "2026-11-09", feats, False)] + others()},
            {"day": "2026-09-01", "entries": [case("Epsilonbolaget", "2026-09-08", feats, True)]}]  # för gammalt
     today = case("Zetaverken", "2026-11-10", feats, False)
     today["follow"] = {}
@@ -274,7 +280,8 @@ def test_larm_liknar_lyckade_fall_och_notis():
     assert [x["name"] for x in sim] == ["Zetaverken"] and sim[0]["matches"] == 3
     assert sim[0]["similar_cases"] == 4 and sim[0]["similar_successes"] == 3  # Deltahem liknar men lyckades inte
     assert len(s["successes"]) == 4 and s["successes"][0]["max_vs_index_pp"] == 6.0
-    assert s["success_recent"]["all"]["cases"] == 4  # september-fallet ligger utanför 28 dagar
+    assert s["success_recent"]["all"]["cases"] == 8  # september-fallet ligger utanför 28 dagar
+    assert sim[0]["similar_share"] == 0.75 and sim[0]["base_share"] == 0.375
     assert s["cases_index"][0][-1] in ("lyckad", "ej")
     n = se.alerts_notice(s, "2026-11-11")
     assert "Liknar nyligen lyckade fall: Zetaverken (3 av 4 liknande lyckades)." in n["notice"]
@@ -439,7 +446,7 @@ def test_rsi_varning_i_larmet_och_sektorns_utfall():
                                              case("Gammagruppen", "2026-11-09", feats, True),
                                              {**case("Deltahem", "2026-11-09", feats, False),
                                               "follow": {"5": {"vs_index_pp": -6.0, "max_high_r": None, "move_pct": 0,
-                                                               "day": "2026-11-09", "volume_ratio": 1.0}}}]}]
+                                                               "day": "2026-11-09", "volume_ratio": 1.0}}}] + others()}]
     today = {**case("Zetaverken", "2026-11-10", feats, False), "follow": {}, "rsi14": 27.6}
     snaps = old + [{"day": "2026-11-10", "swing_date": "2026-11-11", "entries": [today]}]
     s = se.summary(snaps, NOW)
@@ -449,3 +456,15 @@ def test_rsi_varning_i_larmet_och_sektorns_utfall():
     sec = s["sector_recent"]["sectors"]["industri"]
     assert sec["cases"] == 4 and sec["successes"] == 3 and sec["bad"] == 1 and sec["bad_share"] == 0.25
     assert s["weekly_outcomes"][0]["week"] == "2026-W45"
+
+
+def test_larmet_kravar_hogre_andel_an_genomsnittet():
+    """Liknar lyckade fall i tre bolag, men bara 3 av 7 liknande lyckades (43 %) mot genomsnittet 3 av 7: inget larm."""
+    feats = ["strategi:pullback", "etikett:rekyl-i-trend", "stod:nara", "sektor:industri"]
+    old = [{"day": "2026-11-02", "entries": [case("Alfaverken", "2026-11-09", feats, True),
+                                             case("Betabolaget", "2026-11-09", feats, True),
+                                             case("Gammagruppen", "2026-11-09", feats, True)]
+            + [case(f"Deltahem {k}", "2026-11-09", feats, False) for k in range(4)]}]
+    today = {**case("Zetaverken", "2026-11-10", feats, False), "follow": {}}
+    s = se.summary(old + [{"day": "2026-11-10", "swing_date": "2026-11-11", "entries": [today]}], NOW)
+    assert s["alerts"]["similar"] == []

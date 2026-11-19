@@ -46,7 +46,8 @@ uppmaning och säger inget säkert om hur det går nästa gång.
    veckorna, dagar med samma läge som det senaste, och hela perioden som bakgrund), biblioteket med lyckade fall
    (successes, med alla avgjorda fall i cases_index för jämförelsen och lyckade per läge och strategi senaste
    SIMILAR_DAYS dagarna) och larmen (alerts): dagens kandidater som liknar minst SIMILAR_MIN lyckade fall de senaste
-   SIMILAR_DAYS (28) dagarna, räknat i olika bolag (samma strategi och kännetecken med Jaccardlikhet minst
+   SIMILAR_DAYS (28) dagarna, räknat i olika bolag, och där andelen lyckade bland de liknande fallen är högre än
+   genomsnittet för alla avgjorda uppgångar samma period (samma strategi och kännetecken med Jaccardlikhet minst
    SIMILAR_JACCARD), med hur stor andel av alla liknande avgjorda fall som lyckades (som jämförelse), och
    marknadstecknen. Larmen står i notisen vid Bollingerkontrollerna 09:20 och 13:20 (alerts_for, scripts/bollinger.py)
    och bygger på gårdagens stängning. "Mönster": för varje kännetecken med minst MIN_FEATURE_CASES fall,
@@ -728,7 +729,10 @@ def summary(snaps: list[dict], now: datetime) -> dict:
             by_sector.setdefault(x["sector"], []).append(x)
     by_strategy = {k: [x for x in recent if k in x["strategies"]] for k in STRATEGY_ORDER}
     by_strategy["stark"] = [x for x in recent if x["strong"]]
-    # Larmen: dagens kandidater (senaste ögonblicksbilden) som liknar minst SIMILAR_MIN nyligen lyckade fall.
+    # Larmen: dagens kandidater (senaste ögonblicksbilden) som liknar minst SIMILAR_MIN nyligen lyckade fall, och där
+    # andelen lyckade bland de liknande fallen är högre än utvärderingens genomsnitt senaste SIMILAR_DAYS dagarna
+    # (sedan 2026-11-19; 3 av 26 liknande lyckade larmade annars, lägre än genomsnittet).
+    base_share = _rate(recent)["share"]
     similar = []
     if last:
         for e in last["entries"]:
@@ -737,11 +741,13 @@ def summary(snaps: list[dict], now: datetime) -> dict:
             sim = similar_cases(e, last["day"], decided_rows)
             ok = [x for x in sim if x["status"] == "lyckad"]
             companies = sorted({x["name"] for x in ok})
-            if len(companies) >= SIMILAR_MIN:
+            above_base = bool(sim) and base_share is not None and len(ok) / len(sim) > base_share
+            if len(companies) >= SIMILAR_MIN and above_base:
                 similar.append({"ticker": e["ticker"], "name": e["name"], "strategies": e["strategies"],
                                 "matches": len(companies), "similar_cases": len(sim), "similar_successes": len(ok),
                                 "similar_bad": sum(bool(x.get("bad")) for x in sim),
-                                "examples": companies[:3], "rsi14": e.get("rsi14"), "rsi_warn": rsi_warn(e.get("rsi14"))})
+                                "examples": companies[:3], "rsi14": e.get("rsi14"), "rsi_warn": rsi_warn(e.get("rsi14")),
+                                "similar_share": round(len(ok) / len(sim), 4), "base_share": base_share})
     similar.sort(key=lambda x: (-x["matches"], x["name"]))
     # Kortsiktigt översåld i upptrend: dagens bolag (senaste ögonblicksbilden), med marknadsläget och de lägen där
     # RSI(2) under 10 prövats i underlaget (uppgångar med etiketten, på dagar med full uppföljning).

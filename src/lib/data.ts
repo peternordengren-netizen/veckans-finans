@@ -973,7 +973,8 @@ export interface SwingEval {
   cases_index: [string, string[], boolean, string | null, string | null, string][];
   alerts: { swing_date: string | null; day: string | null;
     similar: { ticker: string; name: string; strategies: string[]; matches: number; similar_cases: number;
-      similar_successes: number; examples: string[]; similar_bad?: number; rsi14?: number | null; rsi_warn?: boolean }[];
+      similar_successes: number; examples: string[]; similar_bad?: number; rsi14?: number | null; rsi_warn?: boolean;
+      similar_share?: number; base_share?: number | null }[];
     market: { kind: string; text: string }[];
     sector_moves: SwingEvalSectorMove[];
     oversold: { companies: { ticker: string; name: string; sector: string | null; rsi2: number; vs_ma200_pct: number;

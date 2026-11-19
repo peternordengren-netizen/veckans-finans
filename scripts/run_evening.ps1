@@ -4,7 +4,8 @@
 #
 # Anropas av run_update.ps1 efter eftermiddagskörningen (17:45) och av den schemalagda uppgiften VeckansFinansKvall
 # 21:00 (nytt försök). Gör ingenting
-# - på börsens stängda dagar eller före 17:45 (en uppgift som tas igen nästa morgon: morgonflödet tar det då),
+# - på börsens stängda dagar eller före 17:45 (en uppgift som tas igen nästa morgon: morgonflödet tar det då);
+#   då avslutas den tyst, utan rad i loggen,
 # - när kvällens bygge redan är klart (data\morning\kvall\<nästa handelsdag>.json med "complete": true).
 # Exit 2 från morning.py (dagens kurser saknas än hos Yahoo) loggas; 21:00 försöker igen, därefter morgonen.
 # Bygger sidan när något skrevs (-Build). Logg i logs\evening\<datum>.log.
@@ -30,6 +31,11 @@ function Log([string]$Text) {
     Add-Content -Path $RunLog -Value $line -Encoding UTF8
     Write-Output $line
 }
+
+# Före 17:45 eller på börsens stängda dagar (t.ex. när 21:00-uppgiften tas igen nästa morgon): avsluta tyst, utan logg.
+if ((Get-Date).TimeOfDay -lt [timespan]"17:45") { Write-Output "Före 17:45 - inget kvällsbygge."; exit 0 }
+& cmd.exe /c "$Py scripts\bollinger.py --handelsdag >nul 2>&1"
+if ($LASTEXITCODE -eq 3) { Write-Output "Börsen är stängd i dag - inget kvällsbygge."; exit 0 }
 
 # Redan klart i kväll? (nästa handelsdags fil från kvällen med complete = true)
 $check = & cmd.exe /c "$Py scripts\morning.py --kvall-klar 2>nul"

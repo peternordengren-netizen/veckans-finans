@@ -431,7 +431,8 @@ eller före 08:10, står det så under rubriken med datum. Varje dags rapport fi
 **Kvällens bygge** (sedan 2026-11-18, `morning.py --kvall`, `scripts/run_evening.ps1`): efter eftermiddagskörningen
 17:45 (anropas från `run_update.ps1`), med ett nytt försök 21:00 (uppgiften VeckansFinansKvall), byggs nästa
 handelsdags kursdel (kurser och kurssignaler, `data/morning/kvall/<datum>.json`), swinglistan och utvärderingens
-uppföljning med dagens stängning, med ett batchanrop. Swinglistan skrivs bara när dagens kurser finns för minst 90 %
+uppföljning med dagens stängning, med ett batchanrop. En försenad 21:00-uppgift (som tas igen nästa morgon) avslutar tyst,
+utan rad i loggen, liksom på börsens stängda dagar. Swinglistan skrivs bara när dagens kurser finns för minst 90 %
 av bolagen. Morgonen tar sedan nyheter, insyn, rapportkalendern, konsensus, rapportutfall och det som saknas från
 kvällen: kursdelen hämtas bara om kvällens fil saknas eller är ofullständig, och swinglistan byggs bara om den inte
 redan finns med förra handelsdagens stängning.
@@ -828,7 +829,8 @@ och 60 handelsdagar från signaldagens stängning. Dagens bevakningslista använ
    stängning; samma larm vid båda kontrollerna):
    - *Liknar nyligen lyckade fall*: dagens kandidater som delar strategi och har kännetecken med Jaccardlikhet minst
      0,6 med lyckade fall i minst tre olika bolag de senaste 4 veckorna, med hur många av alla liknande fall som
-     lyckades.
+     lyckades. Sedan 2026-11-19 bara när andelen lyckade bland de liknande fallen är högre än genomsnittet för alla
+     avgjorda uppgångar samma period.
    - *Marknadstecken*: andelen bolag över 50 MA ändrad mer än 10 procentenheter på en vecka, en sektors omsättning
      minst 2× snittet, eller ett nytt marknadsläge mot dagen före.
    - *Sektor i rörelse* (bland marknadstecknen): minst 25 % av sektorns bolag, och minst tre, minst 3
