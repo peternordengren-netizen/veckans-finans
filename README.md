@@ -870,8 +870,10 @@ b) **Claudes bedömning** (`run_events.ps1` från `run_evening.ps1`, och från `
    `/handelser`, Sonnet, läget dontAsk, skriver bara i `data/events/`): "bolagsspecifik" eller "gemensam för
    branschen" med en menings motivering, märkt "Claudes tolkning". `events.py --kontrollera` kräver en bedömning per
    händelse, giltig klass, en mening och inga uppmaningar; `--klar` för in den. Högst två försök.
-c) **Kollegor:** de 5 bolag i listan vars dagsavkastning korrelerat mest med händelsebolagets det senaste året (252
-   handelsdagar, minst 200 gemensamma), oavsett sektor. "Följde med" = minst 2 procentenheter mot index åt samma håll
+c) **Kollegor:** bolag i listan vars dagsavkastning korrelerat med händelsebolagets det senaste året (252
+   handelsdagar, minst 200 gemensamma) med minst 0,4 i samma sektor eller minst 0,55 oavsett sektor; högst 5, högst
+   korrelation först. Uppfyller inget bolag kraven står det "inga tydliga kollegor i listan" (sidan och notisen).
+   Före 2026-11-25 var kollegorna de 5 med högst korrelation oavsett nivå och sektor. "Följde med" = minst 2 procentenheter mot index åt samma håll
    samma dag, utan eget pressmeddelande.
 d) **Uppföljning** i utvärderingen (`scripts/swing_eval.py`): kollegornas rörelse mot index efter 1, 3 och 5 dagar
    från händelsedagens stängning, räknad åt händelsebolagets håll, per klass, för alla kollegor utan eget

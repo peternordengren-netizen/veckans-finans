@@ -318,6 +318,8 @@ export interface EventOutcome {
 export interface EventPeer {
   ticker: string; name: string; sector: string | null; corr: number; move_pct: number | null;
   vs_index_pp: number | null; own_news: boolean; followed: boolean;
+  /** Samma sektor som händelsebolaget (saknas i filer från före 2026-11-25). */
+  same_sector?: boolean;
 }
 export interface SwingEvent {
   ticker: string; name: string; sector: string | null; move_pct: number; vs_index_pp: number; atr_pct: number;
@@ -330,7 +332,9 @@ export interface SwingEvent {
 /** Händelser i sektorn (data/events/<datum>.json, scripts/events.py). */
 export interface EventsView {
   date: string; as_of: string; generated_at: string;
-  thresholds: { atr_mult: number; atr_days: number; peer_n: number; peer_move_pp: number; corr_days: number; min_overlap: number };
+  thresholds: { atr_mult: number; atr_days: number; peer_n: number; peer_move_pp: number; corr_days: number; min_overlap: number;
+    /** Kollegevillkoret: korrelation minst peer_sector_corr i samma sektor eller peer_any_corr oavsett sektor. */
+    peer_sector_corr?: number; peer_any_corr?: number };
   events: SwingEvent[];
 }
 export interface SwingView {
@@ -391,7 +395,7 @@ export interface SwingView {
     events?: {
       period: { start: string; end: string };
       thresholds: EventsView["thresholds"]; horizons: number[];
-      events: number; peers: number; followed: number;
+      events: number; peers: number; followed: number; events_without_peers?: number;
       groups: Record<"all" | "followed" | "not_followed", Record<string, EventOutcome>>;
       by_direction: Record<"upp" | "ned", Record<"followed" | "not_followed", Record<string, EventOutcome>>>;
       rough: boolean; note: string;

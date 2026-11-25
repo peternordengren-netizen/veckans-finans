@@ -502,8 +502,10 @@ const ppFmt = (v: number | null) =>
         <p class="note">
           Bolag som rörde sig minst {num(evs.thresholds.atr_mult, 0)} gånger sin ATR ({evs.thresholds.atr_days} dagar) mot
           OMX Stockholm PI samma dag som ett eget pressmeddelande eller en rapport (efter förra handelsdagens stängning,
-          senast 17:30). Kollegor: de {evs.thresholds.peer_n} bolag i listan vars dagliga rörelser följt bolagets mest det
-          senaste året (korrelation), oavsett sektor. "Följde med": minst {num(evs.thresholds.peer_move_pp, 0)} procentenheter
+          senast 17:30). Kollegor: bolag i listan vars dagliga rörelser följt bolagets det senaste året (korrelation),
+          {evs.thresholds.peer_sector_corr != null
+            ? ` minst ${corrFmt.format(evs.thresholds.peer_sector_corr)} i samma sektor eller minst ${corrFmt.format(evs.thresholds.peer_any_corr ?? 0)} oavsett sektor, högst ${evs.thresholds.peer_n}.`
+            : ` de ${evs.thresholds.peer_n} med högst korrelation, oavsett sektor.`} "Följde med": minst {num(evs.thresholds.peer_move_pp, 0)} procentenheter
           mot index åt samma håll samma dag, utan eget pressmeddelande. I tabellen visas händelsebolagen och kollegorna som
           följde med. Klassen är Claudes tolkning av pressmeddelandet. Beskriver vad som hänt, inga uppmaningar.
         </p>
@@ -532,6 +534,9 @@ const ppFmt = (v: number | null) =>
                 <span class="muted">Claudes bedömning (bolagsspecifik eller gemensam för branschen) saknas än.</span>
               )}
             </p>
+            {e.peers.length === 0 ? (
+              <p class="muted">Kollegor: inga tydliga kollegor i listan.</p>
+            ) : (
             <div class="hist-wrap">
               <table class="hist event-peers">
                 <thead>
@@ -556,6 +561,7 @@ const ppFmt = (v: number | null) =>
                 </tbody>
               </table>
             </div>
+            )}
           </article>
         ))}
       </section>
@@ -1020,7 +1026,9 @@ const ppFmt = (v: number | null) =>
           {shortDate(evHist.period.start)} {evHist.period.start.slice(0, 4)} – {shortDate(evHist.period.end)}{" "}
           {evHist.period.end.slice(0, 4)}: {evHist.events.toLocaleString("sv-SE")} rörelser på minst
           {" "}{num(evHist.thresholds.atr_mult, 0)} ATR mot index och deras {evHist.peers.toLocaleString("sv-SE")} kollegor
-          (de {evHist.thresholds.peer_n} som korrelerat mest året före), varav {evHist.followed.toLocaleString("sv-SE")} följde
+          ({evHist.thresholds.peer_sector_corr != null
+            ? `korrelation året före minst ${corrFmt.format(evHist.thresholds.peer_sector_corr)} i samma sektor eller minst ${corrFmt.format(evHist.thresholds.peer_any_corr ?? 0)} oavsett sektor, högst ${evHist.thresholds.peer_n} per rörelse${evHist.events_without_peers != null ? `; ${evHist.events_without_peers.toLocaleString("sv-SE")} rörelser saknade tydliga kollegor` : ""}`
+            : `de ${evHist.thresholds.peer_n} som korrelerat mest året före`}), varav {evHist.followed.toLocaleString("sv-SE")} följde
           med samma dag. Kollegornas rörelse mot index från händelsedagens stängning, räknad åt händelsebolagets håll
           (positivt = fortsatte åt samma håll): snittet i procentenheter och andelen åt samma håll. <strong>Utan nyhetsdata:</strong>
           {" "}{evHist.note}

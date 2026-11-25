@@ -82,7 +82,9 @@ def test_event_with_news_and_peers():
     e = evs[0]
     assert e["direction"] == "upp" and e["atr_mult"] >= events.ATR_MULT and not e["report"]
     peers = {p["ticker"]: p for p in e["peers"]}
-    assert len(peers) == events.PEER_N and next(iter(peers)) == "BETA"  # högst korrelation först
+    # Bara de tre som följer den gemensamma faktorn är kollegor; övriga korrelerar inte (under 0,4).
+    assert list(peers) == ["BETA", "GAMMA", "DELTA"]  # högst korrelation först
+    assert all(p["same_sector"] and p["corr"] >= events.PEER_SECTOR_CORR for p in peers.values())
     assert peers["BETA"]["followed"] and not peers["BETA"]["own_news"]
     # Gammagruppen rörde sig åt samma håll men har ett eget pressmeddelande: följde inte med.
     assert peers["GAMMA"]["own_news"] and not peers["GAMMA"]["followed"]
@@ -95,6 +97,38 @@ def test_no_event_without_news_or_report():
     assert detect(bars, news={}) == []
     evs = detect(bars, news={}, reporting={"ALFA"})
     assert [e["ticker"] for e in evs] == ["ALFA"] and evs[0]["report"]
+
+
+def test_peer_rule_sector_and_correlation():
+    # Korrelation 0,4–0,55 räcker bara i samma sektor; 0,55 räcker oavsett sektor; högst PEER_N.
+    rng = np.random.default_rng(1)
+    f = rng.normal(0, 1, 260)
+
+    def mix(c):  # serie med korrelation ungefär c mot f
+        return c * f + np.sqrt(1 - c * c) * rng.normal(0, 1, 260)
+
+    tickers = ["A", "SAMMA45", "ANNAN45", "ANNAN70", "SAMMA20", *[f"H{i}" for i in range(6)]]
+    m = np.vstack([f, mix(0.45), mix(0.45), mix(0.7), mix(0.2), *[mix(0.9) for _ in range(6)]])
+    sectors = {"A": "bank", "SAMMA45": "bank", "SAMMA20": "bank"}
+    got = dict(events.top_peers("A", tickers[:5], m[:5], sectors, min_overlap=200))
+    assert set(got) == {"SAMMA45", "ANNAN70"}
+    assert events.top_peers("A", ["A", "ANNAN45"], m[[0, 2]], sectors, min_overlap=200) == []
+    many = events.top_peers("A", tickers, m, sectors, min_overlap=200)
+    assert len(many) == events.PEER_N and all(t.startswith("H") for t, _ in many)
+    assert [c for _, c in many] == sorted((c for _, c in many), reverse=True)
+
+
+def test_no_clear_peers_text():
+    data = {"events": detect(make_bars(last=EVENT_DAY_MOVES))}
+    data["events"][0]["peers"] = []
+    assert events.validate(data) == []
+    assert events.NO_PEERS_TEXT in events.notice_text(data)
+
+
+def test_validate_catches_weak_peer():
+    evs = detect(make_bars(last=EVENT_DAY_MOVES))
+    evs[0]["peers"][0].update(corr=0.45, same_sector=False)
+    assert any("kollegevillkoret" in x for x in events.validate({"events": evs}))
 
 
 def test_small_move_is_no_event():
@@ -170,7 +204,7 @@ def test_followup_by_class(tmp_path):
     out = swing_eval.events_outcomes(snaps)
     assert out["events"]["ej bedömd"] == 1 and out["by_class"]["ej bedömd"]["followed"]["5"]["n"] >= 1
     # Gammagruppen (eget pressmeddelande) räknas inte bland kollegorna.
-    assert out["by_class"]["ej bedömd"]["all"]["1"]["n"] == events.PEER_N - 1
+    assert out["by_class"]["ej bedömd"]["all"]["1"]["n"] == 2  # Betabolaget och Deltaindustri
     # Claudes klass förs in när den kommer; ingen ny uppföljning ändrar redan ifyllda värden.
     events.merge_judgements(data, {"judgements": [judgement(cls="branschgemensam",
                                                            reason="Meddelandet beskriver efterfrågan i hela branschen.")]})

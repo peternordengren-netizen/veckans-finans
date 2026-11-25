@@ -9,8 +9,10 @@ a) Händelse: ett bolag i listan vars dagsrörelse mot index (OMX Stockholm PI, 
    dag" = publicerat efter förra handelsdagens stängning 17:30 och senast dagens 17:30.
 b) Bedömning (Claude, Sonnet, /handelser via scripts/run_events.ps1): "bolagsspecifik" eller "branschgemensam" med en
    motivering på en mening, märkt "Claudes tolkning". Kontrolleras (check_judgements) innan den används.
-c) Kollegor: de PEER_N (5) bolag i listan vars dagsavkastning korrelerat mest med händelsebolagets det senaste året
-   (CORR_DAYS handelsdagar före dagen, minst MIN_OVERLAP gemensamma dagar), oavsett sektor. "Följde med": rörde sig
+c) Kollegor: bolag i listan vars dagsavkastning korrelerat med händelsebolagets det senaste året (CORR_DAYS
+   handelsdagar före dagen, minst MIN_OVERLAP gemensamma dagar) med minst PEER_SECTOR_CORR (0,4) i samma sektor eller
+   minst PEER_ANY_CORR (0,55) oavsett sektor; högst PEER_N (5), högst korrelation först. Uppfyller inget bolag kraven
+   står det NO_PEERS_TEXT ("inga tydliga kollegor i listan"). "Följde med": rörde sig
    minst PEER_MOVE_PP (2) procentenheter mot index åt samma håll samma dag, utan eget pressmeddelande.
 d) Uppföljningen av kollegorna efter 1, 3 och 5 dagar görs i utvärderingen (scripts/swing_eval.py).
 e) Historiken på kursdata (scripts/swing_history.py events_history) använder samma rörelse- och kollegeregler utan
@@ -43,6 +45,9 @@ ATR_MULT = 3.0
 ATR_DAYS = 14
 PEER_N = 5
 PEER_MOVE_PP = 2.0
+PEER_SECTOR_CORR = 0.4  # kollega i samma sektor: korrelation minst så här
+PEER_ANY_CORR = 0.55  # kollega oavsett sektor: korrelation minst så här
+NO_PEERS_TEXT = "inga tydliga kollegor i listan"
 CORR_DAYS = 252
 MIN_OVERLAP = 200
 CLOSE = time(17, 30)
@@ -52,6 +57,7 @@ FORBIDDEN = re.compile(r"\b(köp|sälj|kursmål|rekommend)", re.IGNORECASE)
 EVENT_HORIZONS = (1, 3, 5)  # kollegornas uppföljning (utvärderingen och historiken)
 HISTORY_YEARS = 3  # historiken på kursdata (e)
 THRESHOLDS = {"atr_mult": ATR_MULT, "atr_days": ATR_DAYS, "peer_n": PEER_N, "peer_move_pp": PEER_MOVE_PP,
+              "peer_sector_corr": PEER_SECTOR_CORR, "peer_any_corr": PEER_ANY_CORR,
               "corr_days": CORR_DAYS, "min_overlap": MIN_OVERLAP}
 
 
@@ -88,10 +94,18 @@ def returns_matrix(bars: dict, tickers: list[str], day: date, days: int = CORR_D
     return tickers, m
 
 
-def top_peers(t: str, tickers: list[str], m: np.ndarray, n: int = PEER_N, min_overlap: int = MIN_OVERLAP) -> list[tuple[str, float]]:
-    """De n bolag vars dagsavkastning korrelerat mest med t (Pearson, gemensamma dagar, minst min_overlap)."""
+def is_peer(corr: float, same_sector: bool) -> bool:
+    """Kollegevillkoret: samma sektor och korrelation minst PEER_SECTOR_CORR, eller minst PEER_ANY_CORR oavsett sektor."""
+    return corr >= PEER_ANY_CORR or (same_sector and corr >= PEER_SECTOR_CORR)
+
+
+def top_peers(t: str, tickers: list[str], m: np.ndarray, sectors: dict[str, str | None], n: int = PEER_N,
+              min_overlap: int = MIN_OVERLAP) -> list[tuple[str, float]]:
+    """Högst n kollegor till t, de med högst korrelation först (Pearson på gemensamma dagar, minst min_overlap), bland
+    bolagen som uppfyller is_peer; sectors = sektor per ticker i `tickers`. Kan bli tom."""
     i = tickers.index(t)
     x = m[i]
+    own = sectors.get(t)
     out = []
     for j, u in enumerate(tickers):
         if j == i:
@@ -102,7 +116,9 @@ def top_peers(t: str, tickers: list[str], m: np.ndarray, n: int = PEER_N, min_ov
         a, b = x[ok], m[j][ok]
         if a.std() == 0 or b.std() == 0:
             continue
-        out.append((u, round(float(np.corrcoef(a, b)[0, 1]), 3)))
+        corr = round(float(np.corrcoef(a, b)[0, 1]), 3)
+        if is_peer(corr, own is not None and sectors.get(u) == own):
+            out.append((u, corr))
     out.sort(key=lambda p: -p[1])
     return out[:n]
 
@@ -194,17 +210,20 @@ def detect(day: date, prev_day: date, bars: dict, instruments: dict, news: dict[
     yts = [listed[t].yahoo_ticker for t in listed]
     names, m = returns_matrix(bars, yts, day)
     by_yt = {listed[t].yahoo_ticker: t for t in listed}
+    sectors = {yt: instruments[t].sektor for yt, t in by_yt.items()}
     out = []
     for t in sorted(candidates, key=lambda t: -abs(moves[t][1])):
         mv, rel, atr = moves[t]
         peers = []
-        for yt, corr in top_peers(listed[t].yahoo_ticker, names, m):
+        for yt, corr in top_peers(listed[t].yahoo_ticker, names, m, sectors):
             u = by_yt[yt]
             pm = moves.get(u)
             prel = pm[1] if pm else None
             own = u in news or u in reporting
             followed = bool(prel is not None and not own and abs(prel) >= PEER_MOVE_PP and (prel > 0) == (rel > 0))
+            same = instruments[t].sektor is not None and instruments[u].sektor == instruments[t].sektor
             peers.append({"ticker": u, "name": instruments[u].namn, "sector": instruments[u].sektor, "corr": corr,
+                          "same_sector": same,
                           "move_pct": round(pm[0], 2) if pm else None, "vs_index_pp": round(prel, 2) if pm else None,
                           "own_news": own, "followed": followed})
         out.append({"ticker": t, "name": instruments[t].namn, "sector": instruments[t].sektor,
@@ -234,7 +253,11 @@ def validate(data: dict) -> list[str]:
             errors.append(f"{e['name']}: rörelsen {e['vs_index_pp']} pe är inte minst {ATR_MULT:g} ATR ({e['atr_pct']} %)")
         if not e["news"] and not e["report"]:
             errors.append(f"{e['name']}: varken pressmeddelande eller rapport")
+        if len(e["peers"]) > PEER_N:
+            errors.append(f"{e['name']}: fler än {PEER_N} kollegor")
         for p in e["peers"]:
+            if not is_peer(p["corr"], bool(p.get("same_sector"))):
+                errors.append(f"{e['name']}: {p['name']} uppfyller inte kollegevillkoret (korrelation {p['corr']})")
             want = (p["vs_index_pp"] is not None and not p["own_news"] and abs(p["vs_index_pp"]) >= PEER_MOVE_PP
                     and (p["vs_index_pp"] > 0) == (e["vs_index_pp"] > 0))
             if p["followed"] != want:
@@ -312,8 +335,8 @@ def outcome_stats(vals: list[float]) -> dict:
 def history(bars: dict, instruments: dict, years: int = HISTORY_YEARS) -> dict:
     """e) Grov jämförelse på kursdata, de senaste `years` åren: varje dag ett bolag i listan rörde sig minst ATR_MULT
     gånger sin ATR mot index (utan nyhetsdata: alla sådana rörelser räknas, också marknads- och branschdagar), med ett
-    fall per bolag inom 5 handelsdagar. Kollegorna = de PEER_N som korrelerat mest det senaste året före dagen (samma
-    regel som i drift). Deras rörelse mot index efter 1, 3 och 5 dagar från händelsedagens stängning, åt
+    fall per bolag inom 5 handelsdagar. Kollegorna väljs som i drift (top_peers: samma sektor och korrelation minst
+    PEER_SECTOR_CORR eller minst PEER_ANY_CORR oavsett sektor, året före dagen, högst PEER_N). Deras rörelse mot index efter 1, 3 och 5 dagar från händelsedagens stängning, åt
     händelsebolagets håll, för dem som följde med samma dag (minst PEER_MOVE_PP åt samma håll) och övriga. Kollegornas
     egna nyheter kan inte uteslutas."""
     ib = bars.get(INDEX_TICKER) or []
@@ -342,7 +365,8 @@ def history(bars: dict, instruments: dict, years: int = HISTORY_YEARS) -> dict:
     groups = {g: {str(h): [] for h in EVENT_HORIZONS} for g in ("all", "followed", "not_followed")}
     by_dir = {d: {g: {str(h): [] for h in EVENT_HORIZONS} for g in ("followed", "not_followed")} for d in ("upp", "ned")}
     last_event = {r: -10 for r in range(len(tick))}
-    n_events = n_peers = n_followed = 0
+    n_events = n_peers = n_followed = n_no_peers = 0
+    sectors = {t: instruments[t].sektor for t in tick}
     for k in range(start, len(days)):
         rel = (R[:, k - 1] - IR[k - 1]) * 100
         atr = A[:, k - 1]
@@ -357,7 +381,9 @@ def history(bars: dict, instruments: dict, years: int = HISTORY_YEARS) -> dict:
             last_event[r] = k
             n_events += 1
             sign = 1 if rel[r] > 0 else -1
-            for u_t, _ in top_peers(tick[r], tick, window):
+            peers = top_peers(tick[r], tick, window, sectors)
+            n_no_peers += not peers
+            for u_t, _ in peers:
                 u = tick.index(u_t)
                 if np.isnan(rel[u]) or np.isnan(C[u, k]):
                     continue
@@ -375,7 +401,7 @@ def history(bars: dict, instruments: dict, years: int = HISTORY_YEARS) -> dict:
     return {
         "period": {"start": days[start].isoformat(), "end": days[-1].isoformat()},
         "thresholds": dict(THRESHOLDS), "horizons": list(EVENT_HORIZONS),
-        "events": n_events, "peers": n_peers, "followed": n_followed,
+        "events": n_events, "peers": n_peers, "followed": n_followed, "events_without_peers": n_no_peers,
         "groups": {g: {h: outcome_stats(v) for h, v in hs.items()} for g, hs in groups.items()},
         "by_direction": {d: {g: {h: outcome_stats(v) for h, v in hs.items()} for g, hs in gs.items()}
                          for d, gs in by_dir.items()},
@@ -457,7 +483,10 @@ def notice_text(data: dict | None, max_events: int = 3) -> str:
         j = e.get("judgement")
         kind = f", {j['class']} enligt Claude" if j else ""
         fol = [p for p in e["peers"] if p["followed"]]
-        peers = (" – följde med: " + ", ".join(f"{p['name']} {num(p['vs_index_pp'])}" for p in fol)) if fol else ""
+        if not e["peers"]:
+            peers = f" – {NO_PEERS_TEXT}"
+        else:
+            peers = (" – följde med: " + ", ".join(f"{p['name']} {num(p['vs_index_pp'])}" for p in fol)) if fol else ""
         parts.append(f"{e['name']} {num(e['vs_index_pp'])} pe mot index ({num(e['atr_mult'], False)} ATR{kind}){peers}")
     more = f" och {len(data['events']) - max_events} till" if len(data["events"]) > max_events else ""
     return "Händelser i sektorn (gårdagens stängning): " + "; ".join(parts) + more + "."
