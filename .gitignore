@@ -15,6 +15,7 @@ data/afternoon/
 data/status/
 data/swing/
 data/rotation/
+data/peaks/
 
 # Python
 .venv/

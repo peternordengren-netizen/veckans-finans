@@ -14,7 +14,7 @@ import {
   MIN_CASES, altStopText, decidedShareText, labelClass, labelCounts, levelText, missingText, netText, priceText,
   reportText, resistanceRText, riskText, shareText, bollingerSourceText, chipText, pctBText, signalText,
   TODAY_STATUS, todayInvalid, todayLines, todayOrder, bbLevelText, breakoutLines, todayVolumeText, volumeRuleLines,
-  momentumText, depthsText, criteriaLines, ciShareText, eventMoveText, eventOutcomeText, rsiWarnText, sectorOutcomeText, rText, rankText, rankTitle, srDistText, srInsideText, srKindText, srLevelText, upperRText, vsBaseText,
+  momentumText, depthsText, criteriaLines, ciShareText, eventMoveText, eventOutcomeText, peakTexts, peakTitle, rsiWarnText, sectorOutcomeText, rText, rankText, rankTitle, srDistText, srInsideText, srKindText, srLevelText, upperRText, vsBaseText,
 } from "../lib/swing";
 
 interface Props {
@@ -124,6 +124,11 @@ const ppFmt = (v: number | null) =>
       <li><strong>Mot 20 d / 50 d MA:</strong> stängningskursen mot det glidande medelvärdet för 20 respektive 50 handelsdagar.</li>
       <li><strong>RSI(2) och RSI(14):</strong> relativ styrka över 2 och 14 dagar (0–100).</li>
       <li><strong>ATR(14):</strong> genomsnittlig daglig rörelse de senaste 14 dagarna, i procent av kursen.</li>
+      <li>
+        <strong>⚠ 52v-högsta och rekordnivå</strong> (vid kandidaterna och i Händelser i sektorn): stängningen mot den
+        högsta stängningen de 52 veckorna före, respektive någonsin före (Yahoos historik, räknad en gång i veckan).
+        "Nära" = högst 3 % under, "Ny" = över, med avståndet i procent. Information; påverkar inte rangen.
+      </li>
       <li><strong>Omsättning:</strong> senaste dagens omsättning mot snittet för de 20 handelsdagarna före.</li>
       <li>
         <strong>Utbrott:</strong> stängningen ligger över det högsta värdet de 20 handelsdagarna före; "hög omsättning"
@@ -507,7 +512,9 @@ const ppFmt = (v: number | null) =>
             ? ` minst ${corrFmt.format(evs.thresholds.peer_sector_corr)} i samma sektor eller minst ${corrFmt.format(evs.thresholds.peer_any_corr ?? 0)} oavsett sektor, högst ${evs.thresholds.peer_n}.`
             : ` de ${evs.thresholds.peer_n} med högst korrelation, oavsett sektor.`} "Följde med": minst {num(evs.thresholds.peer_move_pp, 0)} procentenheter
           mot index åt samma håll samma dag, utan eget pressmeddelande. I tabellen visas händelsebolagen och kollegorna som
-          följde med. Klassen är Claudes tolkning av pressmeddelandet. Beskriver vad som hänt, inga uppmaningar.
+          följde med. Klassen är Claudes tolkning av pressmeddelandet. ⚠ visar läget mot 52v-högsta och rekordnivån
+          (högsta stängningen före dagen; "nära" = högst 3 % under, "ny" = över) med avståndet. Beskriver vad som hänt,
+          inga uppmaningar.
         </p>
         {evs.events.length === 0 && <p class="note">Inga händelser vid den här stängningen.</p>}
         {evs.events.map((e) => (
@@ -516,6 +523,9 @@ const ppFmt = (v: number | null) =>
               <strong>{e.name}</strong> <span class="ticker">{e.ticker}</span>{e.sector ? ` · ${e.sector}` : ""}:{" "}
               <span class:list={[e.direction === "upp" ? "pos" : "neg"]}>{eventMoveText(e.vs_index_pp, e.atr_mult)}</span>
               {e.report && " · rapport"}
+              {peakTexts(e.peaks).length > 0 && (
+                <span class="peak" title={peakTitle(e.peaks)}> · {peakTexts(e.peaks).join(" · ")}</span>
+              )}
             </p>
             {e.news.length > 0 && (
               <ul class="event-news">
@@ -551,7 +561,12 @@ const ppFmt = (v: number | null) =>
                 <tbody>
                   {e.peers.map((p) => (
                     <tr class:list={{ followed: p.followed }}>
-                      <th scope="row">{p.name}</th>
+                      <th scope="row">
+                        {p.name}
+                        {peakTexts(p.peaks).length > 0 && (
+                          <span class="sub peak" title={peakTitle(p.peaks)}>{peakTexts(p.peaks).join(" · ")}</span>
+                        )}
+                      </th>
                       <td>{p.sector ?? "–"}</td>
                       <td class="num">{corrFmt.format(p.corr)}</td>
                       <td class="num">{ppFmt(p.vs_index_pp)}</td>
@@ -627,8 +642,10 @@ const ppFmt = (v: number | null) =>
                   {r.labels.some((l) => strategyLabels.has(l)) && (() => {
                     const warn = rsiWarnText(r.rsi14, warnRsi);
                     const sec = ev && r.sector ? sectorOutcomeText(ev.sector_recent?.sectors[r.sector]) : null;
+                    const pk = peakTexts(r.peaks);
                     return (
                       <>
+                        {pk.length > 0 && <span class="sub cand-peak" title={peakTitle(r.peaks)}>{pk.join(" · ")}</span>}
                         {warn && <span class="sub cand-warn" title="Utvärderingen: RSI(14) högst 30 var oftare dåliga (minst 5 procentenheter under index inom 5 dagar). Utesluter inget.">{warn}</span>}
                         {sec && <span class="sub cand-sector" title="Utvärderingen, senaste 4 veckorna, ett fall per uppgång: lyckade = minst 5 procentenheter över index inom 5 dagar, dåliga = minst 5 under.">{sec}</span>}
                       </>
@@ -1626,6 +1643,11 @@ const ppFmt = (v: number | null) =>
     color: var(--neg);
   }
   .cand-sector {
+    font-weight: normal;
+  }
+  /* Läget mot 52v-högsta och rekordnivån (scripts/peaks.py): information, påverkar inte rangen. */
+  .cand-peak,
+  .peak {
     font-weight: normal;
   }
   td.sr {

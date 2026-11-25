@@ -974,9 +974,17 @@ def event_snapshot(data: dict, yahoo: dict[str, str]) -> dict:
          "vs_index_pp": e["vs_index_pp"], "atr_mult": e["atr_mult"], "report": e.get("report", False),
          "class": (e.get("judgement") or {}).get("class"),
          "peers": [{"ticker": p["ticker"], "name": p["name"], "yahoo_ticker": yahoo.get(p["ticker"]), "corr": p["corr"],
-                    "vs_index_pp": p["vs_index_pp"], "own_news": p["own_news"], "followed": p["followed"], "follow": {}}
+                    "vs_index_pp": p["vs_index_pp"], "own_news": p["own_news"], "followed": p["followed"],
+                    **({"peaks": p["peaks"]} if p.get("peaks") is not None else {}), "follow": {}}
                    for p in e["peers"]]}
         for e in data["events"]]}
+
+
+def near_top(p: dict) -> bool | None:
+    """Låg kollegan nära eller över 52v-högsta eller rekordnivån (scripts/peaks.py) på händelsedagen? None när
+    flaggorna saknas (äldre ögonblicksbilder, eller dagen saknades i kursdatan)."""
+    f = p.get("peaks")
+    return None if f is None else bool(f)
 
 
 def event_follow_up(snap: dict, bars: dict) -> int:
@@ -1029,9 +1037,15 @@ def update_events(bars: dict, yahoo: dict[str, str], eval_dir: Path = EVAL_DIR, 
             snaps[data["as_of"]] = event_snapshot(data, yahoo)
             continue
         cls = {e["ticker"]: (e.get("judgement") or {}).get("class") for e in data["events"]}
+        src_peaks = {(e["ticker"], p["ticker"]): p.get("peaks") for e in data["events"] for p in e["peers"]}
         for e in s["events"]:
             if e.get("class") is None and cls.get(e["ticker"]):
                 e["class"] = cls[e["ticker"]]
+            # Toppflaggorna förs in i en ögonblicksbild som skapades innan de fanns (samma händelsedag).
+            for p in e["peers"]:
+                f = src_peaks.get((e["ticker"], p["ticker"]))
+                if "peaks" not in p and f is not None:
+                    p["peaks"] = f
     last = max((b.day for b in bars.get(INDEX_TICKER, [])), default=None)
     for s in snaps.values():
         if last and (keep_open is None or (last - date.fromisoformat(s["day"])).days <= keep_open):
@@ -1061,6 +1075,8 @@ def events_outcomes(snaps: list[dict]) -> dict:
     groups: dict[str, dict[str, dict[str, list[float]]]] = {
         c: {g: {str(k): [] for k in EVENT_HORIZONS} for g in ("all", "followed")} for c in EVENT_CLASSES}
     counts = {c: 0 for c in EVENT_CLASSES}
+    # Kollegorna som följde med, efter läget mot toppnivåerna på händelsedagen (alla klasser tillsammans).
+    top = {g: {str(k): [] for k in EVENT_HORIZONS} for g in ("near_top", "other")}
     for s in snaps:
         for e in s["events"]:
             c = e.get("class") if e.get("class") in EVENT_CLASSES else "ej bedömd"
@@ -1068,15 +1084,21 @@ def events_outcomes(snaps: list[dict]) -> dict:
             for p in e["peers"]:
                 if p.get("own_news"):
                     continue
+                nt = near_top(p)
                 for k, f in p["follow"].items():
                     groups[c]["all"][k].append(f["same_dir_pp"])
                     if p["followed"]:
                         groups[c]["followed"][k].append(f["same_dir_pp"])
+                        if nt is not None:
+                            top["near_top" if nt else "other"][k].append(f["same_dir_pp"])
     return {
         "period": {"start": snaps[0]["day"] if snaps else None, "end": snaps[-1]["day"] if snaps else None},
         "horizons": list(EVENT_HORIZONS), "events": counts,
         "by_class": {c: {g: {k: _event_stats(v) for k, v in hs.items()} for g, hs in gs.items()}
                      for c, gs in groups.items()},
+        # Följde med och låg nära (inom 3 %) eller över 52v-högsta eller rekordnivån, mot övriga som följde med.
+        # "Gick tillbaka" = rörelsen mot index åt händelsens håll högst 0 (1 − same_dir_share).
+        "followed_by_top": {g: {k: _event_stats(v) for k, v in hs.items()} for g, hs in top.items()},
         "note": "Kollegornas rörelse mot index från händelsedagens stängning, räknad åt händelsebolagets håll (positivt = "
                 "samma håll som händelsen). Kollegor med eget pressmeddelande samma dag räknas inte. Klassen är Claudes "
                 "tolkning av pressmeddelandet. Få fall som överlappar i tid; beskriver vad som hänt.",

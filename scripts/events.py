@@ -36,6 +36,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import peaks  # noqa: E402
 from prices import INDEX_TICKER  # noqa: E402
 from validate import DATA_DIR, RAW_DIR  # noqa: E402
 
@@ -184,8 +185,10 @@ def reports_on(day: date, calendar_dir: Path | None = None) -> set[str]:
 
 
 def detect(day: date, prev_day: date, bars: dict, instruments: dict, news: dict[str, list[dict]],
-           reporting: set[str]) -> list[dict]:
-    """Händelserna dag `day` (se modulbeskrivningen a och c)."""
+           reporting: set[str], records: dict[str, dict] | None = None) -> list[dict]:
+    """Händelserna dag `day` (se modulbeskrivningen a och c), med flaggorna för läget mot 52v-högsta och rekordnivån
+    (scripts/peaks.py; records = rekordnivåerna per bolag) för händelsebolagen och kollegorna."""
+    records = records or {}
     idx = bars.get(INDEX_TICKER) or []
     ipos = {b.day: i for i, b in enumerate(idx)}
     if day not in ipos:
@@ -225,24 +228,26 @@ def detect(day: date, prev_day: date, bars: dict, instruments: dict, news: dict[
             peers.append({"ticker": u, "name": instruments[u].namn, "sector": instruments[u].sektor, "corr": corr,
                           "same_sector": same,
                           "move_pct": round(pm[0], 2) if pm else None, "vs_index_pp": round(prel, 2) if pm else None,
-                          "own_news": own, "followed": followed})
+                          "own_news": own, "followed": followed,
+                          "peaks": peaks.flags_at(bars.get(yt), day, records.get(u))})
         out.append({"ticker": t, "name": instruments[t].namn, "sector": instruments[t].sektor,
                     "move_pct": round(mv, 2), "vs_index_pp": round(rel, 2), "atr_pct": round(atr, 2),
                     "atr_mult": round(abs(rel) / atr, 2), "direction": "upp" if rel > 0 else "ned",
-                    "report": t in reporting, "news": news.get(t, []), "peers": peers, "judgement": None})
+                    "report": t in reporting, "news": news.get(t, []), "peers": peers, "judgement": None,
+                    "peaks": peaks.flags_at(bars.get(listed[t].yahoo_ticker), day, records.get(t))})
     return out
 
 
 def build(target: date, day: date, prev_day: date, now: datetime, bars: dict, instruments: dict,
-          raw_dirs: list[Path], calendar_dir: Path | None = None) -> dict:
-    """Händelsefilen för sidan som gäller target (stängningen day)."""
+          raw_dirs: list[Path], calendar_dir: Path | None = None, records: dict[str, dict] | None = None) -> dict:
+    """Händelsefilen för sidan som gäller target (stängningen day); records = rekordnivåerna (peaks.load_records)."""
     since = datetime.combine(prev_day, CLOSE, TZ)
     until = datetime.combine(day, CLOSE, TZ)
     news = company_news(raw_dirs, instruments, since, until)
-    events = detect(day, prev_day, bars, instruments, news, reports_on(day, calendar_dir))
+    events = detect(day, prev_day, bars, instruments, news, reports_on(day, calendar_dir), records)
     return {"schema_version": 1, "date": target.isoformat(), "as_of": day.isoformat(),
             "generated_at": now.isoformat(timespec="seconds"), "news_window": [since.isoformat(), until.isoformat()],
-            "thresholds": dict(THRESHOLDS), "events": events}
+            "thresholds": {**THRESHOLDS, "peaks": dict(peaks.THRESHOLDS)}, "events": events}
 
 
 def validate(data: dict) -> list[str]:
@@ -441,11 +446,13 @@ def write(data: dict, events_dir: Path | None = None) -> Path:
 
 
 def write_events(target: date, day: date, prev_day: date, now: datetime, bars: dict, instruments: dict,
-                 raw_dirs: list[Path] | None = None, events_dir: Path | None = None) -> Path | None:
+                 raw_dirs: list[Path] | None = None, events_dir: Path | None = None,
+                 records: dict[str, dict] | None = None) -> Path | None:
     """Bygger, validerar och skriver händelsefilen; en befintlig bedömning för samma händelse behålls. Fel här stoppar
     aldrig anroparen."""
     try:
-        data = build(target, day, prev_day, now, bars, instruments, raw_dirs or [RAW_DIR, DATA_DIR / "morning" / "raw"])
+        data = build(target, day, prev_day, now, bars, instruments, raw_dirs or [RAW_DIR, DATA_DIR / "morning" / "raw"],
+                     records=records)
         old = load(target, events_dir) or {}
         kept = {e["ticker"]: e.get("judgement") for e in old.get("events", [])}
         for e in data["events"]:

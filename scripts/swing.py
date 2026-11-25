@@ -62,6 +62,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import bbrekyl  # noqa: E402
 import levels  # noqa: E402
 import momentum  # noqa: E402
+import peaks  # noqa: E402
 import vcp  # noqa: E402
 import pullback  # noqa: E402
 import ranking  # noqa: E402
@@ -264,7 +265,8 @@ def priced(instruments: dict[str, Instrument], today: date) -> dict[str, Instrum
 
 
 def build(today: date, now: datetime, instruments: dict[str, Instrument], bars: dict[str, list[Bar]],
-          reports: dict[str, dict]) -> dict:
+          reports: dict[str, dict], records: dict[str, dict] | None = None) -> dict:
+    """Swingfilen. records = rekordnivåerna per bolag (peaks.load_records); utan dem bara 52v-flaggorna."""
     active = priced(instruments, today)
     delisted = [{"ticker": t, "name": i.namn, "last_day": i.avnoterad.isoformat(), "source": i.avnoterad_kalla}
                 for t, i in sorted(instruments.items(), key=lambda x: x[1].namn) if t not in active]
@@ -340,6 +342,8 @@ def build(today: date, now: datetime, instruments: dict[str, Instrument], bars: 
             "bbrekyl": bb,
             "momentum": mom,
             "sr": sr,
+            # Kursens läge mot 52v-högsta och rekordnivån (scripts/peaks.py): information, ingen påverkan på rang.
+            "peaks": peaks.flags(b, i, (records or {}).get(t)),
             "labels": labels + bbrekyl.labels(bb["state"]),
         })
     companies.sort(key=lambda c: c["name"])
@@ -357,7 +361,8 @@ def build(today: date, now: datetime, instruments: dict[str, Instrument], bars: 
                        "ranking": dict(ranking.THRESHOLDS),
                        "bbrekyl": {**bbrekyl.THRESHOLDS, "ranking": dict(bbrekyl.RANK_THRESHOLDS)},
                        "momentum": dict(momentum.THRESHOLDS),
-                       "vcp": {**vcp.THRESHOLDS, "ranking": dict(vcp.RANK_THRESHOLDS)}},
+                       "vcp": {**vcp.THRESHOLDS, "ranking": dict(vcp.RANK_THRESHOLDS)},
+                       "peaks": dict(peaks.THRESHOLDS)},
         "ranking_criteria": dict(ranking.CRITERIA),
         "bbrekyl_criteria": dict(bbrekyl.CRITERIA),
         "vcp_criteria": dict(vcp.CRITERIA),
@@ -485,7 +490,7 @@ def main(argv: list[str] | None = None, fetch: BarFetcher = yahoo_bars, now: dat
     instruments = load_instruments()
     tickers = [i.yahoo_ticker for i in priced(instruments, today).values()]
     bars = fetch([*tickers, INDEX_TICKER], today - timedelta(days=HISTORY_DAYS), today - timedelta(days=1))
-    data = build(today, now, instruments, bars, latest_reports(today))
+    data = build(today, now, instruments, bars, latest_reports(today), peaks.load_records())
     out = write(data, instruments)
     if out is None:
         return 1

@@ -9,7 +9,7 @@
 import type { SwingEval } from "../lib/data";
 import { shortDate } from "../lib/format";
 import { signedPct } from "../lib/signals";
-import { ciShareText, evalName, evalTraits, eventOutcomeText, ppText, rText, rsiWarnText, weeklyOutcomeText } from "../lib/swing";
+import { backShareText, ciShareText, evalName, evalTraits, eventOutcomeText, ppText, rText, rsiWarnText, weeklyOutcomeText } from "../lib/swing";
 
 interface Props {
   ev: SwingEval;
@@ -347,6 +347,33 @@ const CLASS_TEXT: Record<string, string> = {
             </tbody>
           </table>
         </div>
+        {eo.followed_by_top && (
+          <>
+            <p class="note">
+              Kollegorna som följde med, efter läget på händelsedagen: nära (högst 3 % under) eller över 52v-högsta eller
+              rekordnivån, mot övriga som följde med. "Gick tillbaka" = rörde sig mot index åt motsatt håll mot händelsen
+              (eller inte alls). Alla klasser tillsammans; kollegor från före 2026-11-25 saknar flaggorna och räknas inte.
+            </p>
+            <div class="hist-wrap">
+              <table class="hist" data-eval="events-top">
+                <thead>
+                  <tr>
+                    <th scope="col">Följde med</th>
+                    {eo.horizons.map((k) => <th scope="col" class="num">Efter {k} {k === 1 ? "dag" : "dagar"}</th>)}
+                  </tr>
+                </thead>
+                <tbody>
+                  {(["near_top", "other"] as const).map((g) => (
+                    <tr>
+                      <th scope="row">{g === "near_top" ? "Nära toppen" : "Övriga"}</th>
+                      {eo.horizons.map((k) => <td class="num">{backShareText(eo.followed_by_top?.[g][String(k)])}</td>)}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
       </section>
     )
   }

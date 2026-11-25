@@ -336,6 +336,45 @@ export function eventOutcomeText(s: { n: number; mean_pp: number | null; same_di
   return `${pp} pe · ${ciShareText(s.same_dir, s.n, s.ci)}`;
 }
 
+/** Kursens läge mot en toppnivå (scripts/peaks.py). */
+export interface PeakFlag {
+  kind: "52v" | "rekord"; status: "nära" | "ny"; dist_pct: number; level: number; level_day: string | null;
+}
+
+/** Flaggorna som text: "⚠ Nära 52v-högsta −1,2 %", "⚠ Ny rekordnivå +0,8 %". 52v-flaggan utelämnas när
+ *  rekordflaggan har samma status (rekordnivån är minst lika hög, så den säger samma sak). */
+export function peakTexts(flags: readonly PeakFlag[] | null | undefined): string[] {
+  if (!flags?.length) return [];
+  const rec = flags.find((f) => f.kind === "rekord");
+  const pct = (v: number) =>
+    new Intl.NumberFormat("sv-SE", { minimumFractionDigits: 1, maximumFractionDigits: 1, signDisplay: "exceptZero" })
+      .format(v).replace("-", "−");
+  return [...flags]
+    .filter((f) => !(f.kind === "52v" && rec && rec.status === f.status))
+    .sort((a, b) => (a.kind === "rekord" ? -1 : 1) - (b.kind === "rekord" ? -1 : 1))
+    .map((f) => `⚠ ${f.status === "ny" ? "Ny" : "Nära"} ${f.kind === "52v" ? "52v-högsta" : "rekordnivå"} ${pct(f.dist_pct)} %`);
+}
+
+/** Andelen som gick tillbaka (inte åt händelsens håll) med snittet: "2 av 3 gick tillbaka (95 %: …) · −0,4 pe";
+ *  "–" utan fall. */
+export function backShareText(s: { n: number; mean_pp: number | null; same_dir: number; ci: readonly [number, number] | null } | undefined): string {
+  if (!s || s.n === 0 || s.mean_pp === null) return "–";
+  const back = s.n - s.same_dir;
+  const ci = s.ci ? ` (95 %: ${Math.round((1 - s.ci[1]) * 100)}–${Math.round((1 - s.ci[0]) * 100)} %)` : "";
+  const pp = new Intl.NumberFormat("sv-SE", { minimumFractionDigits: 1, maximumFractionDigits: 1, signDisplay: "exceptZero" })
+    .format(s.mean_pp).replace("-", "−");
+  return `${back} av ${s.n} gick tillbaka${ci} · ${pp} pe`;
+}
+
+/** Förklaringen (title) till flaggorna: nivåerna och dagarna. */
+export function peakTitle(flags: readonly PeakFlag[] | null | undefined): string {
+  if (!flags?.length) return "";
+  const lvl = new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 2 });
+  return flags
+    .map((f) => `${f.kind === "52v" ? "52v-högsta" : "Rekordnivå"} ${lvl.format(f.level)}${f.level_day ? ` (${f.level_day})` : ""}`)
+    .join("; ") + ". Stängningen mot högsta stängningen före dagen; nära = högst 3 % under. Information, påverkar inte rangen.";
+}
+
 /** Händelsens rörelse: "+9,9 pe mot index (3,9 ATR)". */
 export function eventMoveText(vsIndexPp: number, atrMult: number): string {
   const f = (v: number, sign: boolean) =>

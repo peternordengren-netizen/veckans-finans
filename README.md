@@ -885,6 +885,28 @@ e) **Historik på kursdata** (`events` i `history.json`, `events.history`): de s
    1 619 kollegor; de 346 som följde med samma dag gick i snitt −1,4 procentenheter åt händelsens håll efter 5 dagar
    (34 % åt samma håll), övriga −0,3 (48 %). Med det gamla urvalet (de 5 mest korrelerade): 6 015 kollegor, de 863
    som följde med −0,7 (41 %), övriga −0,1 (49 %).
+f) **Läget mot toppnivåer** vid händelsebolagen och kollegorna (⚠, se nästa avsnitt). I utvärderingen jämförs
+   kollegorna som följde med och låg nära eller över 52v-högsta eller rekordnivån med övriga som följde med: hur många
+   som gick tillbaka (rörde sig mot index åt motsatt håll mot händelsen) efter 1, 3 och 5 dagar
+   (`followed_by_top` i `events_outcomes`). Kollegor från före 2026-11-25 saknar flaggorna och räknas inte.
+
+#### Läget mot toppnivåer (`scripts/peaks.py`)
+
+Information vid kandidaterna i Swing (under namnet) och vid händelsebolagen och kollegorna i Händelser i sektorn, som
+⚠ med avståndet i procent. Påverkar ingen rang, inget krav och ingen kandidat.
+
+- **Nära 52v-högsta / Ny 52v-högsta:** stängningen ligger högst 3 % under den högsta stängningen de 52 veckorna före
+  dagen (364 kalenderdagar, dagen ingår inte), respektive över den. Kräver kurser från minst 350 dagar före.
+- **Nära rekordnivå / Ny rekordnivå:** samma sak mot den högsta stängningen någonsin före dagen, i Yahoos historik.
+  Rekordnivån per bolag räknas en gång i veckan i veckokörningen (`run_weekly.ps1` → `scripts/peaks.py`, full
+  kurshistorik i ett batchanrop) och sparas i `data/peaks/records.json` (rekordet, dess dag, rekordet före den dagen
+  och senaste hämtade stängningen). Mellan veckokörningarna läggs dagsdatans stängningar till. Ändras stängningen för
+  den senaste hämtade dagen (en split efter hämtningen) skalas rekordnivån om med samma faktor.
+- **Avståndet:** (stängningen / toppnivån − 1) × 100. Stängningen är Yahoos "Close" (justerad för splitar, inte för
+  utdelningar). Är både rekordnivån och 52v-högsta "ny" (eller båda "nära") visas bara rekordnivån.
+- **Begränsningar:** "någonsin" betyder sedan Yahoos första kurs för bolaget (`first_day` i filen); felaktiga
+  enstaka kurser i den gamla historiken kan ge en för hög rekordnivå (rekorddagen syns när man håller muspekaren över
+  flaggan).
 
 Ögonblicksbilderna från 2026-10-28 skapades i efterhand ur de sparade swingfilerna (`swing_eval.py --efterhand`, en
 hämtning). Begränsningar: dagens bevakningslista (överlevnadsbias), fallen överlappar i tid och är inte oberoende,

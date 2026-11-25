@@ -551,7 +551,9 @@ def write_events_for(target: date, day: date, now: datetime, instruments: dict[s
         if len(idx) < 2 or idx[-1] != day:
             print(f"Händelser: indexet saknar {day} – byggs inte.", file=sys.stderr)
             return
-        events.write_events(target, day, idx[-2], now, bars, active)
+        import peaks
+
+        events.write_events(target, day, idx[-2], now, bars, active, records=peaks.load_records())
     except Exception as e:  # noqa: BLE001
         print(f"Händelserna kunde inte skrivas: {e}", file=sys.stderr)
 
@@ -585,12 +587,13 @@ def retry_reasons(data: dict, fetch_errors: list[str], today: date) -> list[str]
 
 def write_swing(today: date, now: datetime, instruments: dict[str, Instrument], fetch: BarFetcher) -> None:
     """Fliken Swing (scripts/swing.py) med morgonrapportens dagsdata. Fel här stoppar inte morgonrapporten."""
+    import peaks
     import swing
 
     try:
         tickers = [i.yahoo_ticker for i in swing.priced(instruments, today).values()]
         bars = fetch([*tickers, INDEX_TICKER], today - timedelta(days=swing.HISTORY_DAYS), today - timedelta(days=1))
-        data = swing.build(today, now, instruments, bars, swing.latest_reports(today))
+        data = swing.build(today, now, instruments, bars, swing.latest_reports(today), peaks.load_records())
         out = swing.write(data, instruments)
         if out:
             print(swing.summary(data, out))

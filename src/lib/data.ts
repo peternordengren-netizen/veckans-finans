@@ -8,6 +8,7 @@
  */
 import type { HbSummary } from "./hb";
 import type { PolicyDecision } from "./policyRate";
+import type { PeakFlag } from "./swing";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -87,6 +88,8 @@ export interface SwingRow {
   report_published: string | null;
   days_since_report: number | null;
   report_verdict: string | null;
+  /** Läget mot 52v-högsta och rekordnivån (scripts/peaks.py): information, ingen påverkan på rang; saknas i äldre filer. */
+  peaks?: PeakFlag[];
   /** Bara i äldre swingfiler (blankning räknas inte sedan 2026-11-11). */
   short_pct?: number | null;
   /** Pullback i trend (scripts/pullback.py): tillståndet och nivåerna vid träff; saknas i äldre filer.
@@ -320,12 +323,16 @@ export interface EventPeer {
   vs_index_pp: number | null; own_news: boolean; followed: boolean;
   /** Samma sektor som händelsebolaget (saknas i filer från före 2026-11-25). */
   same_sector?: boolean;
+  /** Läget mot 52v-högsta och rekordnivån (scripts/peaks.py); saknas i äldre filer, null utan kurs för dagen. */
+  peaks?: PeakFlag[] | null;
 }
 export interface SwingEvent {
   ticker: string; name: string; sector: string | null; move_pct: number; vs_index_pp: number; atr_pct: number;
   atr_mult: number; direction: "upp" | "ned"; report: boolean;
   news: { published: string; title: string; url: string; source: string }[];
   peers: EventPeer[];
+  /** Läget mot 52v-högsta och rekordnivån (scripts/peaks.py); saknas i äldre filer. */
+  peaks?: PeakFlag[] | null;
   /** Claudes bedömning av pressmeddelandet (märkt som tolkning), eller null innan den finns. */
   judgement: { class: "bolagsspecifik" | "branschgemensam"; reason: string; label: string } | null;
 }
@@ -1049,6 +1056,8 @@ export interface SwingEval {
     period: { start: string | null; end: string | null }; horizons: number[];
     events: Record<string, number>;
     by_class: Record<string, Record<"all" | "followed", Record<string, EventOutcome>>>;
+    /** Kollegorna som följde med: nära eller över 52v-högsta eller rekordnivån mot övriga (saknas i äldre filer). */
+    followed_by_top?: Record<"near_top" | "other", Record<string, EventOutcome>>;
     note: string;
   };
   /** Claudes senaste veckotext (data/raw/swing_eval/notes/<vecka>.json), märkt som tolkning. */

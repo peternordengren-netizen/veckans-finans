@@ -241,6 +241,10 @@
           "type": "object",
           "description": "Trösklar för Momentum-utbrott (VCP) (scripts/vcp.py THRESHOLDS och RANK_THRESHOLDS); saknas i äldre filer."
         },
+        "peaks": {
+          "type": "object",
+          "description": "Trösklar för läget mot toppnivåerna (scripts/peaks.py THRESHOLDS); saknas i äldre filer."
+        },
         "momentum": {
           "type": "object",
           "description": "RSI och Stoch RSI (scripts/momentum.py THRESHOLDS); saknas i äldre filer.",
@@ -818,6 +822,23 @@
           "bb_upper_pct": {
             "$ref": "#/$defs/num",
             "description": "Stängningen mot övre Bollingerbandet i procent (saknas i äldre filer)."
+          },
+          "peaks": {
+            "type": "array",
+            "maxItems": 2,
+            "description": "Kursens läge mot 52v-högsta och rekordnivån (scripts/peaks.py): \"nära\" = högst 3 % under, \"ny\" = över; dist_pct = avståndet i procent. Information, ingen påverkan på rang. Saknas i äldre filer.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["kind", "status", "dist_pct", "level", "level_day"],
+              "properties": {
+                "kind": {"enum": ["52v", "rekord"]},
+                "status": {"enum": ["nära", "ny"]},
+                "dist_pct": {"type": "number"},
+                "level": {"type": "number", "exclusiveMinimum": 0},
+                "level_day": {"type": ["string", "null"], "format": "date"}
+              }
+            }
           },
           "sr": {
             "type": [

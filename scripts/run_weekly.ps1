@@ -20,7 +20,8 @@
 #   <vecka>.err (stderr), <vecka>-slutrapport.md (slutrapporten) och <vecka>-build.log.
 # - Efter Claude skrivs signalöversikten (scripts/signals.py, säkerhetskopieras med
 #   backup_week.py), rapportkalendern för veckan efter (scripts/report_calendar.py) och
-#   swinghistoriken för fliken Swing (scripts/swing_history.py).
+#   swinghistoriken för fliken Swing (scripts/swing_history.py) och rekordnivåerna per bolag
+#   (scripts/peaks.py, full kurshistorik).
 #
 # Manuellt: powershell -NoProfile -File scripts\run_weekly.ps1 [-Week 2026-W42] [-DryRun]
 # -DryRun kör allt utom själva sammanfattningen (Claude får ett ofarligt testprompt i stället).
@@ -211,6 +212,14 @@ if ((Test-Path $WeekFile) -and -not $DryRun) {
 $NextWeek = & $Python -c "import sys; from datetime import date, timedelta; y, w = sys.argv[1].split('-W'); n = date.fromisocalendar(int(y), int(w), 1) + timedelta(weeks=1); c = n.isocalendar(); print(f'{c[0]}-W{c[1]:02d}')" $Week
 & cmd.exe /c ".venv\Scripts\python.exe scripts\report_calendar.py $NextWeek 2>&1" | ForEach-Object { Log "kalender: $_" }
 Log "report_calendar.py ${NextWeek}: exit $LASTEXITCODE"
+
+# Rekordnivåerna per bolag (⚠ Nära/Ny rekordnivå i Swing och Händelser i sektorn): full kurshistorik, ett
+# batchanrop till Yahoo, till data\peaks\records.json. Fel här stoppar inte bygget; då gäller förra veckans nivåer.
+if (-not $DryRun) {
+    & cmd.exe /c ".venv\Scripts\python.exe scripts\peaks.py 2>&1" |
+        Where-Object { $_ -match '^Rekordniv' } | ForEach-Object { Log "toppnivåer: $_" }
+    Log "peaks.py: exit $LASTEXITCODE"
+}
 
 # Swinghistoriken (fliken Swing): räknas om på det senaste årets dagsdata, ett batchanrop till Yahoo.
 # Deterministiskt skript utanför Claude; fel här stoppar inte bygget.

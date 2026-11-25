@@ -26,7 +26,7 @@ $Drift = "$Main-drift"
 $Shared = @(
     "data\raw", "data\prices", "data\analysis", "data\calendar", "data\signals", "data\morning",
     "data\consensus", "data\valuation", "data\afternoon", "data\status", "data\swing",
-    "data\bollinger", "data\rotation", "logs", ".venv", "node_modules"
+    "data\bollinger", "data\rotation", "data\peaks", "logs", ".venv", "node_modules"
 )
 # Mappar som Claude skriver i: riktiga i driftkopian, kopplingar i arbetskopian (se ovan).
 $ClaudeWrites = @("data\results", "data\weeks", "data\hb", "data\swing_eval", "data\events")

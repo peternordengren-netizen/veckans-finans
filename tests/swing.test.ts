@@ -5,6 +5,7 @@ import { test } from "node:test";
 import {
   decidedShareText, isPullbackLabel, labelClass, labelCounts, levelText, netText, priceText, reportText, riskText, shareText,
   altStopText, bbLevelText, ciShareText, evalName, evalTraits, ppText, successCount, rsiWarnText, sectorOutcomeText, weeklyOutcomeText, rotationChangeText, breakoutLines, criteriaLines, depthsText, momentumText, todayVolumeText, volumeRuleLines, missingText, resistanceRText, todayInvalid, todayLines, todayOrder, TODAY_STATUS,
+  backShareText, peakTexts, peakTitle,
   bollingerSourceText, chipText, pctBText, rankText, rankTitle, rText, signalText, srDistText, srInsideText, srLevelText, upperRText, vsBaseText,
 } from "../src/lib/swing.ts";
 
@@ -250,4 +251,24 @@ test("Rotationer: förändringar i postens enhet", () => {
   assert.equal(rotationChangeText(9.6, "bp"), "+9,6 rp");
   assert.equal(rotationChangeText(-3.92, "pct"), "−3,9 %");
   assert.equal(rotationChangeText(null, "pct"), "–");
+});
+
+test("toppflaggorna som text", () => {
+  const near52 = { kind: "52v", status: "nära", dist_pct: -1.25, level: 100, level_day: "2026-03-02" } as const;
+  const newRec = { kind: "rekord", status: "ny", dist_pct: 0.84, level: 120, level_day: "2021-05-04" } as const;
+  const new52 = { ...newRec, kind: "52v", level: 110 } as const;
+  assert.deepEqual(peakTexts([near52]), ["⚠ Nära 52v-högsta −1,3 %"]);
+  // Ny rekordnivå innebär ny 52v-högsta: bara rekordflaggan visas.
+  assert.deepEqual(peakTexts([new52, newRec]), ["⚠ Ny rekordnivå +0,8 %"]);
+  // Olika status: båda visas, rekordnivån först.
+  assert.deepEqual(peakTexts([{ ...new52, dist_pct: 2 }, { ...newRec, status: "nära", dist_pct: -2.5 }]),
+    ["⚠ Nära rekordnivå −2,5 %", "⚠ Ny 52v-högsta +2,0 %"]);
+  assert.deepEqual(peakTexts([]), []);
+  assert.deepEqual(peakTexts(null), []);
+  assert.match(peakTitle([near52]), /52v-högsta 100 \(2026-03-02\).*påverkar inte rangen/);
+});
+
+test("andelen som gick tillbaka", () => {
+  assert.equal(backShareText({ n: 4, mean_pp: -0.44, same_dir: 1, ci: [0.05, 0.7] }), "3 av 4 gick tillbaka (95 %: 30–95 %) · −0,4 pe");
+  assert.equal(backShareText({ n: 0, mean_pp: null, same_dir: 0, ci: null }), "–");
 });

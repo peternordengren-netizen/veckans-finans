@@ -89,6 +89,9 @@ def test_event_with_news_and_peers():
     # Gammagruppen rörde sig åt samma håll men har ett eget pressmeddelande: följde inte med.
     assert peers["GAMMA"]["own_news"] and not peers["GAMMA"]["followed"]
     assert not peers["DELTA"]["followed"]  # åt andra hållet
+    # Toppflaggorna (scripts/peaks.py) finns vid händelsebolaget och kollegorna; utan rekordnivåer bara 52v-flaggor.
+    assert isinstance(e["peaks"], list) and all(isinstance(p["peaks"], list) for p in peers.values())
+    assert all(f["kind"] == "52v" for f in e["peaks"] + [f for p in peers.values() for f in p["peaks"]])
     assert events.validate({"events": evs}) == []
 
 
