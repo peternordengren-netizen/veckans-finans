@@ -194,3 +194,11 @@ def test_history_rough_comparison():
     assert set(h["groups"]) == {"all", "followed", "not_followed"}
     assert h["groups"]["all"]["5"]["n"] >= 1 and "nyhetsdata" in h["note"]
     json.dumps(h)  # inga numpy-typer i filen
+
+
+def test_rounding_matches_page():
+    # Samma avrundning som sidan (Intl.NumberFormat, signDisplay "exceptZero"): exakta halvor bort från noll.
+    assert events.fmt1(12.25) == "+12,3" and events.fmt1(-12.25) == "−12,3"
+    assert events.fmt1(2.15) == "+2,2"  # kortaste decimalformen, som Intl (inte det binära 2,1499…)
+    assert events.fmt1(-0.04) == "0,0" and events.fmt1(0.0) == "0,0"
+    assert events.fmt1(3.85, sign=False) == "3,9" and events.fmt1(4.44, sign=False) == "4,4"

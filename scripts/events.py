@@ -26,6 +26,7 @@ import json
 import re
 import sys
 from datetime import date, datetime, time, timedelta
+from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -436,13 +437,21 @@ def write_events(target: date, day: date, prev_day: date, now: datetime, bars: d
         return None
 
 
+def fmt1(x: float, sign: bool = True) -> str:
+    """En decimal med decimalkomma, avrundad som sidan (Intl.NumberFormat, halva bort från noll på talets kortaste
+    decimalform: 12,25 -> 12,3, 2,15 -> 2,2), med tecken utom för noll (signDisplay "exceptZero"), så att notisen och sidan visar samma tal."""
+    d = Decimal(repr(float(x))).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
+    if d == 0:
+        d = abs(d)
+    s = f"{d:+.1f}" if sign and d != 0 else f"{d:.1f}"
+    return s.replace(".", ",").replace("-", "−")
+
+
 def notice_text(data: dict | None, max_events: int = 3) -> str:
     """Notisens rad om händelserna (Bollingerkontrollerna 09:20 och 13:20); tom utan händelser."""
     if not data or not data.get("events"):
         return ""
-    def num(x: float, sign: bool = True) -> str:
-        return (f"{x:+.1f}" if sign else f"{x:.1f}").replace(".", ",").replace("-", "−")
-
+    num = fmt1
     parts = []
     for e in data["events"][:max_events]:
         j = e.get("judgement")
