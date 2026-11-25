@@ -879,10 +879,12 @@ d) **Uppföljning** i utvärderingen (`scripts/swing_eval.py`): kollegornas rör
    från händelsedagens stängning, räknad åt händelsebolagets håll, per klass, för alla kollegor utan eget
    pressmeddelande och för dem som följde med. Visas i utvärderingen överst i Swing.
 e) **Historik på kursdata** (`events` i `history.json`, `events.history`): de senaste tre åren, alla rörelser på minst
-   3 ATR mot index (ett fall per bolag inom 5 dagar) och deras 5 kollegor. Utan nyhetsdata blir det en grov
+   3 ATR mot index (ett fall per bolag inom 5 dagar) och deras kollegor enligt c. Utan nyhetsdata blir det en grov
    jämförelse: marknads- och branschdagar räknas också, och kollegornas egna nyheter kan inte uteslutas. Körningen
-   2026-11-25: 1 258 rörelser och 6 015 kollegor; de 863 som följde med samma dag gick i snitt −0,7 procentenheter
-   åt händelsens håll efter 5 dagar (41 % åt samma håll), övriga −0,1 (49 %).
+   2026-11-25 med det skärpta urvalet (t.o.m. 2026-11-24): 1 257 rörelser, varav 772 utan tydliga kollegor, och
+   1 619 kollegor; de 346 som följde med samma dag gick i snitt −1,4 procentenheter åt händelsens håll efter 5 dagar
+   (34 % åt samma håll), övriga −0,3 (48 %). Med det gamla urvalet (de 5 mest korrelerade): 6 015 kollegor, de 863
+   som följde med −0,7 (41 %), övriga −0,1 (49 %).
 
 Ögonblicksbilderna från 2026-10-28 skapades i efterhand ur de sparade swingfilerna (`swing_eval.py --efterhand`, en
 hämtning). Begränsningar: dagens bevakningslista (överlevnadsbias), fallen överlappar i tid och är inte oberoende,
