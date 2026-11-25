@@ -889,6 +889,11 @@ e) **Historik på kursdata** (`events` i `history.json`, `events.history`): de s
    1 619 kollegor; de 346 som följde med samma dag gick i snitt −1,4 procentenheter åt händelsens håll efter 5 dagar
    (34 % åt samma håll), övriga −0,3 (48 %). Med det gamla urvalet (de 5 mest korrelerade): 6 015 kollegor, de 863
    som följde med −0,7 (41 %), övriga −0,1 (49 %).
+   **Bara negativa händelser** (`negative` i `events`, rörelsen mot index utan teckenvändning), körningen 2026-11-25
+   (t.o.m. 2026-11-24): 559 fall nedåt, varav 329 utan tydliga kollegor, och 764 kollegor. De 139 som föll med samma
+   dag steg i snitt +1,5 procentenheter mer än index efter 1 dag, +1,6 efter 3 och +1,6 efter 5 dagar (median +0,7,
+   +1,1, +1,2); 66 %, 67 % och 65 % steg mer än index (95 %: 56–74 %). Övriga kollegor: −0,1, +0,1 och +0,3 (49–52 %).
+   Kollegorna som föll med tog alltså oftast igen en del av fallet; grov jämförelse, se begränsningarna ovan.
 f) **Under dagen (negativa händelser):** Bollingerkontrollerna 09:20 och 13:20 (`events.intraday` från
    `bollinger.py`, `intraday_events` i kontrollfilen) letar efter bolag som med dagens kurs (fördröjd ca 15 minuter)
    fallit minst 3 ATR mot index och har ett eget pressmeddelande (eller rapport) sedan förra handelsdagens stängning,
