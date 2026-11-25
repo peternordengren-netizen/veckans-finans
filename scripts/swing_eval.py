@@ -60,9 +60,14 @@ uppmaning och säger inget säkert om hur det går nästa gång.
    tolkning (/swing-utvardering, scripts/run_swing_note.ps1). Utkastet i data/swing_eval/<vecka>.json kontrolleras
    (check_note: antal meningar, inga uppmaningar, varje tal finns i sammanställningen) och flyttas sedan till
    rådatarepot.
+5. Händelser i sektorn (scripts/events.py): varje händelsefil (data/events/<datum>.json) sparas som ögonblicksbild
+   (events/<händelsedag>.json) och kollegornas rörelse mot index följs upp efter 1, 3 och 5 handelsdagar
+   (EVENT_HORIZONS) från händelsedagens stängning, räknad åt händelsebolagets håll. Sammanställningen
+   ("events_outcomes") delar upp på Claudes klass (bolagsspecifik, branschgemensam, ej bedömd), för alla kollegor utan
+   eget pressmeddelande och för dem som följde med samma dag.
 
-Underlaget sparas bara i rådatarepot (data/raw/swing_eval/): <signaldag>.json per ögonblicksbild, summary.json och
-notes/<vecka>.json. Kända begränsningar: dagens bevakningslista (överlevnadsbias), fallen överlappar i tid och är inte
+Underlaget sparas bara i rådatarepot (data/raw/swing_eval/): <signaldag>.json per ögonblicksbild, summary.json,
+events/<händelsedag>.json och notes/<vecka>.json. Kända begränsningar: dagens bevakningslista (överlevnadsbias), fallen överlappar i tid och är inte
 oberoende, utan courtage.
 
 Användning:
@@ -125,6 +130,11 @@ NOTE_DIR = DATA_DIR / "swing_eval"  # Claudes utkast (en riktig mapp i driftkopi
 SIGNALS_DIR = DATA_DIR / "signals"
 SWING_DIR = DATA_DIR / "swing"
 STRATEGY_ORDER = ("pullback", "bbrekyl", "vcp")
+# Händelser i sektorn (scripts/events.py): kollegornas rörelse följs upp efter 1, 3 och 5 handelsdagar.
+EVENTS_DIR = DATA_DIR / "events"
+EVENTS_SUBDIR = "events"  # ögonblicksbilderna i rådatarepot: swing_eval/events/<händelsedag>.json
+EVENT_HORIZONS = (1, 3, 5)  # samma som events.EVENT_HORIZONS
+EVENT_CLASSES = ("bolagsspecifik", "branschgemensam", "ej bedömd")
 STRONG_SIGNALS = {"insyn", "avviker", "52v-högsta", "52v-lägsta", "pe-upp"}
 CRITERIA_KEYS = {"pullback": "ranking_criteria", "bbrekyl": "bbrekyl_criteria", "vcp": "vcp_criteria"}
 NOTE_MIN_SENTENCES, NOTE_MAX_SENTENCES = 5, 8
@@ -918,7 +928,7 @@ def _sectors() -> dict[str, str]:
 
 
 def update(swing_files: list[dict], bars: dict, instruments: dict, now: datetime, eval_dir: Path = EVAL_DIR,
-           signals_dir: Path = SIGNALS_DIR, keep_open: int | None = KEEP_OPEN_DAYS
+           signals_dir: Path = SIGNALS_DIR, keep_open: int | None = KEEP_OPEN_DAYS, events_dir: Path | None = None
            ) -> tuple[list[dict], dict, list[tuple[Path, str]]]:
     """Nya ögonblicksbilder ur swingfilerna (befintliga skrivs inte över), marknadsläget där det saknas, uppföljning av
     de öppna (keep_open kalenderdagar; None = alla) och en ny sammanställning. Returnerar (ögonblicksbilder,
@@ -947,7 +957,130 @@ def update(swing_files: list[dict], bars: dict, instruments: dict, now: datetime
             follow_up(s, bars)
     all_snaps = sorted(snaps.values(), key=lambda s: s["day"])
     summ = summary(all_snaps, now)
-    return all_snaps, summ, save(all_snaps, summ, eval_dir)
+    # Händelserna läses ur data/events bara för den riktiga utvärderingen (inte när eval_dir är en annan mapp, t.ex. i test).
+    ev_src = events_dir if events_dir is not None else (EVENTS_DIR if eval_dir == EVAL_DIR else eval_dir / "_inga")
+    ev_snaps, ev_changed = update_events(bars, yahoo, eval_dir, ev_src, keep_open)
+    summ["events_outcomes"] = events_outcomes(ev_snaps)
+    return all_snaps, summ, save(all_snaps, summ, eval_dir) + ev_changed
+
+
+# --- Händelser i sektorn: kollegornas uppföljning --------------------------------------------------
+
+
+def event_snapshot(data: dict, yahoo: dict[str, str]) -> dict:
+    """Ögonblicksbild av en händelsefil (data/events/<datum>.json) för uppföljningen."""
+    return {"schema_version": 1, "day": data["as_of"], "date": data["date"], "events": [
+        {"ticker": e["ticker"], "name": e["name"], "sector": e.get("sector"), "direction": e["direction"],
+         "vs_index_pp": e["vs_index_pp"], "atr_mult": e["atr_mult"], "report": e.get("report", False),
+         "class": (e.get("judgement") or {}).get("class"),
+         "peers": [{"ticker": p["ticker"], "name": p["name"], "yahoo_ticker": yahoo.get(p["ticker"]), "corr": p["corr"],
+                    "vs_index_pp": p["vs_index_pp"], "own_news": p["own_news"], "followed": p["followed"], "follow": {}}
+                   for p in e["peers"]]}
+        for e in data["events"]]}
+
+
+def event_follow_up(snap: dict, bars: dict) -> int:
+    """Kollegornas rörelse mot index från händelsedagens stängning till 1, 3 och 5 handelsdagar senare (justerad
+    stängning), också räknad åt händelsebolagets håll ("same_dir_pp": positivt = samma håll som händelsen). Redan
+    ifyllda värden ändras inte; returnerar antal nya."""
+    idx = {b.day: b.adj_close for b in bars.get(INDEX_TICKER, [])}
+    d0 = date.fromisoformat(snap["day"])
+    added = 0
+    for e in snap["events"]:
+        sign = 1 if e["direction"] == "upp" else -1
+        for p in e["peers"]:
+            b = bars.get(p.get("yahoo_ticker") or "")
+            if not b or d0 not in idx:
+                continue
+            i = next((n for n, x in enumerate(b) if x.day == d0), None)
+            if i is None:
+                continue
+            for k in EVENT_HORIZONS:
+                if str(k) in p["follow"] or i + k >= len(b) or b[i + k].day not in idx:
+                    continue
+                rel = (b[i + k].adj_close / b[i].adj_close - 1) - (idx[b[i + k].day] / idx[d0] - 1)
+                p["follow"][str(k)] = {"day": b[i + k].day.isoformat(), "vs_index_pp": round(rel * 100, 2),
+                                       "same_dir_pp": round(sign * rel * 100, 2)}
+                added += 1
+    return added
+
+
+def update_events(bars: dict, yahoo: dict[str, str], eval_dir: Path = EVAL_DIR, events_dir: Path | None = None,
+                  keep_open: int | None = KEEP_OPEN_DAYS) -> tuple[list[dict], list[tuple[Path, str]]]:
+    """Ögonblicksbilder av händelsefilerna (nya läggs till; Claudes klass förs in när den kommer) och kollegornas
+    uppföljning. Returnerar (ögonblicksbilder, ändrade filer i rådatarepot)."""
+    d = eval_dir / EVENTS_SUBDIR
+    snaps: dict[str, dict] = {}
+    for p in sorted(d.glob("[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9].json")) if d.exists() else []:
+        try:
+            snaps[p.stem] = json.loads(p.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            print(f"Utvärdering: händelser {p.name} kunde inte läsas ({exc}), hoppar över", file=sys.stderr)
+    src = events_dir or EVENTS_DIR
+    for p in sorted(src.glob("[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9].json")) if src.exists() else []:
+        try:
+            data = json.loads(p.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if not data.get("events") or not data.get("as_of"):
+            continue
+        s = snaps.get(data["as_of"])
+        if s is None:
+            snaps[data["as_of"]] = event_snapshot(data, yahoo)
+            continue
+        cls = {e["ticker"]: (e.get("judgement") or {}).get("class") for e in data["events"]}
+        for e in s["events"]:
+            if e.get("class") is None and cls.get(e["ticker"]):
+                e["class"] = cls[e["ticker"]]
+    last = max((b.day for b in bars.get(INDEX_TICKER, [])), default=None)
+    for s in snaps.values():
+        if last and (keep_open is None or (last - date.fromisoformat(s["day"])).days <= keep_open):
+            event_follow_up(s, bars)
+    changed = []
+    if snaps:
+        d.mkdir(parents=True, exist_ok=True)
+    for day, s in sorted(snaps.items()):
+        p = d / f"{day}.json"
+        text = _dump(s)
+        if not p.exists() or p.read_text(encoding="utf-8") != text:
+            p.write_text(text, encoding="utf-8")
+            changed.append((p, f"{RAW_SUBDIR}/{EVENTS_SUBDIR}/{day}.json"))
+    return sorted(snaps.values(), key=lambda s: s["day"]), changed
+
+
+def _event_stats(vals: list[float]) -> dict:
+    import events
+
+    return events.outcome_stats(vals)
+
+
+def events_outcomes(snaps: list[dict]) -> dict:
+    """Kollegornas utfall efter 1, 3 och 5 dagar per Claudes klass (bolagsspecifik, branschgemensam, ej bedömd), för
+    alla kollegor utan eget pressmeddelande och för dem som följde med samma dag. Rörelsen räknas mot index och åt
+    händelsebolagets håll (positivt = samma håll som händelsen)."""
+    groups: dict[str, dict[str, dict[str, list[float]]]] = {
+        c: {g: {str(k): [] for k in EVENT_HORIZONS} for g in ("all", "followed")} for c in EVENT_CLASSES}
+    counts = {c: 0 for c in EVENT_CLASSES}
+    for s in snaps:
+        for e in s["events"]:
+            c = e.get("class") if e.get("class") in EVENT_CLASSES else "ej bedömd"
+            counts[c] += 1
+            for p in e["peers"]:
+                if p.get("own_news"):
+                    continue
+                for k, f in p["follow"].items():
+                    groups[c]["all"][k].append(f["same_dir_pp"])
+                    if p["followed"]:
+                        groups[c]["followed"][k].append(f["same_dir_pp"])
+    return {
+        "period": {"start": snaps[0]["day"] if snaps else None, "end": snaps[-1]["day"] if snaps else None},
+        "horizons": list(EVENT_HORIZONS), "events": counts,
+        "by_class": {c: {g: {k: _event_stats(v) for k, v in hs.items()} for g, hs in gs.items()}
+                     for c, gs in groups.items()},
+        "note": "Kollegornas rörelse mot index från händelsedagens stängning, räknad åt händelsebolagets håll (positivt = "
+                "samma håll som händelsen). Kollegor med eget pressmeddelande samma dag räknas inte. Klassen är Claudes "
+                "tolkning av pressmeddelandet. Få fall som överlappar i tid; beskriver vad som hänt.",
+    }
 
 
 def oversold(swing: dict, bars: dict, yahoo: dict[str, str]) -> list[dict]:

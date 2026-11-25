@@ -27,6 +27,10 @@ handelsdagar från signaldagens stängning ("vcp" i filen). RS-percentilen räkn
 grundregeln (utbrott med 1,5× omsättning, inga övriga volymvillkor), grundregeln plus ett villkor i taget, och alla
 tillsammans (= strategins etiketter), varje variant med sina egna fall (ett i taget per bolag).
 
+Händelser i sektorn (scripts/events.py history, "events" i filen): de senaste events.HISTORY_YEARS åren, varje
+rörelse på minst 3 ATR mot index och de 5 bolag som korrelerat mest med bolaget året före; kollegornas rörelse efter
+1, 3 och 5 dagar. Utan nyhetsdata: en grov jämförelse.
+
 Användning:
     python scripts/swing_history.py                    # hämtar dagsdata (ett batchanrop till Yahoo)
     python scripts/swing_history.py --cache bars.pkl   # återanvänder en sparad hämtning
@@ -48,6 +52,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import bbrekyl  # noqa: E402
+import events  # noqa: E402
 import vcp  # noqa: E402
 import levels  # noqa: E402
 import pullback  # noqa: E402
@@ -197,8 +202,10 @@ def vcp_history(bars: dict, instruments: dict) -> dict:
         # Etiketterna räknas var för sig (ett fall i taget per bolag och etikett).
         "separate_labels": True,
         "note": "Dagens bevakningslista: bolag som avnoterats under perioden saknas (överlevnadsbias). RS-percentilen "
-                "jämförs mot listans bolag samma dag. Etiketterna räknas var för sig, så ett utbrott kan infalla under "
-                "ett pågående Nära pivot-fall i samma bolag. Utan courtage, spread och glidning.",
+                "jämförs mot listans bolag samma dag. "
+                + ("Etiketterna räknas var för sig, så ett utbrott kan infalla under ett pågående Nära pivot-fall i "
+                   "samma bolag. " if vcp.THRESHOLDS.get("breakout_label", True) else "")
+                + "Utan courtage, spread och glidning.",
     }
 
 
@@ -347,6 +354,9 @@ def build(bars: dict, instruments: dict, today: date, results_dir: Path | None =
         },
         # Momentum-utbrott (VCP): 3R före stoppet och utvecklingen mot index, de senaste tre åren.
         "vcp": vcp_history(bars, instruments),
+        # Händelser i sektorn (scripts/events.py): kollegornas rörelse efter en stor rörelse, grov jämförelse utan
+        # nyhetsdata.
+        "events": events.history(bars, instruments),
         # Rekyl efter Bollingerutbrott: hur ofta 2R nåddes före stoppet (rekylens lägsta low) och tvärtom.
         "bbrekyl": {
             "thresholds": {**pullback.THRESHOLDS, **bbrekyl.THRESHOLDS},

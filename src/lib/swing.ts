@@ -328,6 +328,22 @@ export function chipText(label: string, name: string, crossDays: number | null |
 }
 
 /** Utvärderingen (scripts/swing_eval.py): kännetecknets text utan prefix ("Strategi: Pullback i trend" → "Pullback i trend"). */
+/** Kollegornas utfall: "+0,3 pe · 52,0 % (312 av 600; 95 %: 48–56 %)" (snittet och andelen åt händelsens håll), "–" utan fall. */
+export function eventOutcomeText(s: { n: number; mean_pp: number | null; same_dir: number; ci: readonly [number, number] | null } | undefined): string {
+  if (!s || s.n === 0 || s.mean_pp === null) return "–";
+  const pp = new Intl.NumberFormat("sv-SE", { minimumFractionDigits: 1, maximumFractionDigits: 1, signDisplay: "exceptZero" })
+    .format(s.mean_pp).replace("-", "−");
+  return `${pp} pe · ${ciShareText(s.same_dir, s.n, s.ci)}`;
+}
+
+/** Händelsens rörelse: "+9,9 pe mot index (3,9 ATR)". */
+export function eventMoveText(vsIndexPp: number, atrMult: number): string {
+  const f = (v: number, sign: boolean) =>
+    new Intl.NumberFormat("sv-SE", { minimumFractionDigits: 1, maximumFractionDigits: 1, signDisplay: sign ? "exceptZero" : "auto" })
+      .format(v).replace("-", "−");
+  return `${f(vsIndexPp, true)} pe mot index (${f(atrMult, false)} ATR)`;
+}
+
 export function evalName(key: string, texts: Record<string, string>): string {
   const t = texts[key] ?? key;
   return t.replace(/^(Strategi|Etikett|Sektor|Veckosignal): /, "");

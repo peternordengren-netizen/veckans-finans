@@ -3,12 +3,13 @@
  * Den dagliga utvärderingen överst i fliken Swing (scripts/swing_eval.py, data/raw/swing_eval/): dagens marknadsläge
  * och larm, "Gårdagens bästa rörelser", "Mönster" (senaste 2 och 6 veckorna och samma marknadsläge först, hela
  * perioden som bakgrund) och biblioteket "Lyckade fall" (filtrerbart på strategi, sektor och läge, jämfört med alla
- * avgjorda fall). Beskrivande, inga uppmaningar.
+ * avgjorda fall) och "Händelser i sektorn" (kollegornas utfall efter 1, 3 och 5 dagar per Claudes klass). Beskrivande,
+ * inga uppmaningar.
  */
 import type { SwingEval } from "../lib/data";
 import { shortDate } from "../lib/format";
 import { signedPct } from "../lib/signals";
-import { ciShareText, evalName, evalTraits, ppText, rText, rsiWarnText, weeklyOutcomeText } from "../lib/swing";
+import { ciShareText, evalName, evalTraits, eventOutcomeText, ppText, rText, rsiWarnText, weeklyOutcomeText } from "../lib/swing";
 
 interface Props {
   ev: SwingEval;
@@ -32,6 +33,11 @@ const sectorsInLib = [...new Map(ev.cases_index.filter((c) => c[3]).map((c) => [
   .sort((a, b) => a[1].localeCompare(b[1], "sv"));
 const regimesInLib = [...new Set(ev.cases_index.map((c) => c[4]).filter((x): x is string => !!x))].sort();
 const LIB_MAX = 300;
+const eo = ev.events_outcomes ?? null;
+const eoTotal = eo ? Object.values(eo.events).reduce((a, b) => a + b, 0) : 0;
+const CLASS_TEXT: Record<string, string> = {
+  bolagsspecifik: "Bolagsspecifik", branschgemensam: "Gemensam för branschen", "ej bedömd": "Ej bedömd",
+};
 ---
 
 <div class="swing-eval" data-swing-eval>
@@ -308,6 +314,43 @@ const LIB_MAX = 300;
       }),
     )}
   </section>
+
+  {
+    eo && eoTotal > 0 && (
+      <section class="eval-events" aria-labelledby="eval-events">
+        <h3 id="eval-events">Händelser i sektorn: kollegorna efteråt</h3>
+        <p class="note">
+          {eoTotal} {eoTotal === 1 ? "händelse" : "händelser"} {day(eo.period.start)} – {day(eo.period.end)}. Kollegornas
+          rörelse mot index från händelsedagens stängning, räknad åt händelsebolagets håll (positivt = samma håll): snittet i
+          procentenheter och andelen åt samma håll. Uppdelat på Claudes tolkning av pressmeddelandet. {eo.note}
+        </p>
+        <div class="hist-wrap">
+          <table class="hist">
+            <thead>
+              <tr>
+                <th scope="col">Klass</th>
+                <th scope="col">Kollegor</th>
+                {eo.horizons.map((k) => <th scope="col" class="num">Efter {k} {k === 1 ? "dag" : "dagar"}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {Object.entries(eo.by_class)
+                .filter(([c]) => (eo.events[c] ?? 0) > 0)
+                .flatMap(([c, g]) =>
+                  (["all", "followed"] as const).map((grp) => (
+                    <tr>
+                      <th scope="row">{CLASS_TEXT[c] ?? c} ({eo.events[c]})</th>
+                      <td>{grp === "all" ? "alla utan eget pressmeddelande" : "följde med samma dag"}</td>
+                      {eo.horizons.map((k) => <td class="num">{eventOutcomeText(g[grp][String(k)])}</td>)}
+                    </tr>
+                  )),
+                )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    )
+  }
 
   <section class="eval-lib" aria-labelledby="eval-lib">
     <h3 id="eval-lib">Lyckade fall</h3>

@@ -1,5 +1,6 @@
 ﻿# Kvällens bygge (scripts/morning.py --kvall): nästa handelsdags kurser och kurssignaler, swinglistan och
-# utvärderingens uppföljning, med dagens stängning. Morgonen tar sedan bara nyheter, insyn, rapportutfall, konsensus
+# utvärderingens uppföljning, Rotationer och Händelser i sektorn (med Claudes bedömning, run_events.ps1), med dagens
+# stängning. Morgonen tar sedan bara nyheter, insyn, rapportutfall, konsensus
 # och det som saknas från kvällen.
 #
 # Anropas av run_update.ps1 efter eftermiddagskörningen (17:45) och av den schemalagda uppgiften VeckansFinansKvall
@@ -49,6 +50,11 @@ Log ("morning.py --kvall: exit $code" + $(switch ($code) {
     3 { " - ingen handelsdag eller före 17:45" }
     default { "" }
 }))
+# Händelser i sektorn: Claudes bedömning (bolagsspecifik eller branschgemensam); inget körs utan händelser.
+if ($code -eq 0) {
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "run_events.ps1") |
+        ForEach-Object { Log "  $_" }
+}
 if ($Build -and ($code -eq 0 -or $code -eq 2)) {
     $BuildLog = Join-Path $LogDir "$Today-build.log"
     & cmd.exe /c "npm run build > `"$BuildLog`" 2>&1"

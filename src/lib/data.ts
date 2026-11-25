@@ -310,6 +310,29 @@ export interface SwingStat {
   ci: number | null;
   mean: number | null;
 }
+/** Utfallet för en grupp kollegor (scripts/events.py outcome_stats): rörelsen mot index åt händelsens håll. */
+export interface EventOutcome {
+  n: number; mean_pp: number | null; median_pp: number | null; same_dir: number; same_dir_share: number | null;
+  ci: [number, number] | null;
+}
+export interface EventPeer {
+  ticker: string; name: string; sector: string | null; corr: number; move_pct: number | null;
+  vs_index_pp: number | null; own_news: boolean; followed: boolean;
+}
+export interface SwingEvent {
+  ticker: string; name: string; sector: string | null; move_pct: number; vs_index_pp: number; atr_pct: number;
+  atr_mult: number; direction: "upp" | "ned"; report: boolean;
+  news: { published: string; title: string; url: string; source: string }[];
+  peers: EventPeer[];
+  /** Claudes bedömning av pressmeddelandet (märkt som tolkning), eller null innan den finns. */
+  judgement: { class: "bolagsspecifik" | "branschgemensam"; reason: string; label: string } | null;
+}
+/** Händelser i sektorn (data/events/<datum>.json, scripts/events.py). */
+export interface EventsView {
+  date: string; as_of: string; generated_at: string;
+  thresholds: { atr_mult: number; atr_days: number; peer_n: number; peer_move_pp: number; corr_days: number; min_overlap: number };
+  events: SwingEvent[];
+}
 export interface SwingView {
   date: string;
   /** Dagsdatans eget datum (scripts/signals.py data_day). */
@@ -335,6 +358,8 @@ export interface SwingView {
       breakout_on?: string; target_r: number; trigger_days: number; max_days: number;
       /** Ingen Nära pivot när basen brutits nedåt (sedan 2026-11-11); saknas i äldre filer. */
       base_break?: boolean;
+      /** false: ingen etikett "Utbrott" (sedan 2026-11-25); saknas i äldre filer (som hade den). */
+      breakout_label?: boolean;
       ranking: { last_contraction_pct: number; rs_strong: number; at_pivot_pct: number; top: number };
     };
     /** Rekyl efter Bollingerutbrott (saknas i äldre filer). */
@@ -359,7 +384,18 @@ export interface SwingView {
   delisted: SwingDelisted[];
   /** Senaste Bollingerkontrollen i dag för swingfilens kandidater (scripts/bollinger.py), eller null. */
   bollingerCheck: { checked_at: string; delay_note: string; candidates: number; rows: number } | null;
+  /** Händelser i sektorn för swingfilens datum (data/events/<datum>.json), eller null. */
+  events: EventsView | null;
   history: {
+    /** Händelser i sektorn på kursdata (scripts/events.py history): grov jämförelse utan nyhetsdata. */
+    events?: {
+      period: { start: string; end: string };
+      thresholds: EventsView["thresholds"]; horizons: number[];
+      events: number; peers: number; followed: number;
+      groups: Record<"all" | "followed" | "not_followed", Record<string, EventOutcome>>;
+      by_direction: Record<"upp" | "ned", Record<"followed" | "not_followed", Record<string, EventOutcome>>>;
+      rough: boolean; note: string;
+    };
     /** Momentum-utbrott (VCP): 3R före stoppet och utvecklingen mot index (saknas i äldre filer). */
     vcp?: {
       period: { start: string; end: string };
@@ -514,6 +550,7 @@ export function loadLatestSwing(): SwingView | null {
       rows,
       missing: raw.missing ?? [],
       delisted: raw.delisted ?? [],
+      events: IS_MOCK ? null : loadEvents(raw.date),
       bollingerCheck: (pb || bbs || vcs) && check
         ? {
           checked_at: check.checked_at, delay_note: check.delay_note,
@@ -525,6 +562,18 @@ export function loadLatestSwing(): SwingView | null {
     };
   } catch (err) {
     console.warn(`[veckans-finans] kunde inte läsa ${path}, visar sidan utan Swing:`, err);
+    return null;
+  }
+}
+
+/** Händelser i sektorn för ett datum (data/events/<datum>.json), eller null. En trasig fil visas inte. */
+export function loadEvents(date: string): EventsView | null {
+  const path = join(DATA, "events", `${date}.json`);
+  if (!existsSync(path)) return null;
+  try {
+    return readJson<EventsView>(path);
+  } catch (err) {
+    console.warn(`[veckans-finans] kunde inte läsa ${path}, visar Swing utan händelser:`, err);
     return null;
   }
 }
@@ -983,6 +1032,13 @@ export interface SwingEval {
       count?: number; of?: number | null; broad?: boolean;
       regime: string | null; regime_text: string | null; tried: Record<string, SwingEvalRate> } };
   note: string;
+  /** Händelser i sektorn: kollegornas utfall efter 1, 3 och 5 dagar per Claudes klass (saknas i äldre filer). */
+  events_outcomes?: {
+    period: { start: string | null; end: string | null }; horizons: number[];
+    events: Record<string, number>;
+    by_class: Record<string, Record<"all" | "followed", Record<string, EventOutcome>>>;
+    note: string;
+  };
   /** Claudes senaste veckotext (data/raw/swing_eval/notes/<vecka>.json), märkt som tolkning. */
   weekly?: { week: string; label: string; text: string } | null;
 }

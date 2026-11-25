@@ -44,6 +44,8 @@ mot bandet och är ingen uppmaning.
   nyligen lyckade fall, och marknadstecken (andelen bolag över 50 MA, sektorvolym, skifte i marknadsläget). Bygger på
   gårdagens stängning (morgonens sammanställning för dagens swingfil), så samma larm står vid båda kontrollerna;
   null utan sammanställning för dagens swingfil.
+- Händelser i sektorn ("events", scripts/events.notice_text): gårdagens stora bolagsrörelser med eget pressmeddelande
+  eller rapport, Claudes bedömning och kollegorna som följde med; samma vid båda kontrollerna; null utan händelsefil.
 - Dagens omsättning hittills mot normalt vid samma tid ("today.volume", för Rekyl efter Bollingerutbrott och VCP):
   ett batchanrop till Yahoo med 15-minutersstaplar för strategins kandidater (de senaste INTRADAY_DAYS kalender-
   dagarna). Hittills = summan av dagens staplar; normalt = snittet för de VOLUME_PROFILE_DAYS senaste handelsdagarna
@@ -406,6 +408,7 @@ def check(today: date, now: datetime, instruments: dict[str, Instrument], fetch:
         "bbrekyl": sections["bbrekyl"],
         "vcp": sections["vcp"],
         "eval_alerts": eval_alerts(swing),
+        "events": events_notice(swing),
     }
 
 
@@ -419,6 +422,23 @@ def eval_alerts(swing: dict | None) -> dict | None:
         return swing_eval.alerts_notice(swing_eval.load_summary(), swing.get("date"))
     except Exception as exc:  # noqa: BLE001
         print(f"Swing-utvärderingens larm kunde inte läsas: {type(exc).__name__}", file=sys.stderr)
+        return None
+
+
+def events_notice(swing: dict | None) -> dict | None:
+    """Händelser i sektorn för dagens swingfil (scripts/events.py, data/events/<datum>.json); fel här stoppar aldrig
+    kontrollen."""
+    if swing is None:
+        return None
+    try:
+        import events
+
+        data = events.load(swing.get("date"))
+        if data is None:
+            return None
+        return {"count": len(data["events"]), "notice": events.notice_text(data)}
+    except Exception as exc:  # noqa: BLE001
+        print(f"Händelserna kunde inte läsas: {type(exc).__name__}", file=sys.stderr)
         return None
 
 

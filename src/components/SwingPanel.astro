@@ -2,7 +2,9 @@
 /**
  * Fliken Swing: lägesmått per bolag ur dagsdata (scripts/swing.py, uppdateras varje morgon) och beskrivande
  * etiketter, i en sorterbar och filtrerbar tabell med fast rubrikrad. Under tabellen historiken per etikett
- * (scripts/swing_history.py). Ett informationsverktyg: etiketterna beskriver vad som hänt, inga uppmaningar.
+ * (scripts/swing_history.py). Filtret "Händelser i sektorn" (scripts/events.py) visar gårdagens stora rörelser med eget
+ * pressmeddelande eller rapport och kollegorna som följde med. Ett informationsverktyg: etiketterna beskriver vad som
+ * hänt, inga uppmaningar.
  */
 import type { PullbackSummary, SwingEval, SwingView } from "../lib/data";
 import Momentum from "./SwingMomentum.astro";
@@ -12,7 +14,7 @@ import {
   MIN_CASES, altStopText, decidedShareText, labelClass, labelCounts, levelText, missingText, netText, priceText,
   reportText, resistanceRText, riskText, shareText, bollingerSourceText, chipText, pctBText, signalText,
   TODAY_STATUS, todayInvalid, todayLines, todayOrder, bbLevelText, breakoutLines, todayVolumeText, volumeRuleLines,
-  momentumText, depthsText, criteriaLines, ciShareText, rsiWarnText, sectorOutcomeText, rText, rankText, rankTitle, srDistText, srInsideText, srKindText, srLevelText, upperRText, vsBaseText,
+  momentumText, depthsText, criteriaLines, ciShareText, eventMoveText, eventOutcomeText, rsiWarnText, sectorOutcomeText, rText, rankText, rankTitle, srDistText, srInsideText, srKindText, srLevelText, upperRText, vsBaseText,
 } from "../lib/swing";
 
 interface Props {
@@ -85,6 +87,18 @@ const vcTop = vt?.ranking.top ?? 5;
 const vcHist = h?.vcp ?? null;
 const rankTop = t.ranking?.top ?? 5;
 const rankHist = pbHist?.ranking ?? null;
+// Händelser i sektorn: händelsebolagen och kollegorna som följde med markeras på raderna (filtret).
+const evs = swing.events;
+const evRole = new Map<string, string>();
+for (const e of evs?.events ?? []) {
+  for (const p of e.peers) if (p.followed && !evRole.has(p.ticker)) evRole.set(p.ticker, "kollega");
+}
+for (const e of evs?.events ?? []) evRole.set(e.ticker, "bolag");
+const evHist = h?.events ?? null;
+const evTime = (iso: string) => `${shortDate(iso.slice(0, 10))} kl. ${iso.slice(11, 16)}`;
+const corrFmt = new Intl.NumberFormat("sv-SE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const ppFmt = (v: number | null) =>
+  v === null ? "–" : `${new Intl.NumberFormat("sv-SE", { minimumFractionDigits: 1, maximumFractionDigits: 1, signDisplay: "exceptZero" }).format(v).replace("-", "−")} pe`;
 ---
 
 <div class="swing" data-swing>
@@ -384,10 +398,20 @@ const rankHist = pbHist?.ranking ?? null;
               dagarna; lägre räknas som avtagande (rangkriterier).
             </li>
             <li>
-              <strong>Etiketter:</strong> <em>Utbrott</em> när {vt.breakout_on === "high" ? "dagens high passerar pivoten" : "stängningen ligger över pivoten"}
-              {" "}och omsättningen är minst {num(vt.breakout_volume)} gånger snittet för de {vt.avg_days} dagarna före;
-              <em> Nära pivot</em> när stängningen ligger högst {num(vt.near_pct, 0)} % under pivoten (och inget utbrott). En
-              stängning över pivoten utan volymkravet ger ingen etikett.{vt.base_break && (
+              {vt.breakout_label === false ? (
+                <>
+                  <strong>Etikett:</strong> <em>Nära pivot</em> när stängningen ligger högst {num(vt.near_pct, 0)} % under
+                  pivoten och dagens high inte passerat den. Etiketten Utbrott används inte (sedan 25 nov 2026): att pivoten
+                  passeras syns i Status i dag (<em>Pivot bruten</em>) vid kontrollerna 09:20 och 13:20.
+                </>
+              ) : (
+                <>
+                  <strong>Etiketter:</strong> <em>Utbrott</em> när {vt.breakout_on === "high" ? "dagens high passerar pivoten" : "stängningen ligger över pivoten"}
+                  {" "}och omsättningen är minst {num(vt.breakout_volume)} gånger snittet för de {vt.avg_days} dagarna före;
+                  <em> Nära pivot</em> när stängningen ligger högst {num(vt.near_pct, 0)} % under pivoten (och inget utbrott). En
+                  stängning över pivoten utan volymkravet ger ingen etikett.
+                </>
+              )}{vt.base_break && (
                 <> Gick dagens low under sista rekylens low (gårdagens stopp) innan pivoten brutits är <em>basen bruten
                 nedåt</em>, och då blir det ingen Nära pivot nästa morgon. En ny etikett kräver att basen på nytt
                 uppfyller kraven, med den nya botten som sista rekyl.</>
@@ -395,8 +419,10 @@ const rankHist = pbHist?.ranking ?? null;
             </li>
             <li>
               <strong>Stopp och mål:</strong> stoppet är sista rekylens lägsta low och får ligga högst {num(vt.max_stop_pct, 0)} %
-              under pivoten (annars ingen etikett). Referensen är pivoten vid Nära pivot; vid Utbrott
-              {vt.breakout_on === "high" ? " priset där pivoten bröts: pivoten, eller öppningen om dagen öppnade över den" : " stängningen"}. R =
+              under pivoten (annars ingen etikett). Referensen är pivoten{vt.breakout_label === false ? "" : (
+                <> vid Nära pivot; vid Utbrott
+                {vt.breakout_on === "high" ? " priset där pivoten bröts: pivoten, eller öppningen om dagen öppnade över den" : " stängningen"}</>
+              )}. R =
               referens minus stopp, samma R överallt; målet är {num(vt.target_r, 0)}R.
             </li>
             {
@@ -421,10 +447,10 @@ const rankHist = pbHist?.ranking ?? null;
               {" "}gäller bara efter att pivoten brutits. Båda sorteras sist.
             </li>
             <li>
-              <strong>Historiken</strong> under tabellen: de senaste tre åren, ett fall i taget per bolag och etikett, så att ett
-              pågående Nära pivot-fall inte spärrar ett utbrott i samma bolag. Nära pivot startar när kursen når pivoten inom
-              {" "}{vt.trigger_days} handelsdagar, Utbrott vid referensen på signaldagen (stopp och mål prövas från nästa
-              dag); avgjort när {num(vt.target_r, 0)}R
+              <strong>Historiken</strong> under tabellen: de senaste tre åren, ett fall i taget per bolag och etikett.
+              Nära pivot startar när kursen når pivoten inom {vt.trigger_days} handelsdagar{vt.breakout_label === false ? "" : (
+                <>, Utbrott vid referensen på signaldagen (stopp och mål prövas från nästa dag)</>
+              )}; avgjort när {num(vt.target_r, 0)}R
               eller stoppet nås, högst {vt.max_days} handelsdagar. Dessutom utvecklingen mot OMX Stockholm PI efter 5, 20 och 60
               handelsdagar. Bara dagens bevakningslista, så bolag som avnoterats under perioden saknas.
             </li>
@@ -440,6 +466,9 @@ const rankHist = pbHist?.ranking ?? null;
       <select data-label-filter>
         <option value="" selected>alla bolag ({swing.rows.length})</option>
         <option value="*">bolag med etikett ({withLabel})</option>
+        <option value="handelser" disabled={!evs || evs.events.length === 0}>
+          Händelser i sektorn ({evs ? `${evs.events.length} ${evs.events.length === 1 ? "händelse" : "händelser"}` : "ingen fil"})
+        </option>
         {
           strategies.length > 0 && (
             <optgroup label="Strategi">
@@ -465,6 +494,73 @@ const rankHist = pbHist?.ranking ?? null;
       Bollinger och status i dag: {bbCheck ? `senaste kontrollen ${bollingerSourceText(bbCheck.checked_at)}. ${bbCheck.delay_note}` : "gårdagens stängning, ingen kontroll i dag än (09:20 och 13:20). Kurserna är fördröjda ca 15 minuter."}
     </span>
   </div>
+
+  {
+    evs && (
+      <section class="events-list" data-events-list hidden aria-labelledby="swing-events">
+        <h3 id="swing-events">Händelser i sektorn vid stängningen {shortDate(evs.as_of)}</h3>
+        <p class="note">
+          Bolag som rörde sig minst {num(evs.thresholds.atr_mult, 0)} gånger sin ATR ({evs.thresholds.atr_days} dagar) mot
+          OMX Stockholm PI samma dag som ett eget pressmeddelande eller en rapport (efter förra handelsdagens stängning,
+          senast 17:30). Kollegor: de {evs.thresholds.peer_n} bolag i listan vars dagliga rörelser följt bolagets mest det
+          senaste året (korrelation), oavsett sektor. "Följde med": minst {num(evs.thresholds.peer_move_pp, 0)} procentenheter
+          mot index åt samma håll samma dag, utan eget pressmeddelande. I tabellen visas händelsebolagen och kollegorna som
+          följde med. Klassen är Claudes tolkning av pressmeddelandet. Beskriver vad som hänt, inga uppmaningar.
+        </p>
+        {evs.events.length === 0 && <p class="note">Inga händelser vid den här stängningen.</p>}
+        {evs.events.map((e) => (
+          <article class="event">
+            <p class="event-head">
+              <strong>{e.name}</strong> <span class="ticker">{e.ticker}</span>{e.sector ? ` · ${e.sector}` : ""}:{" "}
+              <span class:list={[e.direction === "upp" ? "pos" : "neg"]}>{eventMoveText(e.vs_index_pp, e.atr_mult)}</span>
+              {e.report && " · rapport"}
+            </p>
+            {e.news.length > 0 && (
+              <ul class="event-news">
+                {e.news.map((n) => (
+                  <li><a href={n.url} rel="noopener">{n.title}</a> <span class="muted">({n.source}, {evTime(n.published)})</span></li>
+                ))}
+              </ul>
+            )}
+            <p class="event-judgement">
+              {e.judgement ? (
+                <>
+                  <strong>{e.judgement.class === "bolagsspecifik" ? "Bolagsspecifik" : "Gemensam för branschen"}</strong>
+                  {" "}<span class="interp">{e.judgement.label}</span>: {e.judgement.reason}
+                </>
+              ) : (
+                <span class="muted">Claudes bedömning (bolagsspecifik eller gemensam för branschen) saknas än.</span>
+              )}
+            </p>
+            <div class="hist-wrap">
+              <table class="hist event-peers">
+                <thead>
+                  <tr>
+                    <th scope="col">Kollega</th>
+                    <th scope="col">Sektor</th>
+                    <th scope="col" class="num">Korrelation</th>
+                    <th scope="col" class="num">Samma dag mot index</th>
+                    <th scope="col">Följde med</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {e.peers.map((p) => (
+                    <tr class:list={{ followed: p.followed }}>
+                      <th scope="row">{p.name}</th>
+                      <td>{p.sector ?? "–"}</td>
+                      <td class="num">{corrFmt.format(p.corr)}</td>
+                      <td class="num">{ppFmt(p.vs_index_pp)}</td>
+                      <td>{p.followed ? "ja" : p.own_news ? "nej (eget pressmeddelande)" : "nej"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </article>
+        ))}
+      </section>
+    )
+  }
 
   {
     (swing.missing.length > 0 || swing.delisted.length > 0) && (
@@ -518,6 +614,7 @@ const rankHist = pbHist?.ranking ?? null;
                 data-pb-invalid={r.labels.some((l) => pbLabels.includes(l)) && todayInvalid(r.pullback?.today?.status) ? "1" : undefined}
                 data-bb-invalid={r.labels.some((l) => bbLabels.includes(l)) && todayInvalid(r.bbrekyl?.today?.status) ? "1" : undefined}
                 data-vc-invalid={r.labels.some((l) => vcLabels.includes(l)) && todayInvalid(r.vcp?.today?.status) ? "1" : undefined}
+                data-event={evRole.get(r.ticker)}
               >
                 <th scope="row" data-v={r.name}>
                   <span class="name">{r.name}</span> <span class="ticker">{r.ticker}</span>
@@ -856,7 +953,7 @@ const rankHist = pbHist?.ranking ?? null;
         <h3 id="swing-vcp">Momentum-utbrott (VCP): 3R eller stoppet först</h3>
         <p class="note">
           Varje dag med etiketten {shortDate(vcHist.period.start)} {vcHist.period.start.slice(0, 4)} – {shortDate(vcHist.period.end)}{" "}
-          {vcHist.period.end.slice(0, 4)}, ett fall i taget per bolag{vcHist.separate_labels ? " och etikett" : ""}, utan courtage.
+          {vcHist.period.end.slice(0, 4)}, ett fall i taget per bolag{vcHist.separate_labels && vcLabels.length > 1 ? " och etikett" : ""}, utan courtage.
           Andelarna gäller de avgjorda fallen, med 95 % konfidensintervall: det spann som andelen med stor sannolikhet
           ligger inom givet antalet fall. Ett brett spann betyder att fallen är för få för att säga något säkert;
           öppna fall (inget avgörande inom {vcHist.thresholds.max_days} handelsdagar) och ej utlösta (pivoten nåddes inte inom
@@ -880,7 +977,7 @@ const rankHist = pbHist?.ranking ?? null;
               </tr>
             </thead>
             <tbody>
-              {[...vcLabels.map((l) => ({ key: l, name: swing.labels[l], s: vcHist.labels[l] })), { key: "all", name: "Båda", s: vcHist.all }].map(
+              {[...vcLabels.map((l) => ({ key: l, name: swing.labels[l], s: vcHist.labels[l] })), ...(vcLabels.length > 1 ? [{ key: "all", name: "Båda", s: vcHist.all }] : [])].map(
                 ({ key, name, s }) =>
                   s && (
                     <tr class:list={{ base: key === "all" }}>
@@ -907,10 +1004,51 @@ const rankHist = pbHist?.ranking ?? null;
         </div>
         <p class="note">
           "Mot index": andelen fall där aktien gått bättre än OMX Stockholm PI (antal av alla fall med så många dagars
-          data, och 95 % konfidensintervall), och snittet i procentenheter.{vcHist.separate_labels
+          data, och 95 % konfidensintervall), och snittet i procentenheter.{vcHist.separate_labels && vcLabels.length > 1
             ? " Raden Båda lägger ihop etiketterna; ett utbrott och ett Nära pivot-fall i samma bolag kan överlappa i tid."
             : ""}
         </p>
+      </section>
+    )
+  }
+
+  {
+    evHist && evHist.groups && (
+      <section class="history" aria-labelledby="swing-events-hist">
+        <h3 id="swing-events-hist">Händelser i sektorn: hur gick kollegorna efter en stor rörelse? (grov jämförelse)</h3>
+        <p class="note">
+          {shortDate(evHist.period.start)} {evHist.period.start.slice(0, 4)} – {shortDate(evHist.period.end)}{" "}
+          {evHist.period.end.slice(0, 4)}: {evHist.events.toLocaleString("sv-SE")} rörelser på minst
+          {" "}{num(evHist.thresholds.atr_mult, 0)} ATR mot index och deras {evHist.peers.toLocaleString("sv-SE")} kollegor
+          (de {evHist.thresholds.peer_n} som korrelerat mest året före), varav {evHist.followed.toLocaleString("sv-SE")} följde
+          med samma dag. Kollegornas rörelse mot index från händelsedagens stängning, räknad åt händelsebolagets håll
+          (positivt = fortsatte åt samma håll): snittet i procentenheter och andelen åt samma håll. <strong>Utan nyhetsdata:</strong>
+          {" "}{evHist.note}
+        </p>
+        <div class="hist-wrap">
+          <table class="hist" data-hist="events">
+            <thead>
+              <tr>
+                <th scope="col">Kollegor</th>
+                {evHist.horizons.map((k) => <th scope="col" class="num">Efter {k} {k === 1 ? "dag" : "dagar"}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                { name: "Följde med samma dag", s: evHist.groups.followed },
+                { name: "Följde inte med", s: evHist.groups.not_followed },
+                { name: "Följde med, händelsen uppåt", s: evHist.by_direction.upp.followed },
+                { name: "Följde med, händelsen nedåt", s: evHist.by_direction.ned.followed },
+                { name: "Alla kollegor", s: evHist.groups.all, all: true },
+              ].map(({ name, s, all }) => (
+                <tr class:list={{ base: all }}>
+                  <th scope="row">{name}</th>
+                  {evHist.horizons.map((k) => <td class="num">{eventOutcomeText(s[String(k)])}</td>)}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </section>
     )
   }
@@ -1152,7 +1290,8 @@ const rankHist = pbHist?.ranking ?? null;
       for (const r of rows) {
         const labels = (r.dataset.labels ?? "").split(" ").filter(Boolean);
         r.hidden = want === "" ? false : want === "*" ? labels.length === 0
-          : strategy ? !labels.some((l) => strategyLabels.includes(l)) : !labels.includes(want);
+          : want === "handelser" ? !r.dataset.event
+            : strategy ? !labels.some((l) => strategyLabels.includes(l)) : !labels.includes(want);
         if (!r.hidden) n++;
       }
       if (strategy) root.dataset.strategy = strategy;
@@ -1167,6 +1306,9 @@ const rankHist = pbHist?.ranking ?? null;
         while (rankTh.getAttribute("aria-sort") !== "descending");
       }
       shown.textContent = want === "" ? `Visar alla ${rows.length} bolag` : `Visar ${n} av ${rows.length} bolag`;
+      // Händelser i sektorn: listan över händelserna visas med filtret.
+      const evList = root.querySelector<HTMLElement>("[data-events-list]");
+      if (evList) evList.hidden = want !== "handelser";
       // Kolumnerna ändrades: den fasta rubrikraden räknar om sina bredder vid resize.
       window.dispatchEvent(new Event("resize"));
     };
@@ -1408,6 +1550,39 @@ const rankHist = pbHist?.ranking ?? null;
   td.today.today-pivot_broken_low_vol .line,
   td.today.today-pivot_broken_no_vol .line,
   td.today.today-late .line {
+    font-weight: 600;
+  }
+  /* Händelser i sektorn. */
+  .events-list {
+    margin: 0 0 12px;
+    max-width: 90ch;
+  }
+  .events-list h3 {
+    font-size: 1rem;
+    margin: 0 0 4px;
+  }
+  .event {
+    border-top: 1px solid var(--border, #ddd);
+    padding: 8px 0;
+  }
+  .event p {
+    margin: 0 0 4px;
+  }
+  .event-news {
+    margin: 0 0 4px;
+    padding-left: 1.2em;
+    font-size: 0.875rem;
+  }
+  .event .interp {
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+  .event .muted,
+  .event-news .muted {
+    color: var(--muted);
+  }
+  .event-peers tr.followed th,
+  .event-peers tr.followed td {
     font-weight: 600;
   }
   /* Bolag utan rad i tabellen (Yahoo saknar kursdata, för kort historik, avnoterade). */

@@ -105,6 +105,8 @@ $statusText = if ($statusParts.Count -gt 0) { $statusParts -join " " } elseif ($
 $upperText = $upperParts -join " "
 # Larm ur Swing-utvärderingen (liknar nyligen lyckade fall, marknadstecken; scripts/swing_eval.py).
 if ($data.eval_alerts -and $data.eval_alerts.notice) { $statusText = "$statusText $($data.eval_alerts.notice)" }
+# Händelser i sektorn (gårdagens stora rörelser med eget pressmeddelande, och kollegorna; scripts/events.py).
+if ($data.events -and $data.events.notice) { $statusText = "$statusText $($data.events.notice)" }
 # Bolag som inte klarade valideringen hoppades över (resten av kontrollen skrevs); inget skipped = ingen text (@($null).Count är 1 i PowerShell).
 if ($null -ne $data.skipped -and @($data.skipped | Where-Object { $_ }).Count -gt 0) { $statusText = "$statusText Hoppade över (klarade inte kontrollen): $((@($data.skipped) | ForEach-Object { $_.name }) -join ", ")." }
 $foot = $data.delay_note

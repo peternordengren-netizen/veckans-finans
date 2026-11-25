@@ -17,6 +17,7 @@
 #   3c. Veckans text om Swing-utvärderingen (run_swing_note.ps1, Claude): veckans första handelsdag när texten
 #      saknas (normalt måndag), högst två försök; också när morgonkörningen redan är klar. Själva
 #      utvärderingen (ögonblicksbild och uppföljning) görs av morning.py utan Claude.
+#   3d. Händelser i sektorn (run_events.ps1, Claude): bedömningen om kvällen inte hann, högst två försök
 #   4. npm run build                    om något steg kördes
 # - Saknas förra handelsdagens kurser eller nätverket skrivs morgonrapporten ändå, men med "retry"
 #   (morning.py exit 2), felet loggas och nästa utlösare gör om den. Samma för förra dagens
@@ -111,6 +112,18 @@ function SwingNote {
         ForEach-Object { Log "  $_" } | Out-Null
     return ($LASTEXITCODE -eq 10)
 }
+# 3d. Händelser i sektorn: Claudes bedömning om kvällen inte hann (inget körs utan händelser som saknar bedömning).
+function EventsNote {
+    if ((Attempts "Startar händelsebedömning") -ge $MaxAttempts) { return $false }
+    $d = (& cmd.exe /c ".venv\Scripts\python.exe scripts\events.py --senaste 2>nul" | Select-Object -First 1)
+    if (-not $d) { return $false }
+    & cmd.exe /c ".venv\Scripts\python.exe scripts\events.py --behover-bedomning $($d.Trim()) > nul 2>&1"
+    if ($LASTEXITCODE -ne 0) { return $false }
+    Log "Startar händelsebedömning" | Out-Null
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "run_events.ps1") |
+        ForEach-Object { Log "  $_" } | Out-Null
+    return ($LASTEXITCODE -eq 10)
+}
 # 3b. Handelsbanken-rapporter som laddats ner för hand: körs vid varje utlösare (inget händer utan nya filer).
 & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "run_hb.ps1") | ForEach-Object { Log "  $_" }
 $hbAdded = $LASTEXITCODE -eq 10
@@ -126,6 +139,7 @@ $needResults = -not (ResultsComplete) -and
 $needReaction = $LASTEXITCODE -eq 4 -and (Attempts "Startar kursreaktion") -lt $MaxFetchAttempts
 if (-not $needReport -and (Test-Path $Report) -and (Test-Path $Consensus) -and -not $needResults -and -not $needReaction) {
     if (SwingNote) { $hbAdded = $true }
+    if (EventsNote) { $hbAdded = $true }
     if ($hbAdded) { Build }
     Write-Output "Dagens morgonkörning är klar (eller har gjort sina försök) - inget att göra$(if ($hbAdded) { ' utöver Handelsbanken' })."
     exit 0
@@ -192,6 +206,8 @@ if ($needResults) {
 
 # 3c. Veckans text om Swing-utvärderingen (efter morning.py, som skriver underlaget).
 if (SwingNote) { $ran = $true }
+# 3d. Händelsebedömningen (efter morning.py, som bygger händelserna om kvällen missades).
+if (EventsNote) { $ran = $true }
 
 # 4. Bygget.
 if ($ran) { Build }

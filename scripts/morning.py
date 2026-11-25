@@ -398,6 +398,9 @@ def main(argv: list[str] | None = None, fetch_bars: BarFetcher = yahoo_bars,
     # Rotationer: saknas kvällens fil byggs den nu (förra handelsdagens stängning).
     if not (DATA_DIR / "rotation" / f"{today}.json").exists() and data["price"]["day"]:
         write_rotation_for(today, date.fromisoformat(data["price"]["day"]), now, instruments, fetch_once)
+    # Händelser i sektorn: saknas kvällens fil byggs den nu (samma hämtning som Swing).
+    if not (DATA_DIR / "events" / f"{today}.json").exists() and data["price"]["day"]:
+        write_events_for(today, date.fromisoformat(data["price"]["day"]), now, instruments, fetch_once)
     if data["retry"]:
         for e in data["errors"]:
             print(f"FEL: {e}")
@@ -517,6 +520,7 @@ def evening(today: date, now: datetime, fetch_bars: BarFetcher = yahoo_bars, eve
     (write_swing_fn or write_swing)(target, now, instruments, fetch_once)
     if write_swing_fn is None:
         write_rotation_for(target, today, now, instruments, fetch_once)
+        write_events_for(target, today, now, instruments, fetch_once)
     return 0
 
 
@@ -530,6 +534,26 @@ def write_rotation_for(target: date, day: date, now: datetime, instruments: dict
     except (OSError, ValueError):
         sectors = {}
     rotation.write_rotation(target, day, now, listed(instruments, day), fetch, sectors)
+
+
+def write_events_for(target: date, day: date, now: datetime, instruments: dict[str, Instrument],
+                     fetch: BarFetcher) -> None:
+    """Händelser i sektorn (scripts/events.py) med Swings cachade kurshämtning (samma tickers och datum, alltså ingen
+    ny hämtning); fel stoppar inte anroparen."""
+    import events
+    import swing
+
+    try:
+        active = swing.priced(instruments, target)
+        tickers = [i.yahoo_ticker for i in active.values()]
+        bars = fetch([*tickers, INDEX_TICKER], target - timedelta(days=swing.HISTORY_DAYS), target - timedelta(days=1))
+        idx = [b.day for b in bars.get(INDEX_TICKER, []) if b.day <= day]
+        if len(idx) < 2 or idx[-1] != day:
+            print(f"Händelser: indexet saknar {day} – byggs inte.", file=sys.stderr)
+            return
+        events.write_events(target, day, idx[-2], now, bars, active)
+    except Exception as e:  # noqa: BLE001
+        print(f"Händelserna kunde inte skrivas: {e}", file=sys.stderr)
 
 
 def validate_pruned(data: dict, instruments: dict[str, Instrument]):

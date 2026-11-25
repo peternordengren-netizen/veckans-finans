@@ -758,12 +758,13 @@ gårdagens stängning. Krav (alla måste vara uppfyllda för en etikett):
    ("15 % → 8 % → 4 %" i kolumnen).
 5. **Stopp** under sista rekylens lägsta low, och det får ligga högst 8 % under pivoten.
 
-Etiketter:
-- **Utbrott:** dagens high passerar pivoten och omsättningen är minst 1,5× 50-dagarssnittet (sedan 2026-11-11;
-  tidigare krävdes stängning över pivoten, och äldre swingfiler valideras med den regeln). Referensen är priset där
-  pivoten bröts: pivoten, eller öppningen om dagen öppnade över den.
-- **Nära pivot:** stängningen högst 5 % under pivoten, och inget utbrott. Triggernivån och referensen är pivoten.
-- En stängning över pivoten utan volymkravet ger ingen etikett.
+Etikett (sedan 2026-11-25 bara **Nära pivot**; `breakout_label: false` i trösklarna):
+- **Nära pivot:** stängningen högst 5 % under pivoten, och dagens high har inte passerat den. Triggernivån och
+  referensen är pivoten. Att pivoten passeras syns i statusen "Pivot bruten" vid 09:20 och 13:20.
+- En stängning över pivoten ger ingen etikett.
+- **Utbrott** (bara i swingfiler 2026-11-11 – 11-24, som valideras med den regeln): dagens high passerade pivoten med
+  minst 1,5× 50-dagarssnittets omsättning (före 2026-11-11 krävdes stängning över pivoten). Referensen var priset där
+  pivoten bröts.
 - **Basen bruten nedåt:** gick dagens low under sista rekylens low enligt föregående dags bas (`prev_stop`, gårdagens
   stopp) utan att pivoten brutits, blir det ingen "Nära pivot" nästa morgon (`base_break` i trösklarna, sedan
   2026-11-11). En ny etikett kräver att basen på nytt uppfyller kraven, med den nya botten som sista rekyl.
@@ -786,12 +787,10 @@ dagens high över pivoten). Båda sorteras sist.
 Swingfilen sparar måtten per bolag (`vcp.state`) och valideringen räknar om etiketten, nivåerna, rekyldjupen och
 rangkriterierna ur dem. RS-percentilen räknas inte om (den kräver hela listans dagsdata).
 
-**Historik** (`vcp` i `history.json`; hämtningen är därför cirka fyra år): de senaste tre åren, varje dag med en
-etikett, ett fall i taget per bolag och etikett, så att ett pågående Nära pivot-fall inte spärrar ett utbrott i samma
-bolag. Hur ofta 3R nåddes före stoppet, med 95 % konfidensintervall (Wilson): vid Nära pivot startar fallet när
-kursen når pivoten inom 3 handelsdagar (vid pivoten eller öppningen om den är högre), vid Utbrott vid referensen på
-signaldagen med stopp och mål från nästa dag (resten av signaldagen prövas inte); högst 60 dagar, och når en dag
-både stoppet och målet räknas stoppet. Dessutom utvecklingen mot index (^OMXSPI) efter 5, 20
+**Historik** (`vcp` i `history.json`; hämtningen är därför cirka fyra år): de senaste tre åren, varje dag med
+etiketten Nära pivot, ett fall i taget per bolag. Hur ofta 3R nåddes före stoppet, med 95 % konfidensintervall
+(Wilson): fallet startar när kursen når pivoten inom 3 handelsdagar (vid pivoten eller öppningen om den är högre);
+högst 60 dagar, och når en dag både stoppet och målet räknas stoppet. Dessutom utvecklingen mot index (^OMXSPI) efter 5, 20
 och 60 handelsdagar från signaldagens stängning. Dagens bevakningslista används, så bolag som avnoterats saknas
 (överlevnadsbias), och RS jämförs bara mot listan. Utan courtage, spread och glidning.
 
@@ -855,6 +854,33 @@ och 60 handelsdagar från signaldagens stängning. Dagens bevakningslista använ
    "Claudes tolkning" om marknadsläget, vilka lägen och fall som lyckats de senaste veckorna och vad som ändrats.
    `swing_eval.py --kontrollera` godkänner bara texten när antalet meningar stämmer, inga uppmaningar finns och varje
    tal finns i `summary.json`; `--klar` flyttar den till `notes/<vecka>.json` i rådatarepot. Högst två försök.
+
+9. **Händelser i sektorn** (punkt d nedan): kollegornas rörelse efter 1, 3 och 5 dagar, per Claudes klass, i
+   `events/<händelsedag>.json` och `events_outcomes` i `summary.json`.
+
+#### Händelser i sektorn (`scripts/events.py`, `data/events/<datum>.json`)
+
+Ett filter i rullistan i Swing (händelsebolagen och kollegorna som följde med, med en lista över händelserna) och en
+rad i notisen 09:20 och 13:20. Byggs i kvällsbygget efter Rotationer (som reserv på morgonen), med Swings hämtning.
+
+a) **Händelse:** ett bolag i listan vars dagsrörelse mot OMX Stockholm PI är minst 3× dess ATR (14 dagar, dagen
+   före), samma dag som ett eget pressmeddelande (MFN, Cision eller bolagets webbplats; rutinmeddelanden räknas inte)
+   eller en rapport enligt rapportkalendern. "Samma dag" = efter förra handelsdagens stängning 17:30, senast 17:30.
+b) **Claudes bedömning** (`run_events.ps1` från `run_evening.ps1`, och från `run_morning.ps1` om kvällen inte hann;
+   `/handelser`, Sonnet, läget dontAsk, skriver bara i `data/events/`): "bolagsspecifik" eller "gemensam för
+   branschen" med en menings motivering, märkt "Claudes tolkning". `events.py --kontrollera` kräver en bedömning per
+   händelse, giltig klass, en mening och inga uppmaningar; `--klar` för in den. Högst två försök.
+c) **Kollegor:** de 5 bolag i listan vars dagsavkastning korrelerat mest med händelsebolagets det senaste året (252
+   handelsdagar, minst 200 gemensamma), oavsett sektor. "Följde med" = minst 2 procentenheter mot index åt samma håll
+   samma dag, utan eget pressmeddelande.
+d) **Uppföljning** i utvärderingen (`scripts/swing_eval.py`): kollegornas rörelse mot index efter 1, 3 och 5 dagar
+   från händelsedagens stängning, räknad åt händelsebolagets håll, per klass, för alla kollegor utan eget
+   pressmeddelande och för dem som följde med. Visas i utvärderingen överst i Swing.
+e) **Historik på kursdata** (`events` i `history.json`, `events.history`): de senaste tre åren, alla rörelser på minst
+   3 ATR mot index (ett fall per bolag inom 5 dagar) och deras 5 kollegor. Utan nyhetsdata blir det en grov
+   jämförelse: marknads- och branschdagar räknas också, och kollegornas egna nyheter kan inte uteslutas. Körningen
+   2026-11-25: 1 258 rörelser och 6 015 kollegor; de 863 som följde med samma dag gick i snitt −0,7 procentenheter
+   åt händelsens håll efter 5 dagar (41 % åt samma håll), övriga −0,1 (49 %).
 
 Ögonblicksbilderna från 2026-10-28 skapades i efterhand ur de sparade swingfilerna (`swing_eval.py --efterhand`, en
 hämtning). Begränsningar: dagens bevakningslista (överlevnadsbias), fallen överlappar i tid och är inte oberoende,

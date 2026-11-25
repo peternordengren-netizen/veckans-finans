@@ -29,7 +29,7 @@ $Shared = @(
     "data\bollinger", "data\rotation", "logs", ".venv", "node_modules"
 )
 # Mappar som Claude skriver i: riktiga i driftkopian, kopplingar i arbetskopian (se ovan).
-$ClaudeWrites = @("data\results", "data\weeks", "data\hb", "data\swing_eval")
+$ClaudeWrites = @("data\results", "data\weeks", "data\hb", "data\swing_eval", "data\events")
 
 & git -C $Main fetch -q origin main
 if (-not (Test-Path $Drift)) {
