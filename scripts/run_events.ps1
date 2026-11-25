@@ -30,9 +30,10 @@ function Log([string]$Text) {
     Write-Output $line
 }
 
-$Day = (& cmd.exe /c "$Py scripts\events.py --senaste 2>nul" | Select-Object -First 1)
-if ($LASTEXITCODE -ne 0 -or -not $Day) { exit 0 }
-$Day = $Day.Trim()
+# Hela utdata först (Select-Object -First 1 i pipelinen avbryter den och ger $LASTEXITCODE -1).
+$out = @(& cmd.exe /c "$Py scripts\events.py --senaste 2>nul")
+if ($LASTEXITCODE -ne 0 -or $out.Count -eq 0 -or -not $out[0]) { exit 0 }
+$Day = $out[0].Trim()
 & cmd.exe /c "$Py scripts\events.py --behover-bedomning $Day > nul 2>&1"
 if ($LASTEXITCODE -ne 0) { exit 0 }
 
