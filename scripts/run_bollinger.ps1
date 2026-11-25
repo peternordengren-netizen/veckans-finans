@@ -10,6 +10,9 @@
 #   ogiltig) och de som ligger vid eller över övre bandet, med avståndet dit i R. Den säger att kurserna är
 #   fördröjda ca 15 minuter. Ett klick öppnar sidan. (Listorna över alla bolag vid bandet finns kvar i
 #   kontrollfilen men visas inte sedan 2026-11-11.)
+# - Negativa händelser i sektorn under dagen (scripts/events.py intraday): bolag som fallit minst 3 ATR mot index med
+#   eget pressmeddelande, och kollegorna som föll med. Larmet står först i notisen och titeln säger LARM. Före
+#   kontrollen hämtas rådatarepot (git pull, GitHub Actions hämtningar av MFN och Cision; inga egna anrop till källorna).
 # - Bygget uppdaterar kolumnerna "Bollinger" och "Status i dag" i fliken Swing med kontrollens kurser och tid.
 # - Vaknar datorn sent (-Scheduled, dagens morgonrapport eller swingfil saknas): kör först morgonflödet klart
 #   (run_morning.ps1, som har ett lås mot en samtidig morgonkörning), så att kontrollen får dagens swingfil och
@@ -58,6 +61,10 @@ if ($Scheduled -and -not ((Test-Path $MorningFile) -and (Test-Path $SwingFile)))
 }
 
 Log "Bollingerkontroll startar$(if ($Scheduled) { ' (schemalagd)' } else { '' })"
+# Pressmeddelandena under dagen: GitHub Actions hämtningar i rådatarepot. Via cmd så att gits stderr inte blir ett
+# avbrytande PowerShell-fel; ett misslyckat pull loggas bara (kontrollen använder då det som redan finns).
+& cmd.exe /c "git -C data/raw pull -q --rebase 2>&1" | ForEach-Object { Log "git pull (rådata): $_" }
+Log "git -C data/raw pull: exit $LASTEXITCODE"
 & cmd.exe /c "$Py scripts\bollinger.py 2>&1" | ForEach-Object { Log "  $_" }
 $code = $LASTEXITCODE
 Log "bollinger.py: exit $code"
@@ -86,6 +93,9 @@ function UpperList($section) {
 
 $time = ([datetime]$data.checked_at).ToString("HH:mm")
 $title = "Swing kl. $time - strategikandidaterna"
+# Negativa händelser under dagen: larmet först (se nedan) och i titeln.
+$alarm = if ($data.intraday_events -and $data.intraday_events.notice) { $data.intraday_events.notice } else { "" }
+if ($alarm) { $title = "LARM kl. $time - negativ händelse i sektorn" }
 # Bara kandidaterna i de tre strategierna: status i dag (ändringar sedan föregående kontroll) och övre bandet.
 $strategies = @(
     @{ Name = "Pullback i trend"; Section = $data.pullback },
@@ -109,6 +119,7 @@ if ($data.eval_alerts -and $data.eval_alerts.notice) { $statusText = "$statusTex
 if ($data.events -and $data.events.notice) { $statusText = "$statusText $($data.events.notice)" }
 # Bolag som inte klarade valideringen hoppades över (resten av kontrollen skrevs); inget skipped = ingen text (@($null).Count är 1 i PowerShell).
 if ($null -ne $data.skipped -and @($data.skipped | Where-Object { $_ }).Count -gt 0) { $statusText = "$statusText Hoppade över (klarade inte kontrollen): $((@($data.skipped) | ForEach-Object { $_.name }) -join ", ")." }
+if ($alarm) { $statusText = "$alarm $statusText" }
 $foot = $data.delay_note
 Log "Notis: $statusText | $upperText"
 

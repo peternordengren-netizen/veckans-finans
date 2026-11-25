@@ -89,11 +89,31 @@ const rankTop = t.ranking?.top ?? 5;
 const rankHist = pbHist?.ranking ?? null;
 // Händelser i sektorn: händelsebolagen och kollegorna som följde med markeras på raderna (filtret).
 const evs = swing.events;
+// Negativa händelser under dagen (senaste Bollingerkontrollen i dag), före kvällens lista.
+const iv = swing.intradayEvents;
+const ivEvents = iv?.events ?? [];
 const evRole = new Map<string, string>();
-for (const e of evs?.events ?? []) {
+for (const e of [...ivEvents, ...(evs?.events ?? [])]) {
   for (const p of e.peers) if (p.followed && !evRole.has(p.ticker)) evRole.set(p.ticker, "kollega");
 }
-for (const e of evs?.events ?? []) evRole.set(e.ticker, "bolag");
+for (const e of [...ivEvents, ...(evs?.events ?? [])]) evRole.set(e.ticker, "bolag");
+const evCount = ivEvents.length + (evs?.events.length ?? 0);
+const hhmm = (iso: string) => iso.slice(11, 16);
+const NEWS_SRC: Record<string, string> = { mfn: "MFN", cision: "Cision" };
+const evGroups = [
+  ...(ivEvents.length > 0 && iv
+    ? [{
+      key: "intraday",
+      title: `Under dagen, kontrollen kl. ${hhmm(iv.checked_at)}: negativa händelser`,
+      note: `Dagens kurs (fördröjd ca 15 minuter) mot gårdagens stängning, samma regler som vid stängningen men bara nedåt. ` +
+        `Pressmeddelanden publicerade efter förra handelsdagens stängning, så långt de hunnit hämtas (${
+          Object.entries(iv.news_until).filter(([, v]) => v).map(([k, v]) => `${NEWS_SRC[k] ?? k} ${hhmm(v as string)}`).join(", ") || "okänt"
+        }). Claude bedömer dem i kvällens bygge om de står kvar vid stängningen.`,
+      events: ivEvents,
+    }]
+    : []),
+  ...(evs ? [{ key: "close", title: `Vid stängningen ${shortDate(evs.as_of)}`, note: "", events: evs.events }] : []),
+];
 const evHist = h?.events ?? null;
 const evTime = (iso: string) => `${shortDate(iso.slice(0, 10))} kl. ${iso.slice(11, 16)}`;
 const corrFmt = new Intl.NumberFormat("sv-SE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -471,8 +491,8 @@ const ppFmt = (v: number | null) =>
       <select data-label-filter>
         <option value="" selected>alla bolag ({swing.rows.length})</option>
         <option value="*">bolag med etikett ({withLabel})</option>
-        <option value="handelser" disabled={!evs || evs.events.length === 0}>
-          Händelser i sektorn ({evs ? `${evs.events.length} ${evs.events.length === 1 ? "händelse" : "händelser"}` : "ingen fil"})
+        <option value="handelser" disabled={evCount === 0}>
+          Händelser i sektorn ({evs || iv ? `${evCount} ${evCount === 1 ? "händelse" : "händelser"}` : "ingen fil"})
         </option>
         {
           strategies.length > 0 && (
@@ -501,23 +521,30 @@ const ppFmt = (v: number | null) =>
   </div>
 
   {
-    evs && (
+    evGroups.length > 0 && (() => {
+      const th = (evs ?? iv)!.thresholds;
+      return (
       <section class="events-list" data-events-list hidden aria-labelledby="swing-events">
-        <h3 id="swing-events">Händelser i sektorn vid stängningen {shortDate(evs.as_of)}</h3>
+        <h3 id="swing-events">Händelser i sektorn</h3>
         <p class="note">
-          Bolag som rörde sig minst {num(evs.thresholds.atr_mult, 0)} gånger sin ATR ({evs.thresholds.atr_days} dagar) mot
+          Bolag som rörde sig minst {num(th.atr_mult, 0)} gånger sin ATR ({th.atr_days} dagar) mot
           OMX Stockholm PI samma dag som ett eget pressmeddelande eller en rapport (efter förra handelsdagens stängning,
           senast 17:30). Kollegor: bolag i listan vars dagliga rörelser följt bolagets det senaste året (korrelation),
-          {evs.thresholds.peer_sector_corr != null
-            ? ` minst ${corrFmt.format(evs.thresholds.peer_sector_corr)} i samma sektor eller minst ${corrFmt.format(evs.thresholds.peer_any_corr ?? 0)} oavsett sektor, högst ${evs.thresholds.peer_n}.`
-            : ` de ${evs.thresholds.peer_n} med högst korrelation, oavsett sektor.`} "Följde med": minst {num(evs.thresholds.peer_move_pp, 0)} procentenheter
-          mot index åt samma håll samma dag, utan eget pressmeddelande. I tabellen visas händelsebolagen och kollegorna som
-          följde med. Klassen är Claudes tolkning av pressmeddelandet. ⚠ visar läget mot 52v-högsta och rekordnivån
+          {th.peer_sector_corr != null
+            ? ` minst ${corrFmt.format(th.peer_sector_corr)} i samma sektor eller minst ${corrFmt.format(th.peer_any_corr ?? 0)} oavsett sektor, högst ${th.peer_n}.`
+            : ` de ${th.peer_n} med högst korrelation, oavsett sektor.`} "Följde med" ("föll med" vid negativa händelser): minst {num(th.peer_move_pp, 0)} procentenheter
+          mot index åt samma håll samma dag, utan eget pressmeddelande. Negativa händelser står först. I tabellen visas
+          händelsebolagen och kollegorna som följde med. Klassen, och typen av nyhet för negativa händelser, är Claudes
+          tolkning av pressmeddelandet. ⚠ visar läget mot 52v-högsta och rekordnivån
           (högsta stängningen före dagen; "nära" = högst 3 % under, "ny" = över) med avståndet. Beskriver vad som hänt,
           inga uppmaningar.
         </p>
-        {evs.events.length === 0 && <p class="note">Inga händelser vid den här stängningen.</p>}
-        {evs.events.map((e) => (
+        {evGroups.map((g) => (
+          <>
+        <h4 class="event-group">{g.title}</h4>
+        {g.note && <p class="note">{g.note}</p>}
+        {g.events.length === 0 && <p class="note">Inga händelser vid den här stängningen.</p>}
+        {g.events.map((e) => (
           <article class="event">
             <p class="event-head">
               <strong>{e.name}</strong> <span class="ticker">{e.ticker}</span>{e.sector ? ` · ${e.sector}` : ""}:{" "}
@@ -538,10 +565,13 @@ const ppFmt = (v: number | null) =>
               {e.judgement ? (
                 <>
                   <strong>{e.judgement.class === "bolagsspecifik" ? "Bolagsspecifik" : "Gemensam för branschen"}</strong>
+                  {e.judgement.news_type && <strong> · {e.judgement.news_type[0].toUpperCase() + e.judgement.news_type.slice(1)}</strong>}
                   {" "}<span class="interp">{e.judgement.label}</span>: {e.judgement.reason}
                 </>
+              ) : g.key === "intraday" ? (
+                <span class="muted">Claude bedömer händelsen i kvällens bygge om den står kvar vid stängningen.</span>
               ) : (
-                <span class="muted">Claudes bedömning (bolagsspecifik eller gemensam för branschen) saknas än.</span>
+                <span class="muted">Claudes bedömning (bolagsspecifik eller gemensam för branschen{e.direction === "ned" ? ", och typen av nyhet" : ""}) saknas än.</span>
               )}
             </p>
             {e.peers.length === 0 ? (
@@ -555,7 +585,7 @@ const ppFmt = (v: number | null) =>
                     <th scope="col">Sektor</th>
                     <th scope="col" class="num">Korrelation</th>
                     <th scope="col" class="num">Samma dag mot index</th>
-                    <th scope="col">Följde med</th>
+                    <th scope="col">{e.direction === "ned" ? "Föll med" : "Följde med"}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -579,8 +609,11 @@ const ppFmt = (v: number | null) =>
             )}
           </article>
         ))}
+          </>
+        ))}
       </section>
-    )
+      );
+    })()
   }
 
   {
@@ -1074,6 +1107,43 @@ const ppFmt = (v: number | null) =>
             </tbody>
           </table>
         </div>
+        {evHist.negative && (() => {
+          const ng = evHist.negative!;
+          return (
+            <>
+              <h4 class="hist-sub">Bara negativa händelser: hur rörde sig kollegorna som föll med?</h4>
+              <p class="note">
+                {ng.events.toLocaleString("sv-SE")} fall på minst {num(evHist.thresholds.atr_mult, 0)} ATR nedåt mot index
+                ({ng.events_without_peers.toLocaleString("sv-SE")} utan tydliga kollegor) och {ng.peers.toLocaleString("sv-SE")}
+                {" "}kollegor, varav {ng.followed.toLocaleString("sv-SE")} föll med (minst {num(evHist.thresholds.peer_move_pp, 0)}
+                {" "}procentenheter mot index samma dag). Kollegornas rörelse mot index från händelsedagens stängning, utan
+                teckenvändning: negativt = föll mer än index, positivt = steg mer än index. Andelen = andelen som steg mer än
+                index. Samma grova jämförelse som ovan.
+              </p>
+              <div class="hist-wrap">
+                <table class="hist" data-hist="events-negative">
+                  <thead>
+                    <tr>
+                      <th scope="col">Kollegor</th>
+                      {evHist.horizons.map((k) => <th scope="col" class="num">Efter {k} {k === 1 ? "dag" : "dagar"}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[
+                      { name: "Föll med samma dag", s: ng.groups.followed },
+                      { name: "Föll inte med", s: ng.groups.not_followed },
+                    ].map(({ name, s }) => (
+                      <tr>
+                        <th scope="row">{name}</th>
+                        {evHist.horizons.map((k) => <td class="num">{eventOutcomeText(s[String(k)])}</td>)}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          );
+        })()}
       </section>
     )
   }
@@ -1585,6 +1655,14 @@ const ppFmt = (v: number | null) =>
   .events-list h3 {
     font-size: 1rem;
     margin: 0 0 4px;
+  }
+  h4.hist-sub {
+    font-size: 0.95rem;
+    margin: 12px 0 2px;
+  }
+  .events-list h4.event-group {
+    font-size: 0.95rem;
+    margin: 10px 0 2px;
   }
   .event {
     border-top: 1px solid var(--border, #ddd);

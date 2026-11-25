@@ -334,7 +334,11 @@ export interface SwingEvent {
   /** Läget mot 52v-högsta och rekordnivån (scripts/peaks.py); saknas i äldre filer. */
   peaks?: PeakFlag[] | null;
   /** Claudes bedömning av pressmeddelandet (märkt som tolkning), eller null innan den finns. */
-  judgement: { class: "bolagsspecifik" | "branschgemensam"; reason: string; label: string } | null;
+  judgement: {
+    class: "bolagsspecifik" | "branschgemensam"; reason: string; label: string;
+    /** Typen av nyhet, bara för negativa händelser (saknas i äldre filer). */
+    news_type?: "vinstvarning" | "sänkt prognos" | "förlorad order" | "rapport under förväntan" | "annat";
+  } | null;
 }
 /** Händelser i sektorn (data/events/<datum>.json, scripts/events.py). */
 export interface EventsView {
@@ -397,6 +401,8 @@ export interface SwingView {
   bollingerCheck: { checked_at: string; delay_note: string; candidates: number; rows: number } | null;
   /** Händelser i sektorn för swingfilens datum (data/events/<datum>.json), eller null. */
   events: EventsView | null;
+  /** Negativa händelser under dagen ur senaste Bollingerkontrollen samma dag, eller null. */
+  intradayEvents: IntradayEvents | null;
   history: {
     /** Händelser i sektorn på kursdata (scripts/events.py history): grov jämförelse utan nyhetsdata. */
     events?: {
@@ -405,6 +411,11 @@ export interface SwingView {
       events: number; peers: number; followed: number; events_without_peers?: number;
       groups: Record<"all" | "followed" | "not_followed", Record<string, EventOutcome>>;
       by_direction: Record<"upp" | "ned", Record<"followed" | "not_followed", Record<string, EventOutcome>>>;
+      /** Bara negativa händelser: kollegornas rörelse mot index utan teckenvändning (saknas i äldre filer). */
+      negative?: {
+        events: number; peers: number; followed: number; events_without_peers: number;
+        groups: Record<"followed" | "not_followed", Record<string, EventOutcome>>; note: string;
+      };
       rough: boolean; note: string;
     };
     /** Momentum-utbrott (VCP): 3R före stoppet och utvecklingen mot index (saknas i äldre filer). */
@@ -562,6 +573,9 @@ export function loadLatestSwing(): SwingView | null {
       missing: raw.missing ?? [],
       delisted: raw.delisted ?? [],
       events: IS_MOCK ? null : loadEvents(raw.date),
+      intradayEvents: check?.intraday_events && check.intraday_events.date === raw.date
+        ? withSectorNames(check.intraday_events)
+        : null,
       bollingerCheck: (pb || bbs || vcs) && check
         ? {
           checked_at: check.checked_at, delay_note: check.delay_note,
@@ -577,20 +591,23 @@ export function loadLatestSwing(): SwingView | null {
   }
 }
 
+/** Sektorerna står som id i händelsefilerna; sidan visar namnen (sectors.json). */
+function withSectorNames<T extends { events: SwingEvent[] }>(data: T): T {
+  const names = new Map(loadSectors().map((x) => [x.id, x.name]));
+  const name = (id: string | null) => (id ? names.get(id) ?? id : null);
+  for (const e of data.events) {
+    e.sector = name(e.sector);
+    for (const p of e.peers) p.sector = name(p.sector);
+  }
+  return data;
+}
+
 /** Händelser i sektorn för ett datum (data/events/<datum>.json), eller null. En trasig fil visas inte. */
 export function loadEvents(date: string): EventsView | null {
   const path = join(DATA, "events", `${date}.json`);
   if (!existsSync(path)) return null;
   try {
-    const data = readJson<EventsView>(path);
-    // Sektorerna står som id i filen; sidan visar namnen (sectors.json).
-    const names = new Map(loadSectors().map((x) => [x.id, x.name]));
-    const name = (id: string | null) => (id ? names.get(id) ?? id : null);
-    for (const e of data.events) {
-      e.sector = name(e.sector);
-      for (const p of e.peers) p.sector = name(p.sector);
-    }
-    return data;
+    return withSectorNames(readJson<EventsView>(path));
   } catch (err) {
     console.warn(`[veckans-finans] kunde inte läsa ${path}, visar Swing utan händelser:`, err);
     return null;
@@ -1335,6 +1352,15 @@ export interface BollingerCheck {
   bbrekyl?: BollingerStrategySection | null;
   /** Samma avsnitt för Momentum-utbrott (VCP) (saknas i äldre filer). */
   vcp?: BollingerStrategySection | null;
+  /** Negativa händelser i sektorn under dagen (scripts/events.py intraday); saknas i äldre filer, null vid fel. */
+  intraday_events?: IntradayEvents | null;
+}
+/** Negativa händelser under dagen: samma regler som kvällens händelser, med dagens (fördröjda) kurs. */
+export interface IntradayEvents {
+  date: string; checked_at: string; thresholds: EventsView["thresholds"];
+  /** Senaste hämtningen per källa (MFN, Cision); pressmeddelanden publicerade senare har inte kommit med. */
+  news_until: Record<string, string | null>;
+  events: SwingEvent[]; notice: string; error?: string;
 }
 
 /** En kandidats rad i Bollingerkontrollen: läget mot banden och status i dag. */

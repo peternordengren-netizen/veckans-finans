@@ -868,8 +868,12 @@ a) **Händelse:** ett bolag i listan vars dagsrörelse mot OMX Stockholm PI är 
    eller en rapport enligt rapportkalendern. "Samma dag" = efter förra handelsdagens stängning 17:30, senast 17:30.
 b) **Claudes bedömning** (`run_events.ps1` från `run_evening.ps1`, och från `run_morning.ps1` om kvällen inte hann;
    `/handelser`, Sonnet, läget dontAsk, skriver bara i `data/events/`): "bolagsspecifik" eller "gemensam för
-   branschen" med en menings motivering, märkt "Claudes tolkning". `events.py --kontrollera` kräver en bedömning per
-   händelse, giltig klass, en mening och inga uppmaningar; `--klar` för in den. Högst två försök.
+   branschen" med en menings motivering, märkt "Claudes tolkning". För negativa händelser också typen av nyhet:
+   vinstvarning, sänkt prognos, förlorad order, rapport under förväntan eller annat (`news_type`, bara för händelser
+   nedåt). `events.py --kontrollera` kräver en bedömning per händelse, giltig klass och typ, en mening och inga
+   uppmaningar; `--klar` för in den. Högst två försök.
+   **Negativa händelser först:** i filen, i listan på sidan och i notisen står händelserna nedåt först, sedan störst
+   rörelse. Kollegorna "föll med" i stället för "följde med".
 c) **Kollegor:** bolag i listan vars dagsavkastning korrelerat med händelsebolagets det senaste året (252
    handelsdagar, minst 200 gemensamma) med minst 0,4 i samma sektor eller minst 0,55 oavsett sektor; högst 5, högst
    korrelation först. Uppfyller inget bolag kraven står det "inga tydliga kollegor i listan" (sidan och notisen).
@@ -885,7 +889,16 @@ e) **Historik på kursdata** (`events` i `history.json`, `events.history`): de s
    1 619 kollegor; de 346 som följde med samma dag gick i snitt −1,4 procentenheter åt händelsens håll efter 5 dagar
    (34 % åt samma håll), övriga −0,3 (48 %). Med det gamla urvalet (de 5 mest korrelerade): 6 015 kollegor, de 863
    som följde med −0,7 (41 %), övriga −0,1 (49 %).
-f) **Läget mot toppnivåer** vid händelsebolagen och kollegorna (⚠, se nästa avsnitt). I utvärderingen jämförs
+f) **Under dagen (negativa händelser):** Bollingerkontrollerna 09:20 och 13:20 (`events.intraday` från
+   `bollinger.py`, `intraday_events` i kontrollfilen) letar efter bolag som med dagens kurs (fördröjd ca 15 minuter)
+   fallit minst 3 ATR mot index och har ett eget pressmeddelande (eller rapport) sedan förra handelsdagens stängning,
+   och kollegor (samma urval som c) som fallit minst 2 procentenheter mot index utan egen nyhet. Larmet står först i
+   notisen, med titeln "LARM", och händelserna visas överst i listan på sidan. Pressmeddelandena: morgonens lokala
+   hämtning och rådatarepot, som `run_bollinger.ps1` hämtar med `git pull` före kontrollen (GitHub Actions hämtar MFN
+   var fjärde timme och Cision varannan, med förseningar). Inga egna anrop till MFN eller Cision; notisen och sidan
+   anger senaste hämtningen per källa, och ett pressmeddelande som publicerats senare kommer inte med. Claude bedömer
+   inte händelserna under dagen; kvällsbygget gör det om de står kvar vid stängningen.
+g) **Läget mot toppnivåer** vid händelsebolagen och kollegorna (⚠, se nästa avsnitt). I utvärderingen jämförs
    kollegorna som följde med och låg nära eller över 52v-högsta eller rekordnivån med övriga som följde med: hur många
    som gick tillbaka (rörde sig mot index åt motsatt håll mot händelsen) efter 1, 3 och 5 dagar
    (`followed_by_top` i `events_outcomes`). Kollegor från före 2026-11-25 saknar flaggorna och räknas inte.

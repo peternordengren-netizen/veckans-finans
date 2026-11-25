@@ -8,7 +8,9 @@ a) Händelse: ett bolag i listan vars dagsrörelse mot index (OMX Stockholm PI, 
    Cision eller bolagets egen webbplats; rutinmeddelanden räknas inte) eller en rapport enligt rapportkalendern. "Samma
    dag" = publicerat efter förra handelsdagens stängning 17:30 och senast dagens 17:30.
 b) Bedömning (Claude, Sonnet, /handelser via scripts/run_events.ps1): "bolagsspecifik" eller "branschgemensam" med en
-   motivering på en mening, märkt "Claudes tolkning". Kontrolleras (check_judgements) innan den används.
+   motivering på en mening, märkt "Claudes tolkning". För negativa händelser (nedåt) också typen av nyhet (NEWS_TYPES:
+   vinstvarning, sänkt prognos, förlorad order, rapport under förväntan, annat). Kontrolleras (check_judgements) innan
+   den används. Negativa händelser står först, i filen, på sidan och i notisen.
 c) Kollegor: bolag i listan vars dagsavkastning korrelerat med händelsebolagets det senaste året (CORR_DAYS
    handelsdagar före dagen, minst MIN_OVERLAP gemensamma dagar) med minst PEER_SECTOR_CORR (0,4) i samma sektor eller
    minst PEER_ANY_CORR (0,55) oavsett sektor; högst PEER_N (5), högst korrelation först. Uppfyller inget bolag kraven
@@ -16,7 +18,12 @@ c) Kollegor: bolag i listan vars dagsavkastning korrelerat med händelsebolagets
    minst PEER_MOVE_PP (2) procentenheter mot index åt samma håll samma dag, utan eget pressmeddelande.
 d) Uppföljningen av kollegorna efter 1, 3 och 5 dagar görs i utvärderingen (scripts/swing_eval.py).
 e) Historiken på kursdata (scripts/swing_history.py events_history) använder samma rörelse- och kollegeregler utan
-   nyhetsdata: en grov jämförelse.
+   nyhetsdata: en grov jämförelse. "negative": bara negativa händelser, kollegornas rörelse mot index (utan tecken-
+   vändning) efter 1, 3 och 5 dagar för dem som föll med och övriga.
+f) Under dagen (intraday, Bollingerkontrollerna 09:20 och 13:20): bara negativa händelser, med dagens kurs (fördröjd
+   ca 15 minuter) i stället för stängningen och pressmeddelanden publicerade efter förra handelsdagens stängning fram
+   till kontrollen, så långt de hunnit hämtas (morgonens lokala hämtning och GitHub Actions-hämtningen i
+   rådatarepot; news_until anger senaste hämtningen per källa). Larmar i notisen.
 
 Utfil: data/events/<datum>.json (datum = dagen sidan gäller, måtten = stängningen dagen före), i kvällsbygget.
 """
@@ -53,6 +60,7 @@ CORR_DAYS = 252
 MIN_OVERLAP = 200
 CLOSE = time(17, 30)
 CLASSES = ("bolagsspecifik", "branschgemensam")
+NEWS_TYPES = ("vinstvarning", "sänkt prognos", "förlorad order", "rapport under förväntan", "annat")
 JUDGEMENT_LABEL = "Claudes tolkning"
 FORBIDDEN = re.compile(r"\b(köp|sälj|kursmål|rekommend)", re.IGNORECASE)
 EVENT_HORIZONS = (1, 3, 5)  # kollegornas uppföljning (utvärderingen och historiken)
@@ -215,7 +223,8 @@ def detect(day: date, prev_day: date, bars: dict, instruments: dict, news: dict[
     by_yt = {listed[t].yahoo_ticker: t for t in listed}
     sectors = {yt: instruments[t].sektor for yt, t in by_yt.items()}
     out = []
-    for t in sorted(candidates, key=lambda t: -abs(moves[t][1])):
+    # Negativa händelser (nedåt) först, sedan störst rörelse mot index.
+    for t in sorted(candidates, key=lambda t: (moves[t][1] > 0, -abs(moves[t][1]))):
         mv, rel, atr = moves[t]
         peers = []
         for yt, corr in top_peers(listed[t].yahoo_ticker, names, m, sectors):
@@ -269,17 +278,22 @@ def validate(data: dict) -> list[str]:
                 errors.append(f"{e['name']}: kollegan {p['name']} har fel \"följde med\"")
         j = e.get("judgement")
         if j is not None:
-            errors += [f"{e['name']}: {x}" for x in judgement_errors(j)]
+            errors += [f"{e['name']}: {x}" for x in judgement_errors(j, e["direction"] == "ned")]
     return errors
 
 
 # --- Claudes bedömning ---------------------------------------------------------------------------------
 
 
-def judgement_errors(j: dict) -> list[str]:
+def judgement_errors(j: dict, negative: bool = False) -> list[str]:
+    """Fel i en bedömning; negative = händelsen nedåt (då krävs typen av nyhet, annars får den inte finnas)."""
     errors = []
     if j.get("class") not in CLASSES:
         errors.append(f"bedömningen ska vara {' eller '.join(CLASSES)}")
+    if negative and j.get("news_type") not in NEWS_TYPES:
+        errors.append(f"news_type ska vara en av {', '.join(NEWS_TYPES)} (negativ händelse)")
+    if not negative and j.get("news_type") is not None:
+        errors.append("news_type anges bara för negativa händelser")
     reason = (j.get("reason") or "").strip()
     if not reason or len(re.findall(r"[.!?](\s|$)", reason)) != 1 or not reason.endswith((".", "!", "?")):
         errors.append("motiveringen ska vara en mening")
@@ -303,7 +317,7 @@ def check_judgements(data: dict, claude: dict) -> list[str]:
         if j is None:
             errors.append(f"bedömning saknas för {e['name']} ({e['ticker']})")
             continue
-        errors += [f"{e['name']}: {x}" for x in judgement_errors(j)]
+        errors += [f"{e['name']}: {x}" for x in judgement_errors(j, e["direction"] == "ned")]
     extra = set(got) - {e["ticker"] for e in data["events"]}
     if extra:
         errors.append(f"bedömningar för bolag utan händelse: {sorted(extra)}")
@@ -314,7 +328,8 @@ def merge_judgements(data: dict, claude: dict) -> None:
     got = {j["ticker"]: j for j in claude["judgements"]}
     for e in data["events"]:
         j = got[e["ticker"]]
-        e["judgement"] = {"class": j["class"], "reason": j["reason"].strip(), "label": JUDGEMENT_LABEL}
+        e["judgement"] = {"class": j["class"], "reason": j["reason"].strip(), "label": JUDGEMENT_LABEL,
+                          **({"news_type": j["news_type"]} if e["direction"] == "ned" else {})}
 
 
 def needs_judgement(data: dict | None) -> bool:
@@ -369,6 +384,9 @@ def history(bars: dict, instruments: dict, years: int = HISTORY_YEARS) -> dict:
     start = max(CORR_DAYS + 1, len(days) - 252 * years)
     groups = {g: {str(h): [] for h in EVENT_HORIZONS} for g in ("all", "followed", "not_followed")}
     by_dir = {d: {g: {str(h): [] for h in EVENT_HORIZONS} for g in ("followed", "not_followed")} for d in ("upp", "ned")}
+    # Negativa händelser för sig: kollegornas rörelse mot index utan teckenvändning (negativt = föll mer än index).
+    neg = {g: {str(h): [] for h in EVENT_HORIZONS} for g in ("followed", "not_followed")}
+    n_neg = {"events": 0, "peers": 0, "followed": 0, "events_without_peers": 0}
     last_event = {r: -10 for r in range(len(tick))}
     n_events = n_peers = n_followed = n_no_peers = 0
     sectors = {t: instruments[t].sektor for t in tick}
@@ -388,6 +406,9 @@ def history(bars: dict, instruments: dict, years: int = HISTORY_YEARS) -> dict:
             sign = 1 if rel[r] > 0 else -1
             peers = top_peers(tick[r], tick, window, sectors)
             n_no_peers += not peers
+            if sign < 0:
+                n_neg["events"] += 1
+                n_neg["events_without_peers"] += not peers
             for u_t, _ in peers:
                 u = tick.index(u_t)
                 if np.isnan(rel[u]) or np.isnan(C[u, k]):
@@ -395,6 +416,9 @@ def history(bars: dict, instruments: dict, years: int = HISTORY_YEARS) -> dict:
                 followed = bool(abs(rel[u]) >= PEER_MOVE_PP and (rel[u] > 0) == (sign > 0))
                 n_peers += 1
                 n_followed += followed
+                if sign < 0:
+                    n_neg["peers"] += 1
+                    n_neg["followed"] += followed
                 g = "followed" if followed else "not_followed"
                 for h in EVENT_HORIZONS:
                     if k + h >= len(days) or np.isnan(C[u, k + h]):
@@ -403,6 +427,8 @@ def history(bars: dict, instruments: dict, years: int = HISTORY_YEARS) -> dict:
                     groups["all"][str(h)].append(v)
                     groups[g][str(h)].append(v)
                     by_dir["upp" if sign > 0 else "ned"][g][str(h)].append(v)
+                    if sign < 0:
+                        neg[g][str(h)].append(-v)
     return {
         "period": {"start": days[start].isoformat(), "end": days[-1].isoformat()},
         "thresholds": dict(THRESHOLDS), "horizons": list(EVENT_HORIZONS),
@@ -410,6 +436,11 @@ def history(bars: dict, instruments: dict, years: int = HISTORY_YEARS) -> dict:
         "groups": {g: {h: outcome_stats(v) for h, v in hs.items()} for g, hs in groups.items()},
         "by_direction": {d: {g: {h: outcome_stats(v) for h, v in hs.items()} for g, hs in gs.items()}
                          for d, gs in by_dir.items()},
+        # Bara negativa händelser: kollegornas rörelse mot index (positivt = steg mer än index, dvs. tog igen), med
+        # andelen som steg mer än index (same_dir i outcome_stats = antal > 0).
+        "negative": {**n_neg, "groups": {g: {h: outcome_stats(v) for h, v in hs.items()} for g, hs in neg.items()},
+                     "note": "Rörelsen mot index utan teckenvändning: negativt = kollegan föll mer än index, positivt = "
+                             "steg mer än index. Andelen = andelen som steg mer än index."},
         "rough": True,
         "note": "Grov jämförelse utan nyhetsdata: alla rörelser på minst 3 ATR mot index räknas som händelser, också "
                 "dagar då hela marknaden eller branschen rörde sig, och kollegornas egna nyheter kan inte uteslutas. "
@@ -488,15 +519,96 @@ def notice_text(data: dict | None, max_events: int = 3) -> str:
     parts = []
     for e in data["events"][:max_events]:
         j = e.get("judgement")
-        kind = f", {j['class']} enligt Claude" if j else ""
-        fol = [p for p in e["peers"] if p["followed"]]
-        if not e["peers"]:
-            peers = f" – {NO_PEERS_TEXT}"
-        else:
-            peers = (" – följde med: " + ", ".join(f"{p['name']} {num(p['vs_index_pp'])}" for p in fol)) if fol else ""
-        parts.append(f"{e['name']} {num(e['vs_index_pp'])} pe mot index ({num(e['atr_mult'], False)} ATR{kind}){peers}")
+        kind = (f", {j['news_type'] + ', ' if j.get('news_type') else ''}{j['class']} enligt Claude") if j else ""
+        parts.append(f"{e['name']} {num(e['vs_index_pp'])} pe mot index ({num(e['atr_mult'], False)} ATR{kind})"
+                     f"{_peers_text(e)}")
     more = f" och {len(data['events']) - max_events} till" if len(data["events"]) > max_events else ""
     return "Händelser i sektorn (gårdagens stängning): " + "; ".join(parts) + more + "."
+
+
+def _peers_text(e: dict) -> str:
+    """" – följde med: …" (" – föll med: …" eller " – ingen kollega föll med" för negativa händelser), eller
+    NO_PEERS_TEXT utan kollegor."""
+    if not e["peers"]:
+        return f" – {NO_PEERS_TEXT}"
+    fol = [p for p in e["peers"] if p["followed"]]
+    if e["direction"] == "ned":
+        return (" – föll med: " + ", ".join(f"{p['name']} {fmt1(p['vs_index_pp'])}" for p in fol)) if fol \
+            else " – ingen kollega föll med"
+    return (" – följde med: " + ", ".join(f"{p['name']} {fmt1(p['vs_index_pp'])}" for p in fol)) if fol else ""
+
+
+# --- Under dagen (Bollingerkontrollerna 09:20 och 13:20) -----------------------------------------------
+
+NEWS_SOURCES = ("mfn", "cision")
+
+
+def news_fetched_until(raw_dirs: list[Path], day: date, now: datetime | None = None) -> dict[str, str | None]:
+    """Senaste lyckade hämtningen per källa (MFN, Cision) senast `now` enligt körningsloggarna ("runs") i rådatan,
+    dagens vecka: pressmeddelanden publicerade senare kan inte ha kommit med."""
+    wk = f"{day.isocalendar()[0]}-W{day.isocalendar()[1]:02d}"
+    best: dict[str, datetime | None] = {s: None for s in NEWS_SOURCES}
+    for raw in raw_dirs:
+        p = raw / wk / "index.json"
+        try:
+            runs = json.loads(p.read_text(encoding="utf-8")).get("runs", []) if p.exists() else []
+        except (OSError, ValueError):
+            continue
+        for r in runs:
+            try:
+                t = datetime.fromisoformat(r["time"]).astimezone(TZ)
+            except (KeyError, TypeError, ValueError):
+                continue
+            if now is not None and t > now:
+                continue
+            for s in NEWS_SOURCES:
+                if ((r.get("sources") or {}).get(s) or {}).get("status") == "ok" and (best[s] is None or t > best[s]):
+                    best[s] = t
+    return {s: v.isoformat(timespec="minutes") if v else None for s, v in best.items()}
+
+
+def intraday(today: date, now: datetime, bars: dict, instruments: dict, raw_dirs: list[Path] | None = None,
+             calendar_dir: Path | None = None, records: dict[str, dict] | None = None) -> dict:
+    """f) Negativa händelser under dagen: dagens kurs (sista raden i bars, fördröjd) mot förra handelsdagens stängning,
+    pressmeddelanden publicerade efter förra handelsdagens 17:30 fram till nu (så långt de hämtats). Samma regler som
+    i kvällen (a och c), bara händelser nedåt. bars ska innehålla indexet."""
+    raw_dirs = raw_dirs or [RAW_DIR, DATA_DIR / "morning" / "raw"]
+    out: dict = {"date": today.isoformat(), "checked_at": now.isoformat(timespec="seconds"),
+                 "thresholds": dict(THRESHOLDS), "news_until": {}, "events": [], "notice": ""}
+    days = [b.day for b in bars.get(INDEX_TICKER) or []]
+    if len(days) < 2 or days[-1] != today:
+        out["error"] = "indexet saknar dagens kurs"
+        return out
+    prev = days[-2]
+    news = company_news(raw_dirs, instruments, datetime.combine(prev, CLOSE, TZ), now)
+    evs = [e for e in detect(today, prev, bars, instruments, news, reports_on(today, calendar_dir), records)
+           if e["direction"] == "ned"]
+    problems = validate({"events": evs})
+    if problems:
+        out["error"] = "; ".join(problems[:5])
+        return out
+    out["news_until"] = news_fetched_until(raw_dirs, today, now)
+    out["events"] = evs
+    out["notice"] = intraday_notice_text(out)
+    return out
+
+
+def intraday_notice_text(data: dict | None, max_events: int = 3) -> str:
+    """Larmet i notisen: negativa händelser under dagen, med pressmeddelandets tid och hur långt nyheterna hämtats;
+    tomt utan händelser."""
+    if not data or not data.get("events"):
+        return ""
+    parts = []
+    for e in data["events"][:max_events]:
+        src = "rapport" if e["report"] and not e["news"] else f"pressmeddelande {e['news'][0]['published'][11:16]}"
+        parts.append(f"{e['name']} {fmt1(e['vs_index_pp'])} pe mot index ({fmt1(e['atr_mult'], False)} ATR, {src})"
+                     f"{_peers_text(e)}")
+    more = f" och {len(data['events']) - max_events} till" if len(data["events"]) > max_events else ""
+    nu = data.get("news_until") or {}
+    fetched = ", ".join(f"{'MFN' if s == 'mfn' else 'Cision'} {v[11:16]}" for s, v in nu.items() if v)
+    tail = f" Pressmeddelanden hämtade t.o.m. {fetched}." if fetched else ""
+    return ("LARM – negativa händelser i sektorn under dagen (kursen fördröjd ca 15 min): " + "; ".join(parts) + more
+            + "." + tail)
 
 
 def main(argv: list[str] | None = None) -> int:

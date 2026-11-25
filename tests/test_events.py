@@ -239,3 +239,85 @@ def test_rounding_matches_page():
     assert events.fmt1(2.15) == "+2,2"  # kortaste decimalformen, som Intl (inte det binära 2,1499…)
     assert events.fmt1(-0.04) == "0,0" and events.fmt1(0.0) == "0,0"
     assert events.fmt1(3.85, sign=False) == "3,9" and events.fmt1(4.44, sign=False) == "4,4"
+
+
+# --- Negativa händelser ---------------------------------------------------------------------------------
+
+DOWN_MOVES = {"ALFA": -15.0, "BETA": -4.0, "GAMMA": -3.0, "DELTA": 3.0, "EPS": 0.5, "ZETA": 0.0, "ETA": -0.5}
+
+
+def test_negative_events_first():
+    # Alfaverken föll, Zetakraft steg kraftigt (båda med pressmeddelande): den negativa händelsen står först.
+    bars = make_bars(last={**DOWN_MOVES, "ZETA": 20.0})
+    news = {**NEWS, "ZETA": [{**NEWS["ALFA"][0], "title": "Zetakraft får en stor order", "url": "https://example.com/z"}]}
+    evs = detect(bars, news=news)
+    assert [e["direction"] for e in evs] == ["ned", "upp"] and evs[0]["ticker"] == "ALFA"
+    assert abs(evs[1]["vs_index_pp"]) > abs(evs[0]["vs_index_pp"])  # trots större rörelse uppåt
+    text = events.notice_text({"events": evs})
+    assert text.index("Alfaverken") < text.index("Zetakraft") and "föll med: Betabolaget" in text
+    # Kollegor men ingen som föll med: sägs uttryckligen för negativa händelser.
+    for p in evs[0]["peers"]:
+        p["followed"] = False
+    assert "Alfaverken" in events.notice_text({"events": evs}) and "ingen kollega föll med" in events.notice_text({"events": evs})
+
+
+def test_news_type_for_negative_events():
+    data = {"date": "2026-01-21", "events": detect(make_bars(last=DOWN_MOVES))}
+    j = judgement(reason="Bolaget sänker sin prognos för året.")
+    assert any("news_type" in x for x in events.check_judgements(data, {"date": "2026-01-21", "judgements": [j]}))
+    for bad in ("prognos", None):
+        assert events.check_judgements(data, {"date": "2026-01-21", "judgements": [{**j, "news_type": bad}]})
+    ok = {**j, "news_type": "sänkt prognos"}
+    assert events.check_judgements(data, {"date": "2026-01-21", "judgements": [ok]}) == []
+    events.merge_judgements(data, {"judgements": [ok]})
+    assert data["events"][0]["judgement"]["news_type"] == "sänkt prognos" and events.validate(data) == []
+    assert "sänkt prognos, bolagsspecifik enligt Claude" in events.notice_text(data)
+    # Positiva händelser har ingen typ av nyhet.
+    up = {"date": "2026-01-21", "events": detect(make_bars(last=EVENT_DAY_MOVES))}
+    assert any("bara för negativa" in x for x in
+               events.check_judgements(up, {"date": "2026-01-21", "judgements": [{**judgement(), "news_type": "annat"}]}))
+
+
+def test_intraday_negative_only_with_news_until(tmp_path, monkeypatch):
+    bars = make_bars(last=DOWN_MOVES)
+    today = bars[INDEX_TICKER][-1].day
+    now = datetime.combine(today, datetime.min.time().replace(hour=13, minute=20), tzinfo=events.TZ)
+    seen = {}
+
+    def fake_news(raw_dirs, instruments, since, until):
+        seen["window"] = (since, until)
+        return NEWS
+
+    monkeypatch.setattr(events, "company_news", fake_news)
+    wk = f"{today.isocalendar()[0]}-W{today.isocalendar()[1]:02d}"
+    (tmp_path / wk).mkdir()
+    runs = [{"time": f"{today}T09:17:00+01:00", "sources": {"mfn": {"status": "ok"}, "cision": {"status": "ok"}}},
+            {"time": f"{today}T11:17:00+01:00", "sources": {"mfn": {"status": "error"}, "cision": {"status": "ok"}}}]
+    (tmp_path / wk / "index.json").write_text(json.dumps({"items": [], "runs": runs}), encoding="utf-8")
+    out = events.intraday(today, now, bars, inst(), raw_dirs=[tmp_path], calendar_dir=tmp_path)
+    assert seen["window"][1] == now and seen["window"][0].hour == 17
+    assert [e["ticker"] for e in out["events"]] == ["ALFA"] and out["events"][0]["direction"] == "ned"
+    assert out["news_until"] == {"mfn": f"{today}T09:17+01:00", "cision": f"{today}T11:17+01:00"}
+    # En hämtning efter kontrollen räknas inte (omkörning i efterhand).
+    early = datetime.combine(today, datetime.min.time().replace(hour=10), tzinfo=events.TZ)
+    assert events.news_fetched_until([tmp_path], today, early) == {"mfn": f"{today}T09:17+01:00",
+                                                                     "cision": f"{today}T09:17+01:00"}
+    assert out["notice"].startswith("LARM") and "föll med: Betabolaget" in out["notice"]
+    assert "pressmeddelande 08:00" in out["notice"] and "MFN 09:17, Cision 11:17" in out["notice"]
+    # En händelse uppåt larmar inte under dagen.
+    up = events.intraday(today, now, make_bars(last=EVENT_DAY_MOVES), inst(), raw_dirs=[tmp_path], calendar_dir=tmp_path)
+    assert up["events"] == [] and up["notice"] == ""
+    # Utan dagens indexkurs: inga händelser.
+    old = {k: v[:-1] for k, v in bars.items()}
+    assert events.intraday(today, now, old, inst(), raw_dirs=[tmp_path], calendar_dir=tmp_path)["error"]
+
+
+def test_history_negative_only():
+    h = events.history(make_bars(n=300, event_at=280, last=DOWN_MOVES), inst(), years=1)
+    neg = h["negative"]
+    assert 1 <= neg["events"] <= h["events"] and neg["followed"] <= neg["peers"] <= h["peers"]
+    assert set(neg["groups"]) == {"followed", "not_followed"}
+    # Utan teckenvändning: samma tal som by_direction med omvänt tecken.
+    f5, d5 = neg["groups"]["followed"]["5"], h["by_direction"]["ned"]["followed"]["5"]
+    assert f5["n"] == d5["n"] and (f5["mean_pp"] is None or f5["mean_pp"] == pytest.approx(-d5["mean_pp"], abs=0.011))
+    json.dumps(h)

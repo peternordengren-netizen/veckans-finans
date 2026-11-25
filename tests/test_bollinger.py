@@ -53,7 +53,7 @@ def test_ovre_bandet():
 
 def test_kontrollen_delar_upp_bolagen():
     def fetch(tickers, start, end):
-        assert end == TODAY and len(tickers) == 4  # ett batchanrop för alla
+        assert end == TODAY and len(tickers) == 5 and tickers[-1] == "^OMXSPI"  # ett batchanrop för alla och indexet
         return {
             "ALFA.ST": series(BASE[1:] + [106.0]),  # långt över bandet
             "BETA.ST": series(BASE[1:] + [103.2]),  # strax under bandet
