@@ -571,7 +571,15 @@ export function loadEvents(date: string): EventsView | null {
   const path = join(DATA, "events", `${date}.json`);
   if (!existsSync(path)) return null;
   try {
-    return readJson<EventsView>(path);
+    const data = readJson<EventsView>(path);
+    // Sektorerna står som id i filen; sidan visar namnen (sectors.json).
+    const names = new Map(loadSectors().map((x) => [x.id, x.name]));
+    const name = (id: string | null) => (id ? names.get(id) ?? id : null);
+    for (const e of data.events) {
+      e.sector = name(e.sector);
+      for (const p of e.peers) p.sector = name(p.sector);
+    }
+    return data;
   } catch (err) {
     console.warn(`[veckans-finans] kunde inte läsa ${path}, visar Swing utan händelser:`, err);
     return null;
