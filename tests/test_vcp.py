@@ -54,9 +54,13 @@ def test_krav_och_etiketter():
     deep[-1]["trough"] = 102.0  # stoppet 8,9 % under pivoten
     assert vcp.labels(state(contractions=deep)) == []
     assert vcp.labels(state(close=106.0)) == []  # mer än 5 % under pivoten
-    # Utbrott: dagens high över pivoten med minst 1,5× volym, även om stängningen hamnar under pivoten.
-    assert vcp.labels(state(high=113.0, close=113.0, volume=1500.0)) == ["vcp-utbrott"]
-    assert vcp.labels(state(high=112.5, close=110.0, volume=1500.0)) == ["vcp-utbrott"]
+    # Sedan 2026-11-25 ingen etikett "Utbrott": över pivoten ingen etikett, under pivoten Nära pivot.
+    assert vcp.labels(state(high=113.0, close=113.0, volume=1500.0)) == []
+    assert vcp.labels(state(high=112.5, close=110.0, volume=1500.0)) == ["vcp-nara-pivot"]
+    # Filer 2026-11-11 – 11-24 (utan breakout_label): dagens high över pivoten med minst 1,5× volym gav Utbrott.
+    with_break = {k: v for k, v in vcp.THRESHOLDS.items() if k != "breakout_label"}
+    assert vcp.labels(state(high=113.0, close=113.0, volume=1500.0), with_break) == ["vcp-utbrott"]
+    assert vcp.labels(state(high=112.5, close=110.0, volume=1500.0), with_break) == ["vcp-utbrott"]
     # Utan volymkravet: stängning över pivoten ger ingen etikett, high över men stängning under ger Nära pivot.
     assert vcp.labels(state(high=113.0, close=113.0, volume=1400.0)) == []
     assert vcp.labels(state(high=112.5, close=110.0, volume=1400.0)) == ["vcp-nara-pivot"]
@@ -68,7 +72,7 @@ def test_krav_och_etiketter():
     assert vcp.labels(state(low=106.0, prev_stop=106.6), no_break) == ["vcp-nara-pivot"]
     assert vcp.base_broken(state(low=106.0, high=112.5)) is False  # pivoten bruten samma dag
     # Äldre filer (utan breakout_on): stängningen över pivoten krävs.
-    old = {k: v for k, v in vcp.THRESHOLDS.items() if k != "breakout_on"}
+    old = {k: v for k, v in vcp.THRESHOLDS.items() if k not in ("breakout_on", "breakout_label")}
     assert vcp.labels(state(high=112.5, close=110.0, volume=1500.0), old) == ["vcp-nara-pivot"]
     assert vcp.labels(state(high=113.0, close=113.0, volume=1500.0), old) == ["vcp-utbrott"]
 
@@ -227,7 +231,8 @@ def test_utbrott_spärras_inte_av_nära_pivot():
     inst = {t: Instrument(name, (), t, f"{t}.ST", "Stockholm") for t, name in
             [("ALFA", "Alfaverken"), ("BETA", "Betabolaget"), ("GAMMA", "Gammagruppen"), ("DELTA", "Deltahem")]}
     h = swing_history.vcp_history(bars, inst)
-    assert h["labels"]["vcp-nara-pivot"]["cases"] >= 1 and h["labels"]["vcp-utbrott"]["cases"] == 1
+    # Sedan 2026-11-25 räknas inga utbrott (etiketten finns inte längre); Nära pivot räknas som förut.
+    assert h["labels"]["vcp-nara-pivot"]["cases"] >= 1 and h["labels"]["vcp-utbrott"]["cases"] == 0
 
 
 def test_status_basen_bruten_nedat():

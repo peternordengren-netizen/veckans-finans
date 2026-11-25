@@ -50,10 +50,14 @@ THRESHOLDS = {
     "max_stop_pct": 8.0, "target_r": 3.0, "trigger_days": 3, "max_days": 60,
     # Utbrott när dagens high passerar pivoten (sedan 2026-11-11; tidigare stängningen, "close").
     "breakout_on": "high",
+    # Etiketten "Utbrott" används inte sedan 2026-11-25 (bara "Nära pivot"; statusen "Pivot bruten" vid 09:20 och 13:20
+    # visar när pivoten passeras). Saknas i äldre filer, som då hade etiketten.
+    "breakout_label": False,
     # Ingen "Nära pivot" när dagens low gått under föregående dags stopp (basen bruten nedåt; sedan 2026-11-11).
     "base_break": True,
 }
-LABELS = {"vcp-nara-pivot": "Nära pivot", "vcp-utbrott": "Utbrott"}
+LABELS = {"vcp-nara-pivot": "Nära pivot", "vcp-utbrott": "Utbrott"}  # "vcp-utbrott" bara i filer före 2026-11-25
+ACTIVE_LABELS = ["vcp-nara-pivot"]
 CRITERIA = {
     "volym_avtar": "Volymen senaste 10 dagarna lägre än 50-dagarssnittet",
     "atr_avtar": "ATR senaste 10 dagarna lägre än 50-dagarssnittet",
@@ -180,7 +184,7 @@ def labels(s: dict | None, th: dict = THRESHOLDS) -> list[str]:
         return []
     volume_ok = s["volume_avg50"] > 0 and s["volume"] >= th["breakout_volume"] * s["volume_avg50"]
     broke = s["high"] > s["pivot"] if th.get("breakout_on") == "high" else s["close"] > s["pivot"]
-    if broke and volume_ok:
+    if broke and volume_ok and th.get("breakout_label", True):
         return ["vcp-utbrott"]
     if s["close"] > s["pivot"]:
         return []  # stängning över pivoten utan volymkravet

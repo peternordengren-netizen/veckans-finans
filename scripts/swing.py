@@ -102,13 +102,13 @@ LABELS = {
     "death-cross": "Death cross",
     **pullback.LABELS,
     **bbrekyl.LABELS,
-    **vcp.LABELS,
+    **{k: v for k, v in vcp.LABELS.items() if k in vcp.ACTIVE_LABELS},
 }
 # Strategier i rullistan: namn och etiketterna som räknas som träff (scripts/pullback.py).
 STRATEGIES = {
     "pullback": {"name": "Pullback i trend", "labels": list(pullback.LABELS)},
     "bbrekyl": {"name": "Rekyl efter Bollingerutbrott", "labels": list(bbrekyl.LABELS)},
-    "vcp": {"name": "Momentum-utbrott (VCP)", "labels": list(vcp.LABELS)},
+    "vcp": {"name": "Momentum-utbrott (VCP)", "labels": list(vcp.ACTIVE_LABELS)},
 }
 
 
