@@ -10,7 +10,7 @@
 #   händelserna ändå, utan klass.
 # - Logg i logs\events\<datum>.log.
 #
-# Manuellt: powershell -NoProfile -File scriptsun_events.ps1
+# Manuellt: powershell -NoProfile -File scripts\run_events.ps1
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "claude_limit.ps1")
 $Root = Split-Path -Parent $PSScriptRoot
